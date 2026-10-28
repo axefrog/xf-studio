@@ -3,11 +3,10 @@ import { createBrowserPreviewDevice } from "../../legacy/eye-makeup/browser/brow
 import { GlitterMeasurements } from "../../legacy/eye-makeup/glitter-measurements";
 import { rasterRegion, type LayeredMakeupRegion } from "../../engines/layered-makeup/region";
 import type { BrowserPreviewCapability } from "./preview-capabilities";
-import type { createTrustedAuthoringCore } from "../../app/trusted-authoring-core";
+import type { PreviewLayerSource } from "../../legacy/eye-makeup/preview/authoring-render-scheduler";
 export function createLayeredPreviewCapability(region: LayeredMakeupRegion): BrowserPreviewCapability {
   return { create(state, options) {
-    const core = state as ReturnType<typeof createTrustedAuthoringCore>;
-    const source = core.document;
+    const { document: source } = state as { readonly document: PreviewLayerSource };
     const measurements = new GlitterMeasurements({ layers: () => source.recipe.layers,
       size: () => device.coordinator.size, fineGlitter: region.fineGlitter });
     const device = createBrowserPreviewDevice({ ...options, document: source, region: rasterRegion(region),

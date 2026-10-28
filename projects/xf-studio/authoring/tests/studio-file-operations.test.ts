@@ -6,6 +6,7 @@ import { StudioFileOperations, type StudioFilePort, type StudioPickedFile } from
 import { BUILD_NEEDS_SETUP, BUILD_TOOLS_CHECKING_REASON } from "../src/app/alpha-availability";
 import { initialRecipe } from "./fixtures/eye-region";
 import { profileStudio } from "./fixtures/profile-studio";
+import { makeupFileOperations } from "../src/app/authoring/makeup-files";
 
 const picked = (name: string, text: string, size = text.length): StudioPickedFile => ({
   name, size, text: async () => text, bytes: async () => new TextEncoder().encode(text),
@@ -28,11 +29,11 @@ async function fixture(buildReadiness?: () => "ready" | "needs-setup" | "checkin
   const device: StudioFilePort = {
     pick: async () => { const file = nextFile; nextFile = undefined; return file; },
     download: (blob, name) => { downloads.push({ name, type: blob.type, blob }); },
-    bakeMask: async value => { maskInput = value; return bakeMask(value); },
+    bakeMask: async value => { maskInput = value as typeof layer; return bakeMask(value as typeof layer); },
   };
   const files = new StudioFileOperations(device, {
-    recipe: () => studio.document.recipe, selectedLayer: () => layer,
-    importRecipe: (value, name) => { imported = { recipe: value, name }; },
+    featureFiles: makeupFileOperations({ recipe: () => studio.document.recipe, selectedLayer: () => layer,
+      importRecipe: (value, name) => { imported = { recipe: value, name }; } }),
     hasSavedV: () => true,
     savedV: () => ({ gameVersion: 2000 } as any),
     loadSavedV: (bytes, character) => { loadedBytes = bytes; loadedFor = character; return { suggestedEyeShape: 3 }; },

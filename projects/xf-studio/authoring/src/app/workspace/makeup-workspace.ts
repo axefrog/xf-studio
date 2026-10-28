@@ -53,7 +53,7 @@ export function livePart(look: Pick<Look, "parts" | "locked"> | undefined, model
   return look?.locked ? undefined : look?.parts[liveId(model)]?.body as Recipe | undefined;
 }
 /** A look's parts with the live document's part set; an empty recipe is not added to a look that had none. */
-export function withLivePart(look: Look, recipe: Recipe, model: DocumentModel): Look["parts"] {
+export function withLivePart(look: Look, recipe: Recipe, model: LookDocumentModel): Look["parts"] {
   const { parts } = model, live = liveId(model);
   if (!look.parts[live] && !recipe.layers.length) return look.parts;
   return { ...look.parts, [live]: parts.readPart(live, parts.envelope(live, recipe), false) };

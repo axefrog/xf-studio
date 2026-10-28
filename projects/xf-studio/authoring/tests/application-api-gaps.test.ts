@@ -218,7 +218,7 @@ test("async work is one activity list linked to request IDs, and cancellation is
   const gate = new Promise<void>(resolve => { release = resolve; });
   const { service, document } = await withCollection({ versions: library => ({ save: async (id, signal) => { await gate; return library.save(id, signal); } }) });
   const files = new StudioFileOperations({ pick: async () => undefined, download: () => {}, bakeMask: async () => new Blob() }, {
-    recipe: () => document.recipe, selectedLayer: () => document.recipe.layers[0], importRecipe: () => {},
+    featureFiles: makeupFileOperations({ recipe: () => document.recipe, selectedLayer: () => document.recipe.layers[0], importRecipe: () => {} }),
     hasSavedV: () => false, savedV: () => undefined, loadSavedV: () => { throw Error("not used"); }, savedVReady: () => false,
     executeCollection: request => service.execute(request), recoverCollection: () => {} });
   files.attachCollection(service);
@@ -362,3 +362,4 @@ test("camera and UV navigation commands are view-only and bounded", async () => 
   expect(attachment.uvNavigate({ kind: "zoom", factor: 2, at: { u: .3, v: .3 } })).toBe(true);
   expect(moves).toEqual([{ kind: "zoom", factor: 2, at: { u: .3, v: .3 } }]);
 });
+import { makeupFileOperations } from "../src/app/authoring/makeup-files";

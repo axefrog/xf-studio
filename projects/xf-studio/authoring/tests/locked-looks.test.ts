@@ -8,7 +8,8 @@
 import { expect, test } from "bun:test";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { EVERY_LOOK_NEWER_MESSAGE, NO_EDITABLE_EYE_MAKEUP_MESSAGE } from "../src/library/collection-service";
+import { EVERY_LOOK_NEWER_MESSAGE } from "../src/library/collection-service";
+import { NO_EDITABLE_EYE_MAKEUP_MESSAGE } from "../src/app/authoring/makeup-files";
 import { collectionDraft, NEWER_LOOKS_LIBRARY_MESSAGE } from "../src/app/workspace/collection-workspace";
 import { STUDIO_DOCUMENTS, STUDIO_PARTS } from "../src/compose/studio-registry";
 import { openTestLibrary } from "./fixtures/library-file";

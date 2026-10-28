@@ -1,4 +1,5 @@
 import type { PartPresetService } from "../src/library/part-presets";
+import { makeupFileOperations } from "../src/app/authoring/makeup-files";
 import type { Recipe } from "../src/engines/layered-makeup/recipe";
 import type { WorkspaceLease } from "../src/app/workspace/workspace-lease";
 import { eyeCheck } from "./fixtures/package-results";
@@ -73,8 +74,8 @@ export function trustedFixture(options: { hitAt?: ViewportAttachmentPort<string>
   let library!: CollectionApplication;
   const files = new StudioFileOperations({ pick: async () => undefined,
     download: (_blob, name) => downloads.push(name), bakeMask: async () => new Blob() }, {
-    recipe: () => document.recipe, selectedLayer: () => document.recipe.layers[document.active],
-    importRecipe: (value, name, collection) => library.importRecipe(value, name, collection),
+    featureFiles: makeupFileOperations({ recipe: () => document.recipe, selectedLayer: () => document.recipe.layers[document.active],
+      importRecipe: (value, name, collection) => library.importRecipe(value, name, collection) }),
     hasSavedV: () => false, savedV: () => undefined, loadSavedV: () => ({}),
     savedVReady: () => false, executeCollection: request => app.execute(request),
     recoverCollection: () => library.recover(),

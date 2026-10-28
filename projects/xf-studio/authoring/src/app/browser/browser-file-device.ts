@@ -1,11 +1,20 @@
-import type { Layer } from "../../engines/layered-makeup/recipe";
 import type { StudioFileKind, StudioFilePort, StudioPickedFile } from "../studio-file-operations";
+import type { AnyOwner, Registry } from "../../platform/core/registry";
+
+type MaskBakeOptions = { document: Document; workerUrl?: string };
+export type BrowserMaskBake = { create(options: MaskBakeOptions): NonNullable<StudioFilePort["bakeMask"]> };
+export function registeredMaskBake(registry: Registry<AnyOwner>, model: { readonly live?: string }): BrowserMaskBake | undefined {
+  const feature = model.live;
+  const owner = feature === undefined ? undefined : registry.owner(feature);
+  return owner?.owner === "feature" ? (owner as typeof owner & { maskBake?: BrowserMaskBake }).maskBake : undefined;
+}
 
 /** Browser mechanics for the file workflow. The shell supplies its own picker elements. */
 export function createBrowserFileDevice(options: {
   document: Document;
   pickers: Record<StudioFileKind, HTMLInputElement>;
   workerUrl?: string;
+  maskBake?: BrowserMaskBake;
 }): StudioFilePort {
   const pick = (kind: StudioFileKind): Promise<StudioPickedFile | undefined> => new Promise(resolve => {
     const picker = options.pickers[kind];
@@ -31,18 +40,5 @@ export function createBrowserFileDevice(options: {
     anchor.href = url; anchor.download = name; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const bakeMask = (layer: Layer): Promise<Blob> => new Promise((resolve, reject) => {
-    const bake = new Worker(options.workerUrl ?? "/build/raster-worker.js", { type: "module" });
-    bake.onmessage = e => {
-      try {
-        const canvas = options.document.createElement("canvas"); canvas.width = canvas.height = 2048;
-        canvas.getContext("2d")!.putImageData(new ImageData(e.data.data, 2048, 2048), 0, 0);
-        bake.terminate();
-        canvas.toBlob(blob => blob ? resolve(blob) : reject(Error("Mask export failed.")));
-      } catch (error) { bake.terminate(); reject(error); }
-    };
-    bake.onerror = () => { bake.terminate(); reject(Error("Mask export failed.")); };
-    bake.postMessage({ i: 0, version: 0, layer: { ...layer, enabled: true }, size: 2048 });
-  });
-  return { pick, download, bakeMask };
+  return { pick, download, ...(options.maskBake ? { bakeMask: options.maskBake.create(options) } : {}) };
 }

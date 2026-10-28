@@ -9,6 +9,8 @@ import { profileContextStudio } from "./fixtures/profile-context-studio";
 import { portableRecipe } from "../src/legacy/eye-makeup/recipe-schema";
 import { initialRecipe } from "./fixtures/eye-region";
 import { eyeBuild, eyeCheck } from "./fixtures/package-results";
+import { makeupFileOperations } from "../src/app/authoring/makeup-files";
+import type { Layer } from "../src/engines/layered-makeup/recipe";
 
 const fileActions: StudioFileAction[] = [
   { kind: "workspace.showInFolder" }, { kind: "recipe.import", collection: "A" }, { kind: "recipe.export" }, { kind: "mask.export" },
@@ -60,8 +62,8 @@ function fixture() {
   };
   const writer: FileWriter = {
     operations: () => ({ service, execute }), collection: () => "A", message: () => "A completed",
-    recipe: () => recipe, selectedLayer: () => recipe.layers[0],
-    importRecipe: (_recipe, _name, into) => { expect(into).toBe("A"); seen.push("importRecipe:A"); },
+    featureFiles: makeupFileOperations({ recipe: () => recipe, selectedLayer: () => recipe.layers[0],
+      importRecipe: (_recipe, _name, into) => { expect(into).toBe("A"); seen.push("importRecipe:A"); } }),
     hasSavedV: () => true, savedV: () => ({ owner: "A" } as never), savedVReady: () => true,
     loadSavedV: (_bytes, character) => { expect(character).toBe("V-A"); seen.push("savedV:A"); return {}; },
     recoverCollection: draft => { expect(draft).toBe("earlier-A"); seen.push("recover:A"); },
@@ -74,14 +76,15 @@ function fixture() {
     pick: async kind => { await gate.promise; const value = kind === "recipe" ? portableRecipe(recipe)
       : kind === "characterPreset" ? { schema: "xfs/cc-preset-1", bodyGender: "female", values: [] } : { target: "A" };
       const text = JSON.stringify(value); return { name: "A.json", size: text.length, text: async () => text, bytes: async () => new TextEncoder().encode(text) }; },
-    download: (blob, name) => downloads.push({ blob, name }), bakeMask: async layer => { expect(layer.id).toBe(recipe.layers[0]!.id); await gate.promise; return new Blob(["mask-A"]); },
+    download: (blob, name) => downloads.push({ blob, name }), bakeMask: async layer => { expect((layer as Layer).id).toBe(recipe.layers[0]!.id); await gate.promise; return new Blob(["mask-A"]); },
   };
   const live = { ...service, summary: () => ({ busy: false, summaries: [], progress: { phase: "error", code: "B", message: "Wrong B" } }),
     lastPackageIsCurrent: () => { throw Error("Accepted freshness reached the live service"); },
     exportWindowCopy: () => { throw Error("Accepted export reached the live service"); },
     windowCopyCapability: () => ({ available: true }) } as unknown as CollectionService;
   const wrong = () => { throw Error("Accepted operation reached a live writer"); };
-  const files = new StudioFileOperations(device, { ...writer, recipe: wrong, savedV: wrong, importRecipe: wrong, loadSavedV: wrong, recoverCollection: wrong,
+  const files = new StudioFileOperations(device, { ...writer, featureFiles: makeupFileOperations({ recipe: wrong, selectedLayer: () => recipe.layers[0], importRecipe: wrong }),
+    savedV: wrong, loadSavedV: wrong, recoverCollection: wrong,
     message: wrong, characterPreset: { unavailable: () => undefined, load: wrong, save: async () => wrong() },
     executeCollection: async () => { throw Error("Accepted execution reached the live service"); },
     capture: () => { focused = "B"; return { writer, check: () => ({ available: true }), release: () => { released++; } }; } });

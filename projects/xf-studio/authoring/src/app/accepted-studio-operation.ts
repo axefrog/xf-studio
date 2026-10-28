@@ -1,8 +1,6 @@
 /** An accepted operation has only captured dependencies. No live input/router is available in this module. */
 import type { CancelResult, CollectionOutcome, CollectionProgress, CollectionRequest } from "../library/collection-service";
 import type { FileOperationSources, CapturedCollectionPort, InputCapture, PackageResult, StudioActivity, StudioFileAction, StudioFileOutcome, StudioFilePort, StudioFileState } from "./studio-file-operations";
-import { portableRecipe, readPortableRecipe, RECIPE_FILE_MESSAGE } from "../legacy/eye-makeup/recipe-schema";
-import type { Layer, Recipe } from "../engines/layered-makeup/recipe";
 import { CC_PRESET_LIMITS, readPresetJson } from "../character/cc-preset";
 import { refusal } from "../platform/api/capability";
 
@@ -86,23 +84,24 @@ export class AcceptedStudioOperation {
           check();
           if (!file) return this.finish(action.kind, { ok: false, code: "cancelled", message: "Recipe selection cancelled." });
           if (file.size > 1_000_000) throw new FileOperationError("too_large", "Recipe is too large.");
-          const recipe = readPortableRecipe(JSON.parse(await file.text()));
+          const format = sources.featureFiles!.portable!;
+          const recipe = format.parse(JSON.parse(await file.text()));
           check();
-          if (!recipe) throw Error(RECIPE_FILE_MESSAGE);
-          sources.importRecipe(recipe, file.name.replace(/\.json$/i, ""), action.collection);
+          if (recipe === undefined) throw Error(format.invalidMessage);
+          format.load(recipe, file.name.replace(/\.json$/i, ""), action.collection);
           outcome = { ok: true, code: "imported", message: `Opened ${file.name}` }; break;
         }
         case "recipe.export":
           // The oldest recipe schema that holds it, so older builds open it too.
-          this.device.download(new Blob([JSON.stringify(portableRecipe(sources.recipe() as Recipe), null, 2)],
-            { type: "application/json" }), "xfs.recipe.json");
-          outcome = { ok: true, code: "exported", message: "Recipe exported — editable shapes, colours and fields." }; break;
+          this.device.download(new Blob([JSON.stringify(sources.featureFiles!.portable!.serialize(), null, 2)],
+            { type: "application/json" }), sources.featureFiles!.portable!.name);
+          outcome = { ok: true, code: "exported", message: sources.featureFiles!.portable!.message }; break;
         case "mask.export": {
-          const layer = structuredClone(sources.selectedLayer()!) as Layer;
-          const blob = await this.device.bakeMask(layer);
+          const mask = sources.featureFiles!.mask!, input = mask.capture()!;
+          const blob = await this.device.bakeMask!(structuredClone(input.value), this.signal);
           check();
-          this.device.download(blob, `xfs-${layer.id}-alpha.png`);
-          outcome = { ok: true, code: "exported", message: "Exported the layer's shape as a 2048 × 2048 mask." }; break;
+          this.device.download(blob, input.name);
+          outcome = { ok: true, code: "exported", message: mask.message }; break;
         }
         case "savedV.import": {
           const file = await this.device.pick("savedV");

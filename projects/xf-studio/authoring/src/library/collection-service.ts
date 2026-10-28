@@ -17,18 +17,17 @@
  *   import not saved yet).
  */
 import { COLLECTION_MESSAGE } from "../platform/core/document";
-import { eyeMakeupCollection, planCollection } from "../legacy/eye-makeup/export/preset-collection";
 import type { Recipe } from "../engines/layered-makeup/recipe";
 import { COLLECTION_2, isKeptPackagePlan, PLAN_ISSUE_MESSAGE, refusal, storedPackagePlan, type Capability, type KeptPackagePlan, type Look, type LookCollection,
   type ModPackagePlan, type PackageBuildProgress, type PackageBuildResult, type PackageCheckResult, type PackagePlanIssue } from "../platform/api";
 import { nameIssue, positionIssue, refuse } from "../platform/api/validation-issues";
 import type { OutboxEdit } from "../platform/core/document-outbox";
-import type { PackageAction } from "../legacy/eye-makeup/export/package-action";
-import { packageBuildLine, packageCheckLine } from "../legacy/eye-makeup/export/package-filter";
-import { packageBuildStageLine } from "../legacy/eye-makeup/export/package-action";
+import { registeredCollectionExport, NO_COLLECTION_EXPORT } from "./collection-export";
+type PackageAction = "check" | "build";
 import { hostClock, type Clock } from "../platform/core/clock";
 import { collectionProducts, copyPackagePlan, editPackagePlan, packagePlanEditIssue, type PlannedProduct } from "../platform/core/package-plan";
-import { emptyMemory, NEWER_LOOKS_LIBRARY_MESSAGE, newPresetName, starterLook, withLiveMemory, withLivePart, type DocumentModel } from "../app/workspace/makeup-workspace";
+import { withLivePart } from "../app/workspace/makeup-workspace";
+import { NEWER_LOOKS_LIBRARY_MESSAGE, newPresetName, starterLook, type DocumentModel } from "../app/workspace/collection-workspace";
 import { type CollectionAction, type CodedCapability, type CollectionConflict, CONFLICT_FIRST, type CollectionDraftSummary, packagePlanEdit, type PackageProductSummary, type ReadonlyDeep,
   type CollectionSummary, type StoredCollection, PACKAGE_PLAN_KINDS, type PackagePlanAction } from "./collection-actions";
 import { type CollectionSnapshot, type CollectionView, type CollectionOwner, type LookInput, MAX_LOOKS_AT_CREATE } from "./collection-owner";
@@ -37,10 +36,7 @@ import { documentKey } from "../platform/api/document-commands";
 import type { OutboxEntry } from "../platform/core/document-outbox";
 
 /** The plain reasons a collection has nothing to put in a mod because of looks made with a newer version (PIPE-44). */
-export const EVERY_LOOK_NEWER_MESSAGE = "Every look in this collection was made with a newer version of XF Studio, so this version " +
-  "can't put them in a mod. Update XF Studio to build it.";
-export const NO_EDITABLE_EYE_MAKEUP_MESSAGE = "The looks with eye makeup here were made with a newer version of XF Studio, so this " +
-  "version can't put them in a mod. Update XF Studio to build them, or add eye makeup to another look.";
+export { EVERY_LOOK_NEWER_MESSAGE } from "./collection-export";
 const LOADING = "Collection is still loading.";
 /** How many collections Reopen previous steps back through. */
 export const PREVIOUS_LIMIT = 8;
@@ -391,12 +387,11 @@ export class CollectionService {
   }
   /** Why the collection has no look to package, or undefined when it has one (CORE-34, PIPE-44). */
   private unpackageable(collection: LookCollection): string | undefined {
-    const selected = this.selectedId(), feature = this.deps.model.live, looks = collection.presets, current = this.readLive();
-    if (feature && looks.some(look => !look.locked && !!(look.id === selected && current
-      ? liveParts(look, current, this.deps.model) : look.parts)[feature])) return undefined;
-    if (looks.length && looks.every(look => look.locked)) return EVERY_LOOK_NEWER_MESSAGE;
-    return looks.some(look => look.locked) ? NO_EDITABLE_EYE_MAKEUP_MESSAGE
-      : "None of these presets has eye makeup yet, so there is nothing to put in a mod.";
+    const bridge = registeredCollectionExport(this.deps.model);
+    if (!bridge) return NO_COLLECTION_EXPORT;
+    const selected = this.selectedId(), current = this.readLive();
+    return bridge.unavailable({ ...collection, presets: collection.presets.map(look => !look.locked && look.id === selected && current
+      ? { ...look, parts: liveParts(look, current, this.deps.model) } : look) });
   }
   hasPreset(id: string): boolean { return !!this.shown()?.looks.includes(id); }
   draftIdentity(): { collectionId: string; selected?: string } | undefined {
@@ -546,7 +541,7 @@ export class CollectionService {
         const from = owner.look({ collection: id, look: command.id })!, now = owner.collection(id)!;
         const made = done(owner.dispatch({ kind: "collection.addLook", collection: id, base: now.revision, at: now.looks.indexOf(command.id) + 1,
           look: { ...(command.newId ? { id: command.newId } : {}), name: `${from.name.slice(0, 113)} (copy)`, parts: from.parts,
-            memory: model.parts.writeMemory(withLiveMemory(undefined, emptyMemory(), model), { lookLevel: true }) } }));
+            memory: this.freshMemory() } }));
         this.show(made.look!);
         break;
       }
@@ -580,7 +575,12 @@ export class CollectionService {
   /** A look's stored parts and fresh editor memory (a new look's). */
   private storedLook(look: Look): Pick<LookInput, "parts" | "memory"> {
     const model = this.deps.model;
-    return { parts: model.parts.minimalLook(look, false).parts, memory: model.parts.writeMemory(withLiveMemory(undefined, emptyMemory(), model), { lookLevel: true }) };
+    return { parts: model.parts.minimalLook(look, false).parts, memory: this.freshMemory() };
+  }
+  /** The primary feature's registered initial editor; no concrete editor or fabricated part is needed. */
+  private freshMemory() {
+    const model = this.deps.model, module = model.live === undefined ? undefined : model.parts.feature(model.live);
+    return model.parts.writeMemory(module ? { [module.id]: { editor: module.editor.empty() } } : {}, { lookLevel: true });
   }
   /** Show a look on the scene (its edits so far are written first by the look editor). */
   private show(ref: LookRef) { this.deps.scene.setLook(ref); }
@@ -642,7 +642,7 @@ export class CollectionService {
         const stage = await ask();
         if (!stop.signal.aborted && !this.buildAbort?.signal.aborted && stage && this.running?.requestId === requestId && this.progress?.requestId === requestId &&
             this.progress.phase === "working") {
-          const message = packageBuildStageLine(stage), fraction = (stage.step - .5) / stage.steps;
+          const message = registeredCollectionExport(this.deps.model)!.stageLine(stage), fraction = (stage.step - .5) / stage.steps;
           if (message !== this.progress.message || fraction !== this.progress.fraction)
             this.setProgress({ phase: "working", code: "package", requestId, message, fraction });
         }
@@ -730,7 +730,7 @@ export class CollectionService {
     return ids.map(look => ({ collection: input.id, look }));
   }
   private storedLooks(collection: LookCollection, keepIds: boolean): LookInput[] {
-    const model = this.deps.model, memory = model.parts.writeMemory(withLiveMemory(undefined, emptyMemory(), model), { lookLevel: true });
+    const model = this.deps.model, memory = this.freshMemory();
     return collection.presets.map(look => ({ ...(keepIds ? { id: look.id } : {}), name: look.name, parts: model.parts.minimalLook(look, false).parts, memory }));
   }
   private remembered(): void {
@@ -844,7 +844,7 @@ export class CollectionService {
           if (storable) await this.saveVersion(view.id);
           const collection = await this.snapshot(view.id);
           result = { kind: "export", name: plan ? "xfs.build-plan.json" : "xfs.collection.json",
-            json: JSON.stringify(plan ? planCollection(eyeMakeupCollection(collection)) : this.deps.model.parts.writeMinimal(collection), null, 2) };
+            json: JSON.stringify(plan ? registeredCollectionExport(this.deps.model)!.plan(collection) : this.deps.model.parts.writeMinimal(collection), null, 2) };
           const locked = collection.presets.filter(look => look.locked);
           const kept = storable ? "It was also saved to your library first."
             : plan ? "It wasn't saved to your library: it has a look made with a newer version of XF Studio. Your collection is kept."
@@ -864,10 +864,10 @@ export class CollectionService {
           this.packageKey = key;
           if (request.action === "check") {
             const checked = response as PackageCheckResult;
-            result = { kind: "packageCheck", result: checked }; message = packageCheckLine(checked);
+            result = { kind: "packageCheck", result: checked }; message = registeredCollectionExport(this.deps.model)!.checkLine(checked);
           } else {
             const built = response as PackageBuildResult;
-            result = { kind: "packageBuild", result: built }; message = packageBuildLine(built);
+            result = { kind: "packageBuild", result: built }; message = registeredCollectionExport(this.deps.model)!.buildLine(built);
           }
           break;
         }

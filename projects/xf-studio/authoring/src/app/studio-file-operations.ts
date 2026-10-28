@@ -2,7 +2,7 @@ import { AcceptedStudioOperation, collectionRequest } from "./accepted-studio-op
 import { BUILD_NEEDS_SETUP, BUILD_TOOLS_CHECKING_REASON } from "./alpha-availability";
 import type { CancelResult, CollectionOutcome, CollectionProgress, CollectionRequest, CollectionResult, CollectionService } from "../library/collection-service";
 import type { PackageBuildResult, PackageCheckResult } from "../platform/api";
-import type { Layer, Recipe } from "../engines/layered-makeup/recipe";
+import type { FeatureFileOperations } from "./feature-files";
 import type { ReadonlyDeep } from "../platform/api/read-only";
 import type { SavedAppearanceState } from "../character/saved-appearance-actions";
 import type { SavedV } from "../saves/save-reader";
@@ -13,7 +13,7 @@ export type StudioPickedFile = { name: string; size: number; text(): Promise<str
 export type StudioFilePort = {
   pick(kind: StudioFileKind): Promise<StudioPickedFile | undefined>;
   download(blob: Blob, name: string): void;
-  bakeMask(layer: Layer): Promise<Blob>;
+  bakeMask?(value: unknown, signal?: AbortSignal): Promise<Blob>;
   /** Desktop-only host-owned file; the browser supplies no route. */
   revealWorkspace?: () => Promise<void>;
 };
@@ -70,10 +70,7 @@ type FileSources = {
   operations?(): CapturedCollectionPort;
   message?(): string | undefined;
   collection?(): string | undefined;
-  recipe(): ReadonlyDeep<Recipe>;
-  selectedLayer(): ReadonlyDeep<Layer> | undefined;
-  /** Import a recipe as a new preset of `collection` (the one the request named when it was asked). */
-  importRecipe(recipe: Recipe, name: string, collection: string): void;
+  featureFiles?: FeatureFileOperations;
   hasSavedV(): boolean;
   savedV(): SavedV | undefined;
   /** Show a save's V on `character` (the V the request named when it was asked). */
@@ -186,9 +183,11 @@ export class StudioFileOperations {
     if ((action.kind === "savedV.import" || action.kind === "characterPreset.import") && !action.character) return refusal("missing_target", "Choose a V first.");
     switch (action.kind) {
       case "workspace.showInFolder": return this.port.revealWorkspace ? { available: true } : { available: false, reason: "This workspace is stored in your browser." };
-      case "recipe.import": case "recipe.export": return { available: true };
-      case "mask.export": return this.sources.selectedLayer() ? { available: true } :
-        { available: false, reason: "Select a layer before exporting a mask." };
+      case "recipe.import": case "recipe.export": return this.sources.featureFiles?.portable ? { available: true } :
+        { available: false, reason: "No recipe file format is registered for this look." };
+      case "mask.export": return this.sources.featureFiles?.mask && this.port.bakeMask
+        ? this.sources.featureFiles.mask.capture() ? { available: true } : { available: false, reason: this.sources.featureFiles.mask.unavailable }
+        : { available: false, reason: "No mask export is registered for this look." };
       case "savedV.import": return this.sources.savedVReady(action.character!) ? { available: true } :
         { available: false, reason: this.sources.savedVUnavailableReason?.() ?? "Wait for the 3D view to finish loading." };
       case "savedV.export": return this.sources.hasSavedV() ? { available: true } :

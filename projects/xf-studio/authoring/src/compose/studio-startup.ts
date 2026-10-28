@@ -25,7 +25,7 @@ import type { ModuleViewBinding } from "../studio-ui/views/feature-view";
  * storage, the preparation endpoint, the setup form) arrive as a typed `StudioHost`, never as
  * page globals or data attributes. Nothing in `studio-ui/` imports this module.
  */
-import { createBrowserFileDevice } from "../app/browser/browser-file-device";
+import { createBrowserFileDevice, registeredMaskBake } from "../app/browser/browser-file-device";
 import { NO_3D_PREVIEW_IN_ALPHA } from "../app/alpha-availability";
 import type { PreviewPreparationActions } from "../preview/preview-preparation";
 import { PreviewSetupActions } from "../preview/preview-setup";
@@ -165,7 +165,7 @@ async function start(host: StudioHost, root: HTMLElement) {
   const verification = new URLSearchParams(location.search).has("verify");
   // Diagnostics first, so everything after is trapped (docs/diagnostics.md): page failures reach the host log, notices carry a
   // reference, and "Report a problem" prepares a report for review. Nothing is sent anywhere by itself.
-  const fileDevice = createBrowserFileDevice({ document, pickers: {
+  const fileDevice = createBrowserFileDevice({ document, maskBake: registeredMaskBake(STUDIO_COMPOSITION.registry, STUDIO_COMPOSITION.documents), pickers: {
     recipe: byId<HTMLInputElement>("device-recipe-picker"),
     collection: byId<HTMLInputElement>("device-collection-picker"),
     savedV: byId<HTMLInputElement>("device-save-picker"),

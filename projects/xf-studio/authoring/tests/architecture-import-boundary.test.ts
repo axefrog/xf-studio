@@ -91,6 +91,16 @@ test("slice 10 preview construction is registered and head preparation names no 
   expect(resolved("legacy/eye-makeup/preview/authoring-preview-coordinator")).not.toContain("app/authoring/makeup-document");
   expect(resolved("legacy/eye-makeup/preview/authoring-render-scheduler")).not.toContain("app/authoring/makeup-document");
 });
+test("slice 11 file workflows bind registered projections and keep the mask worker with its contribution", () => {
+  for (const name of ["app/studio-file-operations", "app/accepted-studio-operation", "app/trusted-studio-bootstrap", "app/browser/browser-file-device"])
+    expect(resolved(name).filter(path => /engines\/layered-makeup|legacy\/eye-makeup\/(?:recipe-schema|export\/)/.test(path))).toEqual([]);
+  expect(codeOnly(DISK.text("app/trusted-studio-bootstrap"))).not.toMatch(/core\.presentation\.(?:recipe|layer)\(/);
+  expect(codeOnly(DISK.text("app/browser/browser-file-device"))).not.toMatch(/new Worker\(|new ImageData\(/);
+  expect(resolved("library/collection-service").filter(path => /legacy\/eye-makeup\/export\//.test(path))).toEqual([]);
+  for (const adapter of ["app/authoring/makeup-files", "preview/browser/layered-mask-bake"])
+    expect(DISK.names.filter(name => resolved(name).includes(adapter))).toEqual(["compose/studio-registry"]);
+  expect(resolved("preview/browser/layered-preview-capability")).not.toContain("app/trusted-authoring-core");
+});
 /** A module's imports with whether each is type-only, as src-relative module names. */
 const usesIn = (tree: Tree, name: string) => importUses(tree.text(name)).map(use => ({ path: resolveFrom(name, use.specifier), typeOnly: use.typeOnly }));
 /** A resolved import as the module it names (`x` or `x/index`), when it names one in the tree. */

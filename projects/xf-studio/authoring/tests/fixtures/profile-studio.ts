@@ -15,7 +15,7 @@ import type { Recipe } from "../../src/engines/layered-makeup/recipe";
 import { CollectionApplication } from "../../src/library/collection-application";
 import { CollectionService, type CollectionServiceDeps, type CollectionTransport } from "../../src/library/collection-service";
 import type { AuthoringDocument } from "../../src/app/authoring/makeup-document";
-import type { DocumentModel } from "../../src/app/workspace/makeup-workspace";
+import type { DocumentModel } from "../../src/app/workspace/collection-workspace";
 import { type LookRef, lookRef, collectionRef } from "../../src/library/collection-documents";
 import { CollectionOwner, type CollectionVersionsPort } from "../../src/library/collection-owner";
 import { saveCollectionVersion } from "../../src/library/host/collection-store";
@@ -30,6 +30,7 @@ import { freshWorkspace } from "./eye-region";
 import { openTestLibrary, type TestLibrary } from "./library-file";
 import { eyeBuild, eyeCheck } from "./package-results";
 import { memoryOutboxStorage } from "./platform-doubles";
+import { makeupFileOperations } from "../../src/app/authoring/makeup-files";
 
 const MODEL = STUDIO_DOCUMENTS;
 
@@ -114,8 +115,8 @@ export async function profileStudio(options: {
   };
   const files = new StudioFileOperations({ pick: async () => options.pick?.(), download: (blob, name) => { void blob.text().then(text => downloads.push({ name, text })); },
     bakeMask: async () => new Blob() }, {
-    recipe: () => core.document.recipe, selectedLayer: () => core.document.recipe.layers[core.document.active],
-    importRecipe: (value, name, collection) => application!.importRecipe(value, name, collection),
+    featureFiles: makeupFileOperations({ recipe: () => core.document.recipe, selectedLayer: () => core.document.recipe.layers[core.document.active],
+      importRecipe: (value, name, collection) => application!.importRecipe(value, name, collection) }),
     hasSavedV: () => false, savedV: () => undefined, loadSavedV: () => ({}), savedVReady: () => false,
     executeCollection: request => core.app.execute(request), recoverCollection: draft => application!.recover(draft),
   });

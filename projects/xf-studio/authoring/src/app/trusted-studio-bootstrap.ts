@@ -22,6 +22,7 @@ import type { NamedTargets } from "./action-targets";
 import type { Capability } from "../platform/api";
 import { PanelEditingContexts } from "./profiles/panel-editing-contexts";
 import { builtModsOf } from "../installation/mod-install-actions";
+import { registeredFeatureFiles } from "./feature-files";
 
 type Core = ReturnType<typeof createTrustedAuthoringCore>;
 
@@ -106,11 +107,8 @@ export function createTrustedStudioBootstrap<Slot>(options: {
     operations: () => ({ service: collection.service, execute: request => core.app.execute(request) }),
     message: () => collection.service.view().progress?.message,
     collection: () => collection.service.draftIdentity()?.collectionId,
-    recipe: () => core.presentation.recipe(), selectedLayer: () => core.presentation.layer(),
-    importRecipe: (recipe, name, into) => {
-      collection.importRecipe(recipe, name, into);
-      options.onRecipeImported();
-    },
+    featureFiles: registeredFeatureFiles(core.app.actionRegistry(), core.documents.live,
+      { document: core.lookDocument, application: core.app, signal: core.signal, imported: options.onRecipeImported }),
     hasSavedV: options.savedAppearance.has, savedV: options.savedAppearance.read,
     loadSavedV: (bytes, character) => {
       const applied = options.savedAppearance.load(bytes, character);

@@ -301,6 +301,8 @@ Details and line references: [CCXL merge boundary](../research/character-customi
 
 XF Studio's single eye-makeup selector (one switcher with Off and complete-look choices in the `face` group) follows this model; see [experiment 005](../experiments/005-preset-collection/README.md) and the [ArchiveXL strategy](../research/archive-xl/eye-artistry-strategy.md).
 
+**Studio file/export boundary [offline].** The registered eye-makeup file/export bridge supplies the released recipe format, standalone mask inputs and compiler plan; its existing export info supplies the same product brand and selector defaults. CORE-03 slice 11 preserves the portable bytes, package request snapshots, partial omissions and identities captured from `1a6cdc80`; package and manifest goldens remain the independent output gates. Standalone 2048² mask export now passes the region the worker requires (previously missing), with real-worker RGBA parity for plain, directional and mottled layers. This is an offline file-workflow correction, not new game or ArchiveXL evidence; see [the pipeline's file boundary](../research/authoring/studio-to-mod-pipeline.md#the-pipeline-at-a-glance) and [slice 11](../research/authoring/core-03-plan.md#slice-11-as-built-28-october-2026).
+
 ### Hair-colour additions
 
 Every CCXL hair-colour pack on the reference installation (six, 150 colours) follows the wiki's hair-profiles template ([study](../research/hair/hair-colour-authoring-feasibility.md)):

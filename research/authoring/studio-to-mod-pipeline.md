@@ -17,6 +17,10 @@ The short version: the Studio saves editable makeup as data. Check and Build mak
 
 ## The pipeline at a glance
 
+The page's portable recipe and collection-plan projections now come from the live feature's existing registration (`files` and `collectionExport` in [the composition list](../../projects/xf-studio/authoring/src/compose/studio-registry.ts)). Eye makeup's [released-format adapter](../../projects/xf-studio/authoring/src/app/authoring/makeup-files.ts) supplies its recipe parser/writer, filenames and compiler plan; the same registration's existing export info supplies brand and selector defaults. Check/Build still send the same coherent stored collection to the unchanged export host, filter, builder and manifest gates. With no registered file/export contribution those operations are unavailable; opening, saving and portable collection recovery remain supported.
+
+**Standalone mask export** (`mask.export`, the collection panel's Export layer mask and the Research command) is separate from Check/Build. Its [registered baker](../../projects/xf-studio/authoring/src/preview/browser/layered-mask-bake.ts) supplies the raster worker with the layer **and its region**, forces the selected layer enabled as before, and writes the same 2048² canvas PNG. Slice 11 fixes a missing region in the former file device: the real worker previously failed before producing pixels. Offline real-worker tests compare plain, directional and mottled RGBA bytes against the same evaluator/region/size; PNG encoding remains the browser's. Aborting releases the worker and prevents a late download. This fix changes no package texture, Check/Build result, omission, identity or manifest.
+
 Solid arrows below are implemented local data/build steps. The final dashed arrow is **work still to be observed in game**. A red rejection means no eligible preset remains; structural or integrity failures also prevent promotion. A partial result carries explicit omissions. The first diagram follows authoring through eligibility; the second begins with the same validated build snapshot.
 
 ```mermaid
