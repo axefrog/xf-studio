@@ -6,7 +6,7 @@ import { studioReadDeps, targetReadBaseline } from "./fixtures/target-read-basel
 
 // Alternate order, warm both implementations, and compare the two on this machine. No cross-machine microsecond budget.
 // A read takes 10–100 us, so a batch of 100 lasted about a millisecond and a busy CI runner's bursts moved the median ratio from 0.9x
-// to 1.7x. Each batch now runs for at least 2 ms, and each side's cost is its fastest batch (pauses only ever add time). A ratio over
+// to 1.7x. Each batch is sized to target about 2 ms (from one baseline batch), and each side's cost is its fastest batch (pauses only ever add time). A ratio over
 // budget is measured again, up to three times: a real regression stays over budget, a burst of load usually doesn't.
 function compare(label: string, baseline: () => unknown, live: () => unknown) {
   expect(live()).toEqual(baseline());
