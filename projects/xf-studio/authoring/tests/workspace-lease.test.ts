@@ -363,7 +363,7 @@ test("the outbox's drain reports a command that failed while it waited, and stop
   await new Promise(resolve => setTimeout(resolve, 5));
   answer!({ ok: false, reason: "superseded" });
   expect(await again).toBe(false);
-  expect(outbox.status()).toMatchObject({ stopped: true, pending: 1 });
+  expect(outbox.status()).toMatchObject({ stopped: false, suspended: true, pending: 1 });
 });
 
 test("a failed takeover returns to read-only, withdraws its request, and can be tried again", async () => {

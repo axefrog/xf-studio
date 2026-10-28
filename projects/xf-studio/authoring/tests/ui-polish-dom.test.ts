@@ -903,6 +903,25 @@ describe("Polish batch 2: the profiles phase 1 UI follow-ups", () => {
     expect((root.querySelector(".workspace-notice-actions") as LightElement).hidden).toBe(true);
   });
 
+  test("a suspended writer uses the read-only notice and its recovery actions even during a control run", async () => {
+    const { workspaceNotice, workspaceNoticeState } = await import("../src/studio-ui/app");
+    const { PAUSED_WORKSPACE } = await import("../src/app/workspace/workspace-access");
+    const sent: string[] = [];
+    const notice = workspaceNotice({ port: { documents: { dispatch: async (action: { kind: string }) => { sent.push(action.kind); return { ok: false, message: "Export this window's copy, or reopen the window." }; } } },
+      file: (action: { kind: string }) => { sent.push(action.kind); }, feedback: { toast() {} } } as never);
+    const frame = { status: { lease: { writable: false, message: PAUSED_WORKSPACE }, outbox: { suspended: true } },
+      preview: { gesture: null, control: { id: "opacity" } } } as never;
+    expect(workspaceNoticeState(frame)).toEqual({ message: PAUSED_WORKSPACE, actions: ["retryRestore", "exportCopy"] });
+    notice.update(frame);
+    const root = notice.element as unknown as LightElement;
+    expect(root.hidden).toBe(false); expect(text(root)).toContain("read-only");
+    const shown = buttons(root).filter(button => !button.hidden);
+    expect(shown.map(button => text(button))).toEqual(["Try again", "Export this window's copy"]);
+    for (const button of shown) button.click();
+    await Promise.resolve();
+    expect(sent).toEqual(["documents.retryRecovery", "collection.exportWindowCopy"]);
+  });
+
   test("condition 5: while the restoring line shows, the status bar's idle \"Ready\" gives way; real activity stays", async () => {
     const { statusActivity } = await import("../src/studio-ui/app");
     const frame = (recovering: typeof idle, library: Record<string, unknown> = {}) =>

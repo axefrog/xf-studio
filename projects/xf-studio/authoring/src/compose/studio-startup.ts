@@ -78,6 +78,7 @@ import { PROFILES_MIGRATION_ENABLED, startProfilesMigration, watchProfilesMigrat
 import { workspaceKeys, type WorkspaceState } from "../app/workspace/workspace-state";
 import { WorkspacePersistence } from "../app/workspace/workspace-persistence";
 import { outboxView } from "../app/presentation-status";
+import { workspaceAccess } from "../app/workspace/workspace-access";
 import type { TargetResolver } from "../app/profiles/targets";
 import { createProfileServices, createTargetResolver, drawnView as drawnViewOf, historyScopeName, historyScopeDetails, panelBindingTargets, openProfileSession,
   sceneHeadTargets, sceneCommands, tabDefaults } from "../app/profiles/profile-window";
@@ -198,6 +199,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   const warmStart = new CharacterWarmStart({ storage, verification });
   if (new URLSearchParams(location.search).get("warm") !== "off") void warmStart.start();
   const documents = host.documents, lease = host.lease, base = verification ? "/api/verification" : "/api";
+  const access = workspaceAccess(lease, documents.outbox);
   // One history service for the session: every look's history (`look:<collection>/<look>`), every V's (`character:<id>`) and the View and
   // lighting history, beside the experiments' documents (profiles design §3.7).
   const historyService = ("historyService" in experiments && experiments.historyService) || createHistoryService();
@@ -213,13 +215,13 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   const services = createProfileServices({ documents: documents.documents, outbox: documents.outbox, subjects: createStudioSubjects(),
     layouts: { ...layouts,
       // The library's own write authority (the lease), not the workspace file's protection: a protected workspace still edits defaults.
-      writable: () => lease?.writable() ?? true, note: text => defaultNote(text) },
+      writable: access.writable, note: text => defaultNote(text) },
     catalogue: creatorCatalogue, history: historyService, versions: collectionVersions(`${base}/collection-versions`, fetch, documents.fence),
     report: error => diagnostics.failure("library", "library_owner_failed", "Part of your library couldn't be read.", error, { level: "warn" }) });
   // The live feature's starter shapes (profiles design §6): its contributed ones and the person's own (library documents through the outbox),
   // and which one new layers and looks start from, kept in the workspace's feature memory.
   const starters = registeredStarters(composition.registry, composition.documents)?.create({ workspace,
-    documents: documents.documents, outbox: documents.outbox, writable: () => lease?.writable() ?? true, note: text => defaultNote(text),
+    documents: documents.documents, outbox: documents.outbox, writable: access.writable, note: text => defaultNote(text),
     report: error => diagnostics.failure("library", "starters_failed", "Part of your starters couldn't be read.", error, { level: "warn" }) });
   const starterShapes = starters?.shapes;
   // The profiles migration (profiles design §8) runs before anything is built, in the window holding the workspace: the Studio opens on the
@@ -331,7 +333,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     finally { try { releaseHeads?.(); } finally { lookEditor.dispose(); } }
   }, { once: true });
   // One writer per workspace: while another window holds it, every action, request, control and gesture is refused here.
-  if (lease) core.app.attach({ access: lease });
+  core.app.attach({ access });
   // The session's view graph (view-graph-design.md §3.3), which the core acts on: the head restores and follows its main view.
   const views = core.views;
   // The scene the drawn view shows (none while no view is drawn) and the look it shows, which the collection service changes.
@@ -350,10 +352,10 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     collection: () => bootstrap?.collection.service.draftIdentity()?.collectionId });
   // Dispatch checks what an action names by the resolver's rule (the one its captures follow).
   const panelActions = panelCommands(sessionState, targets, layouts.catalogue,
-    { bindingTargets: () => panelBindingTargets(sessionState, services, targets.world()), access: () => lease?.refusal() ?? { available: true } });
+    { bindingTargets: () => panelBindingTargets(sessionState, services, targets.world()), access: () => access.refusal() ?? { available: true } });
   core.app.attach({ targetCheck: targets, panels: panelActions,
     historyScopeDetails: scope => historyScopeDetails(scope, { services, history: historyService }) });
-  const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, () => !lease || lease.writable(), () => statusSource.changed()) : undefined;
+  const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, access.writable, () => statusSource.changed()) : undefined;
   const headHost = byId("device-head");
   const viewportDevice = createBrowserViewportDevice({ signal, surface: registeredEditorAdapters(core)?.surface, headHost, queryContext: hit => core.app.contextQuery(hit, targets.namedView(drawnView())), renderers: composition.renderers, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
@@ -559,7 +561,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
     tabs: layoutTabsPort(sessionState, layoutTabs, services), starters: starterActions?.port(),
     emptyChoices: emptyChoicesPort({ session: sessionState, resolver: targets, services, panels: panelActions,
       ownerType: (instance, route) => route === "look" ? "presets" : route === "subject" ? "view" : layouts.catalogue().primary(sessionState.panel(instance)?.type ?? "")?.id,
-      registration: () => experiments.registrationGeneration(), access: () => lease?.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
+      registration: () => experiments.registrationGeneration(), access: () => access.refusal() ?? tabFixtures?.choiceAccess() ?? { available: true },
       createLookCapability: collection => core.app.capability({ kind: "preset.edit", collection, command: { kind: "add" } }),
       starter: () => starterParts(core.documents, starters?.part()), baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) }),
     // The input layer: what each action names (profiles design §3.6), resolved from the session, focus and the owners.

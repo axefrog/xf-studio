@@ -171,9 +171,11 @@ test("external updates reset only their look history; a scoped conflict resoluti
 
 test("a write failure retains the sole dirty context through release/reacquire; aborted acquisition creates nothing", async () => {
   const w = await profileContextStudio();
+  const update = w.services.collections.updateLook;
   try {
     const panel = w.bind("presets--unseen"), eye = panel.context.current().feature("eye-makeup");
-    w.outbox.stop();
+    // Fail the writer itself: a stopped outbox now refuses the application edit before it can dirty the context.
+    w.services.collections.updateLook = () => ({ ok: false, code: "unavailable", reason: "Injected write failure" });
     expect(eye.dispatch({ kind: "layer.setOpacity", layerId: "layer-1", opacity: 0.48 }).ok).toBe(true);
     panel.life.abort();
     expect(w.authoring.contexts.held().find(held => held.ref.look === w.looks[2]!.look)).toMatchObject({ wants: 0, dirty: true });
@@ -181,7 +183,7 @@ test("a write failure retains the sole dirty context through release/reacquire; 
     const before = w.authoring.contexts.held(), cancelled = new AbortController(); cancelled.abort();
     expect(w.authoring.contexts.acquire(w.looks[1]!, cancelled.signal)).toBeUndefined();
     expect(w.authoring.contexts.held()).toEqual(before);
-  } finally { await w.dispose(); }
+  } finally { w.services.collections.updateLook = update; await w.dispose(); }
 });
 
 test("missing data stays empty and creates no replacement; stale facade actions refuse after release", async () => {

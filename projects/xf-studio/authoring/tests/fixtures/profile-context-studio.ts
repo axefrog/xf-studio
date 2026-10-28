@@ -28,7 +28,9 @@ import { STUDIO_COMPOSITION } from "../../src/compose/studio-registry";
 import { STUDIO_CATALOGUE } from "../../src/compose/views";
 import { createStudioSubjects } from "../../src/compose/subjects";
 import { panelCommands } from "../../src/compose/panel-commands";
-import { DocumentOutbox } from "../../src/platform/core/document-outbox";
+import { DocumentOutbox, type OutboxStorage, type OutboxTransport } from "../../src/platform/core/document-outbox";
+import type { WorkspaceLease } from "../../src/app/workspace/workspace-lease";
+import { workspaceAccess } from "../../src/app/workspace/workspace-access";
 import { createHistoryService } from "../../src/platform/core/history-service";
 import { characterRef } from "../../src/platform/api/characters";
 import { MAIN_VIEW, type ViewRecord } from "../../src/platform/api/view-graph";
@@ -43,9 +45,11 @@ import { openTestLibrary, type TestLibrary } from "./library-file";
 import { libraryPort, libraryVersions, storedLook } from "./profile-studio";
 
 export type ContextRestart = { library: TestLibrary; session: ProfileSessionData; profile: string; looks: LookRef[]; vs: string[] };
-export async function profileContextStudio(options: { signal?: AbortSignal; clock?: Clock; now?: () => number; restart?: ContextRestart; pick?: () => Promise<StudioPickedFile | undefined>; package?: CollectionTransport["package"]; diagnostics?: DiagnosticsActions; starters?: boolean; recipe?: () => Recipe; modInstall?: ModInstallActions; presets?: PartPresetService; modules?: readonly ModuleService[]; viewPanels?: boolean; available?: (type: string) => boolean; generation?: (type: string) => number; panelViewport?: Parameters<typeof createTrustedStudioBootstrap<HTMLElement>>[0]["panelViewport"] } = {}) {
-  const library = options.restart?.library ?? openTestLibrary(undefined, { clock: options.clock }), transport = libraryPort(library), storage = memoryOutboxStorage();
-  const outbox = new DocumentOutbox(transport, storage, { retryMs: 5 }); outbox.open();
+export async function profileContextStudio(options: { lease?: WorkspaceLease; outbox?: { storage?: OutboxStorage; transact?: OutboxTransport["transact"] }; download?: StudioFilePort["download"]; signal?: AbortSignal; clock?: Clock; now?: () => number; restart?: ContextRestart; pick?: () => Promise<StudioPickedFile | undefined>; package?: CollectionTransport["package"]; diagnostics?: DiagnosticsActions; starters?: boolean; recipe?: () => Recipe; modInstall?: ModInstallActions; presets?: PartPresetService; modules?: readonly ModuleService[]; viewPanels?: boolean; available?: (type: string) => boolean; generation?: (type: string) => number; panelViewport?: Parameters<typeof createTrustedStudioBootstrap<HTMLElement>>[0]["panelViewport"] } = {}) {
+  const library = options.restart?.library ?? openTestLibrary(undefined, { clock: options.clock }), released = libraryPort(library);
+  const transport = { ...released, ...(options.outbox?.transact ? { transact: options.outbox.transact } : {}) }, storage = options.outbox?.storage ?? memoryOutboxStorage();
+  const outbox = new DocumentOutbox(transport, storage, { retryMs: 5, writable: () => options.lease?.writable() ?? true }); outbox.open();
+  const access = workspaceAccess(options.lease, outbox);
   const history = createHistoryService(), workspace = freshWorkspace(), host = await fixtureHost();
   const services = createProfileServices({ documents: transport, outbox, now: options.now ?? (options.clock ? () => options.clock!.now() : undefined), history, subjects: createStudioSubjects(),
     catalogue: new CreatorCatalogue(host.port), versions: libraryVersions(library) });
@@ -90,8 +94,9 @@ export async function profileContextStudio(options: { signal?: AbortSignal; cloc
   const authoring = createProfileAuthoring(lookWorkspace(workspace, STUDIO_COMPOSITION.documents), { history, views: session.graph, selectedCollection: () => "fixture", resetStack: () => { resets++; } },
     STUDIO_COMPOSITION, { owner: services.collections, sessions: services.looks, outbox, note: text => notes.push(text), report: error => failures.push(error), shown: () => { shows++; } });
   const core = authoring.core, targets = createTargetResolver({ state: session, history, services, available: options.available, generation: options.generation, contexts: type => STUDIO_CATALOGUE.context(type) });
+  core.app.attach({ access });
   if (options.presets) core.app.attach({ presets: options.presets });
-  const panelActions = panelCommands(session, targets, undefined, { bindingTargets: () => panelBindingTargets(session, services, targets.world()) });
+  const panelActions = panelCommands(session, targets, undefined, { bindingTargets: () => panelBindingTargets(session, services, targets.world()), access: () => access.refusal() ?? { available: true } });
   const layoutDefaults = tabDefaults(session, services);
   core.app.attach({ scenes: sceneCommands(session, services), panels: panelActions, tabs: layoutDefaults, targetCheck: targets,
     historyScopeDetails: scope => historyScopeDetails(scope, { services, history }) });
@@ -109,15 +114,15 @@ export async function profileContextStudio(options: { signal?: AbortSignal; cloc
   }
   const collectionTransport: CollectionTransport = { list: async () => library.collections.list(), get: async id => library.collections.get(id),
     package: options.package ?? (async () => { throw Error("Not used"); }) };
-  const fileDevice: StudioFilePort = { pick: options.pick ?? (async () => undefined), download: () => {}, bakeMask: async () => new Blob() };
+  const fileDevice: StudioFilePort = { pick: options.pick ?? (async () => undefined), download: options.download ?? (() => {}), bakeMask: async () => new Blob() };
   const viewport = new ViewportAttachment<HTMLElement>({ moveHost: () => {}, measure: () => ({ width: 300, height: 600 }), resize: () => {},
     cancelInput: () => {}, inputCapture: () => false, headView: () => undefined, uvView: () => undefined, uvCommand: () => false,
     hitAt: () => undefined, queryContext: hit => core.app.contextQuery(hit) }, ["head", "uv"]);
   const emptyChoices = emptyChoicesPort({ session, resolver: targets, services, panels: panelActions,
     ownerType: (instance, route) => route === "look" ? "presets" : route === "subject" ? "view" : STUDIO_CATALOGUE.primary(session.panel(instance)?.type ?? "")?.id,
-    starter: () => starterParts(core.documents), createLookCapability: () => ({ available: true }), access: () => ({ available: true }),
+    starter: () => starterParts(core.documents), createLookCapability: () => ({ available: true }), access: () => access.refusal() ?? { available: true },
     baseline: () => defaultViewGraph(workspace.preview), dispatch: action => core.app.dispatch(action) });
-  const boot = createTrustedStudioBootstrap({ core, signal: options.signal, emptyChoices, diagnostics: options.diagnostics, modInstall: options.modInstall, preferences: new UIPreferenceActions(workspace.uiPreferences), viewport,
+  const boot = createTrustedStudioBootstrap({ core, outbox, lease: options.lease, signal: options.signal, emptyChoices, diagnostics: options.diagnostics, modInstall: options.modInstall, preferences: new UIPreferenceActions(workspace.uiPreferences), viewport,
     previewReadiness: { readiness: () => ({ phase: "ready", size: 512, pending: 0, waiting: false, estimatedBytes: 0, layers: [] }), subscribe: () => () => {} },
     fileDevice,
     collections: { owner: services.collections, scene: { look: () => { const id = sceneOf(); return id ? session.knownScene(id)?.look : undefined; }, setLook: ref => { const id = sceneOf(); if (id) session.setLook(id, ref); }, subscribe: listener => session.subscribe(listener) },

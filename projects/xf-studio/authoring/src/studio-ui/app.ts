@@ -644,6 +644,8 @@ function shellHeader(rt: StudioRuntime, theme: Theme, view: ViewPrefs, openHelp:
  */
 export function workspaceNoticeState(frame: Frame): WorkspaceNoticeState | null {
   const lease = frame.status.lease;
+  if (frame.status.outbox?.suspended) return { message: lease?.message ?? "This window can't save changes. Export this window's copy, or reopen the window.",
+    actions: ["retryRestore", "exportCopy"] };
   if (lease?.message) {
     // A handover that couldn't save names two ways on, so it offers both: Try again, and the recovery export, which needs nothing from the
     // library that couldn't take the changes (condition 1).

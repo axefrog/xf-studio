@@ -321,7 +321,7 @@ describe("the outbox's rules (A1–A7)", () => {
     expect(outbox.conflicts()[0]!.writes[0]!.value).toEqual({ n: 5 });
   });
 
-  test("a superseded answer stops the outbox only after what waits to be stored soon is stored: the next holder recovers the successor", async () => {
+  test("a superseded answer suspends the outbox and stores the deferred successor for recovery", async () => {
     const r = rig(), storage = memoryOutboxStorage();
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
@@ -334,14 +334,15 @@ describe("the outbox's rules (A1–A7)", () => {
     await tick();
     first.commit("look.edit", [{ ...LOOK, value: { n: 2 } }], { store: "soon" });
     expect(first.storingSoon()).toEqual([LOOK]);
-    // The library answers that another holder superseded this page: it stops, having stored the successor first, and sends nothing more.
+    // The library answers that another holder superseded this page: it suspends, stores the successor and sends nothing more.
     release();
     await tick(10);
-    expect(first.status().stopped).toBe(true);
+    expect(first.status()).toMatchObject({ stopped: false, suspended: true });
     expect(first.storingSoon()).toEqual([]);
     const sent = r.calls.length;
     first.store(); await tick(10);
     expect(r.calls.length).toBe(sent);
+    first.retire(); // Confirmed takeover cleanup never writes the first holder's keys again.
     // A restart well after: the stored keys bring back the successor's value.
     await tick(30);
     const second = new DocumentOutbox(r.port, storage, { retryMs: 5 });

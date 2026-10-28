@@ -145,6 +145,8 @@ export type OutboxStatus = {
   readonly failing: boolean;
   /** Stopped: the page released or lost its workspace, and nothing is written or sent again. */
   readonly stopped: boolean;
+  /** Sending and command admission are paused; pending values remain available for recovery. */
+  readonly suspended: boolean;
   /** Documents with a change from the last session still being restored (no new edit is taken on them until it is: `recovering`). */
   readonly recovering: readonly DocumentRef[];
   /** Restoring has taken longer than `RECOVERY_SHOW_MS`: it is said so (a moment's restore shows nothing). */
@@ -282,7 +284,8 @@ export class DocumentOutbox {
   private failures = 0;
   private retryTimer: { cancel(): void } | null = null;
   private sizes = new Map<string, number>();
-  private readonly life = new AbortController();
+  private life = new AbortController();
+  private closing = false;
   private readonly timers = new Set<{ cancel(): void }>();
 
   constructor(private readonly transport: OutboxTransport, private readonly storage: OutboxStorage, private readonly options: OutboxOptions = {}) {
@@ -512,7 +515,7 @@ export class DocumentOutbox {
     return { pending: this.entries.filter(entry => entry.state === "queued").length, conflicts: this.conflicts().length,
       unprotected: [...this.unprotectedKeys.keys()].map(key => this.held.get(key)?.ref ?? refOfKey(key)),
       unprotectedWarning: reason !== null, unprotectedReason: reason,
-      failing: this.failing, stopped: this.stopped,
+      failing: this.failing, stopped: this.stopped, suspended: this.suspended,
       recovering: recovering.map(key => this.held.get(key)?.ref ?? refOfKey(key)),
       recoveringShown: recovering.length > 0 && this.now() - this.openedAt >= RECOVERY_SHOW_MS,
       recoveringLong: recovering.length > 0 && this.now() - this.openedAt >= RECOVERY_NOTICE_MS,
@@ -663,11 +666,21 @@ export class DocumentOutbox {
     const base = first?.writes.find(write => documentKey(write) === key)?.base;
     return !!held?.known && typeof base === "number" && base === held.revision;
   }
-  /**
-   * Try again: sends what waits now (restored changes, changes waiting for the library), and looks again for missing sources.
-   */
-  retry(): void {
-    if (this.suspended) return;
+  /** Why an explicit recovery retry cannot run, independently of whether its backups can be repaired. */
+  retryRefusal(): "stopped" | "lease-lost" | undefined {
+    if (this.closing || this.stopped) return "stopped";
+    if ((this.options.writable?.() ?? true) === false) return "lease-lost";
+  }
+  /** Try again: protect and resume a suspended writer with a valid lease, then resend waiting commands under their original IDs. */
+  retry(): boolean {
+    if (this.retryRefusal()) return false;
+    if (this.suspended) {
+      // Protection alone never unlocks editing. Only this explicit transition, with a valid lease and every copy protected, does.
+      if (!this.protect() || this.unprotectedKeys.size || this.retryRefusal()) return false;
+      this.life = new AbortController();
+      this.suspended = false;
+      this.emit({ kind: "status" });
+    }
     this.retryTimer?.cancel(); this.retryTimer = null;
     // A hung attempt is abandoned and its command sent again (under its own ID: a late answer to the old attempt is ignored).
     for (const attempt of this.attempts.values()) attempt.abort(RETRIED);
@@ -675,6 +688,7 @@ export class DocumentOutbox {
     for (const lookup of this.looking.values()) lookup.abort(RETRIED);
     this.looking.clear();
     this.pump();
+    return true;
   }
   /**
    * Keep working on the restored version: documents whose restored changes are safe to edit after (`status().recoveringSafe`) take
@@ -824,7 +838,8 @@ export class DocumentOutbox {
     } catch (error) {
       // Lost: maybe committed, maybe not. Sent again with the same ID later (A1); the host's receipt decides (A4).
       deadline.cancel();
-      if (this.attempts.get(entry.id) === attempt) this.attempts.delete(entry.id);
+      if (this.attempts.get(entry.id) !== attempt) { this.forget.push(...forget); return; }
+      this.attempts.delete(entry.id);
       this.inFlight.delete(entry.id);
       this.forget.push(...forget);
       if (this.suspended) return;
@@ -836,7 +851,8 @@ export class DocumentOutbox {
       return;
     }
     deadline.cancel();
-    if (this.attempts.get(entry.id) === attempt) this.attempts.delete(entry.id);
+    if (this.attempts.get(entry.id) !== attempt) { this.forget.push(...forget); return; }
+    this.attempts.delete(entry.id);
     this.inFlight.delete(entry.id);
     if (this.suspended) return;
     const recovered = this.failing;
@@ -851,7 +867,12 @@ export class DocumentOutbox {
       this.acknowledge(entry, revisions, "equal", answer.current);
     } else if (answer.reason === "stale") this.toConflict(entry, { ...answer.current });
     else if (answer.reason === "missing") { this.forget.push(...forget); this.restore(answer.missing); }
-    else { this.forget.push(...forget); this.stop(); return; }
+    else {
+      this.forget.push(...forget);
+      this.suspend();
+      this.store(); this.protect();
+      return;
+    }
     // A put that landed (or was already there) is what commands waiting for a missing source wait for.
     if (!this.entries.includes(entry) && entry.writes.every(write => this.immutable(write.kind)))
       for (const write of entry.writes) if (this.missing.delete(documentKey(write))) this.emit({ kind: "status" });
@@ -1114,6 +1135,7 @@ export class DocumentOutbox {
    */
   stop(): boolean {
     if (this.stopped) return true;
+    this.closing = true;
     this.suspend();
     if (this.deferred.size) this.persist([...this.deferred]);
     for (const [key, protection] of [...this.unprotectedKeys]) if (protection.failed) this.persistKey(key);
@@ -1142,7 +1164,7 @@ export class DocumentOutbox {
     this.storeTimer = null;
     this.retryTimer?.cancel(); this.retryTimer = null;
     for (const id of [...this.waits.keys()]) this.finish(id, "stopped");
-    this.wake();
+    this.emit({ kind: "status" });
   }
   private requireWritable() {
     if (this.suspended) throw Error("This workspace was released, so this change can't be saved here.");

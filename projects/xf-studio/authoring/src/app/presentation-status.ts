@@ -45,6 +45,8 @@ export type PresentationStatus = {
 
 /** What the presentation shows of the outbox: the unprotected-changes warning, and how many changes wait or are in conflict. */
 export type OutboxView = {
+  /** A paused writer makes the window read-only while its copy remains recoverable. */
+  readonly suspended?: boolean;
   /** Documents whose latest change isn't protected on this computer, once that warrants the warning (a failed write, or a long wait); else 0. */
   readonly unprotected: number;
   readonly unprotectedReason?: OutboxStatus["unprotectedReason"];
@@ -60,7 +62,7 @@ export type OutboxView = {
   readonly recovering: { readonly shown: boolean; readonly long: boolean; readonly safe: boolean; readonly missing: number };
 };
 export const outboxView = (status: OutboxStatus): OutboxView =>
-  ({ unprotected: status.unprotectedWarning ? status.unprotected.length : 0, unprotectedReason: status.unprotectedReason,
+  ({ ...(status.suspended && !status.stopped ? { suspended: true } : {}), unprotected: status.unprotectedWarning ? status.unprotected.length : 0, unprotectedReason: status.unprotectedReason,
     pending: status.pending, conflicts: status.conflicts, failing: status.failing,
     recovering: { shown: status.recoveringShown, long: status.recoveringLong, safe: status.recoveringSafe, missing: status.missing.length } });
 

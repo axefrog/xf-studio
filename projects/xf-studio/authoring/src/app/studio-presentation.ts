@@ -5,10 +5,11 @@ import type { FacialPreviewSnapshot } from "../platform/api/facial";
 import type { PartPresetList, PartPresetOutcome, PartPresetRequest, PartPresetSetList, SetExportState } from "../library/part-presets";
 import type { AuthoringPresentation } from "./authoring/authoring-presentation";
 import type { CollectionViewPort } from "../library/collection-application";
-import { emptyPresentationStatus, type PresentationStatus } from "./presentation-status";
+import { emptyPresentationStatus, outboxView, type PresentationStatus } from "./presentation-status";
 import { DOCUMENT_OUTBOX_DESCRIPTORS, PREVIEW_SETUP_DESCRIPTORS, WORKSPACE_LEASE_DESCRIPTORS } from "./studio-action-descriptors";
 import type { DocumentOutbox } from "../platform/core/document-outbox";
-import { leaseSnapshot, type WorkspaceLease, type WorkspaceLeaseAction, type WorkspaceLeaseSnapshot } from "./workspace/workspace-lease";
+import type { WorkspaceLease, WorkspaceLeaseAction, WorkspaceLeaseSnapshot } from "./workspace/workspace-lease";
+import { BACKUP_RECOVERY_FAILED, retryRecoveryRefusal, workspaceAccess } from "./workspace/workspace-access";
 import type { Layer, Recipe, WarpField } from "../engines/layered-makeup/recipe";
 import type { PreviewReadiness } from "../legacy/eye-makeup/preview/authoring-preview-coordinator";
 import type { ReadonlyDeep } from "../platform/api/read-only";
@@ -387,6 +388,10 @@ function documentsCapability(outbox: DocumentOutbox | undefined, action: Documen
     case "documents.protect":
       return status?.unprotected.length ? { available: true } : { available: false, code: "invalid_value", reason: "Every change is backed up on this computer." };
     case "documents.retryRecovery":
+      if (status?.suspended) {
+        const reason = retryRecoveryRefusal(outbox!);
+        return reason ? { available: false, code: "unavailable", reason } : { available: true };
+      }
       return status?.recovering.length || status?.missing.length ? { available: true } : { available: false, code: "invalid_value", reason: "Nothing from your last session is waiting." };
     case "documents.keepRestored":
       return status?.recoveringSafe ? { available: true }
@@ -396,8 +401,6 @@ function documentsCapability(outbox: DocumentOutbox | undefined, action: Documen
     default: return { available: false, code: "invalid_value", reason: "Unknown command." };
   }
 }
-/** Without a lease the page is the only one, and holds its workspace. */
-const SOLE_WINDOW: WorkspaceLeaseSnapshot = Object.freeze(leaseSnapshot({ phase: "holder", generation: null }));
 type StatusSource = { snapshot(): PresentationStatus; subscribe(listener: () => void): () => void };
 
 /** Method wrappers prevent a presentation consumer from receiving trusted service objects. */
@@ -475,7 +478,8 @@ export function createStudioPresentation<Slot>(sources: {
     subscribe: () => () => {} };
   // The lease's gate for the families that don't route through the application (which refuses by itself, `Services.access`).
   const lease = sources.workspace;
-  const denied = () => lease?.refusal();
+  const access = workspaceAccess(lease, sources.outbox);
+  const denied = () => access.refusal();
   const refusedAsync = async () => { const why = denied()!; return { ok: false as const, code: why.code!, message: why.reason! }; };
   /** A family's capability and dispatch behind the lease. */
   const leased = <F extends { capability(action: never): unknown; dispatch(action: never, ...rest: never[]): Promise<unknown> }>(family: F): F => ({
@@ -753,7 +757,8 @@ export function createStudioPresentation<Slot>(sources: {
         const outbox = sources.outbox!;
         try {
           switch (action.kind) {
-            case "documents.retryRecovery": outbox.retry(); return { ok: true as const };
+            case "documents.retryRecovery": return outbox.retry() ? { ok: true as const }
+              : { ok: false as const, code: "unavailable", message: retryRecoveryRefusal(outbox) ?? BACKUP_RECOVERY_FAILED };
             case "documents.keepRestored": return outbox.keepRestored().length ? { ok: false as const, code: "not_ready",
               message: "Some restored changes still need the library's answer before they can be edited." } : { ok: true as const };
             case "documents.discardWaiting": outbox.discardWaiting(); return { ok: true as const };
@@ -764,13 +769,13 @@ export function createStudioPresentation<Slot>(sources: {
           : { ok: false as const, code: "unavailable", message: "Your changes still couldn't be recorded on this computer. Export your collection to keep a copy." };
       },
       descriptors: () => structuredClone(DOCUMENT_OUTBOX_DESCRIPTORS) }),
-    workspace: Object.freeze({ snapshot: () => lease?.snapshot() ?? SOLE_WINDOW,
+    workspace: Object.freeze({ snapshot: () => access.snapshot(),
       capability: (action: WorkspaceLeaseAction) => lease ? lease.capability(action) : { available: false, code: "unavailable" as const, reason: "This workspace is already editable here." },
       dispatch: (action: WorkspaceLeaseAction) => lease ? lease.dispatch(action) : Promise.resolve({ ok: false as const, code: "unavailable", message: "This workspace is already editable here." }),
       descriptors: () => structuredClone(WORKSPACE_LEASE_DESCRIPTORS) }),
     snapshot: () => ({ authoring: a.snapshot(), library: l.view(), files: f.snapshot(),
       viewport: v.snapshot(), preferences: p.snapshot(), previewReadiness: r.readiness(),
-      status: s.snapshot(), localSetup: localSetup.snapshot(),
+      status: { ...s.snapshot(), ...(sources.outbox?.status().suspended ? { lease: access.snapshot(), outbox: outboxView(sources.outbox.status()) } : {}) }, localSetup: localSetup.snapshot(),
       installDetection: installDetection.snapshot(), modInstall: modInstall.snapshot(), previewSetup: previewSetup.snapshot(),
       desktopApp: desktopApp.snapshot(), updates: updates.snapshot() }),
     subscribe(listener: () => void) {

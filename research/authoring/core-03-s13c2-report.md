@@ -137,6 +137,46 @@ Only `src/platform/core/document-outbox.ts`, `src/app/browser/document-outbox-de
 
 All Bun processes ran sequentially under the 4 GB guard; no guard kill, heavy gate, typecheck or browser/GPU run. Skips remain private-raster and unavailable-Chrome cases. All original snapshot bytes/hashes remain unchanged. The footprint checkpoint has **203.9 GB free on C** (1 GB guard, rounded **0.0 GB** peak), with no new scratch or retained payload. Repository checks pass: **0 broken links/source paths across 504 Markdown files**, **0 tracked-text privacy findings**, **0 privacy/source-path/whitespace/hash findings across all nine changed files**, and clean `git diff --check`. All eight snapshot files remain byte-unchanged. No new scratch/output is retained; all owned jobs have ended. The original committed checkpoint's gate counts and cleanup history below remain provenance, not new runs.
 
+## Recovery re-review after `49a5db3f`
+
+Both recovery findings are fixed. The outbox exposes suspension, and the existing application access gate combines it with lease ownership. A suspended writer is read-only before another action/control/gesture can mutate its document. Presentation families and direct panel/empty-choice/default/starter routes use the same gate. The existing workspace notice shows its plain reason and Try again / Export this window's copy; recovery export remains available. The real-profile regression attempts a later opacity edit, proves refusal and unchanged document state, then downloads and parses the portable collection and compares its entire eye-makeup part with the shown recipe.
+
+Supersession now suspends without terminal retirement. Explicit `documents.retryRecovery` checks the still-held lease and repairs protection before clearing suspension and resuming original-ID sends; pending background copies also prevent resumption. Failed protection returns a refusal instead of false success. Lease loss and terminal shutdown refuse without sending, with Export-copy/reopen guidance. A protection-only retry leaves editing paused until the explicit recovery action. Abandoned attempt identity checks prevent an old continuation from disturbing resumed work. Terminal shutdown still cancels admission, attempts, reads, timers and waiters before protection, and cannot be resumed. Normal handover still drains, protects all remaining keys, settles durable copies, releases the lease, then retires without persistence. No workspace-persistence or adapter release ordering changed.
+
+Changed files (paths below `projects/xf-studio/authoring/` unless otherwise named):
+
+| Files | Change |
+|---|---|
+| `src/platform/core/document-outbox.ts` | Exposed suspension, explicit guarded recovery transition/result and terminal-shutdown distinction; fences abandoned attempts. |
+| `src/app/workspace/workspace-access.ts` (new) | Stateless access/notice projection over the lease and outbox, with transition-only notifications. |
+| `src/app/presentation-status.ts`, `src/app/studio-presentation.ts` | Paused read-only projection and truthful presentation recovery capability/result; gates other action families. |
+| `src/compose/studio-startup.ts` | Wires the same application access service to existing mutation routes; no policy added to startup. |
+| `src/studio-ui/app.ts` | Selects the existing notice and recovery actions during suspension, including an active control run. No component/guide edit. |
+| `tests/document-outbox-recovery.test.ts` (new), `tests/fixtures/profile-context-studio.ts` | Four real-profile/presentation regressions: exact shown-state export, failed protection followed by successful resumption, lost lease, terminal shutdown. |
+| `tests/ui-polish-dom.test.ts` | Existing notice opens immediately and dispatches the recovery retry/export routes. |
+| `tests/document-outbox.test.ts`, `tests/workspace-lease.test.ts` | Assert recoverable suspension rather than terminal retirement after supersession; retain drain/successor protection proofs. |
+| `tests/profile-edit-contexts.test.ts` | Dirty-context retention injects a writer refusal directly; stopping the outbox now correctly refuses editing before mutation. |
+| `research/authoring/core-03-plan.md`, `research/authoring/code-health.md`, `research/authoring/profiles-views-layouts-design.md`, `knowledge/webgl-program-linking.md`, this report | Current recovery/access contract, offline evidence and handoff. |
+
+Bound-panel and capture **release** are unchanged. Existing root/fork inheritance carries the access gate to bound and captured facades; no new lifetime owner or registry. Normal redraw parity remains exact. `panels.bindings`, `panels.setBinding`, `authoring.historyScopes()`, `history.selectScope`, P3-v catalogue implementations/IDs, storage schemas and import allowances remain unchanged. CORE-03 remains High; 13c3/13d and coordinator browser/GPU responsibilities above remain open. Types were read manually; no typecheck ran.
+
+| Recovery-fix gate | Result |
+|---|---|
+| First focused run | **21 pass, 1 fail**, three files, 168 assertions, **0.296 s**, rounded **0.0 GB** peak. Product behavior passed; export assertion was corrected to compare the portable part envelope with the shown recipe's envelope. |
+| Focused plus notice | **72 pass, 1 fail**, four files, 572 assertions, **0.969 s**, **0.4 GB** peak. The notice test used the wrong light-DOM click helper. |
+| Notice failure isolation | **0 pass, 1 fail, 50 filtered**, one file, four assertions, **0.086 s**, rounded **0.0 GB** peak; corrected to the harness's `click()`. |
+| First targeted boundary/parity/startup run | **260 pass, 3 skip, 6 fail**, 24 files, 2,760 assertions, **19.50 s**, **0.8 GB** peak; 16 matching snapshots and one UV redraw mismatch. Found conservative browser-global string checks, obsolete terminal/dirty-edit test assumptions and duplicate normal notifications. No boundary rule or snapshot was relaxed. |
+| Boundary/UV failure isolation | **41 pass, 3 fail**, two files, 435 assertions, **8.41 s**, **0.2 GB** peak. Recovery prose moved to its application owner; the core returns refusal codes. |
+| Second targeted run | **265 pass, 3 skip, 1 fail**, 24 files, 2,818 assertions, **20.72 s**, **0.9 GB** peak; 16 matching snapshots and two extra UV draws. Removed redundant child-bootstrap access attachment; bound contexts inherit the root gate. |
+| UV and recovery confirmation | **5 pass, 0 fail**, two files, 56 assertions, **0.291 s**, rounded **0.0 GB** peak; UV snapshot matches. |
+| Final permitted targeted run | **266 pass, 3 skip, 0 fail**, 24 files, **17 matching snapshots**, 2,818 assertions, **20.63 s**, **0.9 GB** peak. Includes outbox, host lifetime, leases, real-profile contexts, notice, accepted captures, architecture boundary, trusted bootstrap, view contributions and all retained parity/startup files. |
+
+All Bun processes ran sequentially under the 4 GB guard. No guard kill, heavy gate, desktop suite, typecheck, browser or GPU run. Skips remain private-raster and unavailable-Chrome cases. The eight snapshot hashes in the parity table above remain the compatibility baseline; none was updated. New recovery-only notice behavior is the requested correction, using existing controls and actions.
+
+Repository checks: **0 broken links/source paths across 504 Markdown files**, **0 tracked-text privacy findings**, and clean `git diff --check`. The explicit changed/new-file scan covers **17 files**. Snapshot verification compares **Git/LF content**: all **eight hashes match HEAD and the retained table**. Its first raw-byte comparison flagged four CRLF working-tree files; normalizing their line endings proves identical content, with no snapshot change or Git diff. The wrap-up footprint has **203.1 GB free on C**, under the 1 GB guard with peak rounded **0.0 GB**; the unrelated inaccessible worktree scan remains incomplete. No new scratch, generated payload or owned process remains. The original cleanup limitation below is historical and unchanged.
+
+Coordinator: use the exact guarded `core-startup-browser.test.ts` command above. In isolated `?verify=1`, fault backup storage and return superseded during a look send: confirm the plain read-only notice, refused opacity/control edits, unchanged look and matching Export copy. Repair storage with the lease retained, choose Try again and confirm sending/editing return. Repeat after lease loss: retry must refuse and Export copy/reopen remain the routes forward. Confirm ordinary two-window handover still shows its existing notice/actions. Release ownership and the WebGL rows named above are unchanged; no new browser/GPU proof is claimed.
+
 ## Remaining work and cleanup
 
 - **13c3:** complete shell/facial/warm-start listener/request/timer/frame/observer cancellation and integrated normal/empty/partial-start CDP resource-baseline/late-publication proof without destroying the page.
