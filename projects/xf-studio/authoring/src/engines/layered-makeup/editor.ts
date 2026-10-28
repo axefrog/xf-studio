@@ -57,8 +57,8 @@ export function createLayeredMakeupEditor(host: FeatureEditorHost, feature: stri
   });
   live.onReplacing(() => {
     if (host.signal.aborted) return;
-    const control = controls.snapshot(), gesture = gestures.snapshot();
-    if (control) controls.commit(control.id);
+    const gesture = gestures.snapshot();
+    controls.replacing();
     if (gesture) gestures.commit(gesture.source);
   });
   host.signal.addEventListener("abort", () => { listeners.clear(); }, { once: true });

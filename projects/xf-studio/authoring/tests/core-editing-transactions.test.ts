@@ -111,6 +111,8 @@ test("replacement settles a registered control without application listeners; ab
   f.document.replacing();
   expect(f.editor.controls.snapshot()).toBeUndefined();
   expect(f.document.history.state().depth).toBe(1);
+  expect(f.editor.controls.edit("opacity", layer.id, { kind: "layer.setOpacity", layerId: layer.id, opacity: 0.3 })).toBe("stale");
+  expect(f.document.history.state().depth).toBe(1);
   f.editor.gestures.beginLayer("uv", layer.id);
   f.life.abort();
   expect(f.editor.gestures.snapshot()).toBeUndefined();
@@ -151,5 +153,34 @@ test("the compatibility view forwards the registered editor instances and one ef
     if (!route.ok) throw Error("missing fixture action");
     editor.eyeMakeup.apply(route.spec as EyeMakeupSpec, { kind: "layer.setOpacity", layerId: layer.id, opacity: 0.4 }, true);
     expect(effects).toBe(1);
+  } finally { core.app.dispose(); core.document.dispose(); }
+});
+
+test("production replacement revokes control continuations until an explicit new begin", () => {
+  const workspace = freshWorkspace(opticsRecipe("replacement"));
+  const core = createTrustedAuthoringCore(workspace, { resetStack() {}, selectedCollection: () => "a" }, STUDIO_COMPOSITION);
+  const look = { collection: "local", look: "local" };
+  try {
+    const layerId = core.document.recipe.layers[0].id;
+    const restored = core.document.export();
+    restored.recipe.layers[0].opacity = 0.85;
+    expect(core.app.controlBegin("opacity", layerId, look)).toBe(true);
+    expect(core.app.controlEdit("opacity", { kind: "layer.setOpacity", layerId, opacity: 0.4, look }).ok).toBe(true);
+    core.document.restore(restored);
+    const before = core.document.export(), version = core.document.version;
+    for (let i = 0; i < 2; i++) {
+      expect(core.app.controlEdit("opacity", { kind: "layer.setOpacity", layerId, opacity: 0.3, look }))
+        .toMatchObject({ ok: false, code: "missing_target" });
+      expect(core.document.export()).toEqual(before);
+      expect(core.document.version).toBe(version);
+      expect(core.controls.snapshot()).toBeUndefined();
+    }
+    expect(core.document.recipe.layers[0].opacity).toBe(0.85);
+    expect(core.document.history.state().depth).toBe(0);
+    expect(core.app.controlBegin("opacity", layerId, look)).toBe(true);
+    expect(core.app.controlEdit("opacity", { kind: "layer.setOpacity", layerId, opacity: 0.3, look }).ok).toBe(true);
+    core.app.controlCommit("opacity");
+    expect(core.document.recipe.layers[0].opacity).toBe(0.3);
+    expect(core.document.history.state().depth).toBe(1);
   } finally { core.app.dispose(); core.document.dispose(); }
 });

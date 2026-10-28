@@ -20,6 +20,7 @@ export type ControlEditOutcome = "changed" | "unchanged" | "stale";
  */
 export class AuthoringControlEdits {
   private active?: Transaction;
+  private readonly invalidated = new Set<string>();
   constructor(private document: EditingDocument,
     private dispatch: (action: RecipeAction) => boolean,
     /** The Undo step's name for an edit: the trusted core passes the registered spec's `label`. */
@@ -38,6 +39,7 @@ export class AuthoringControlEdits {
     active.transaction = this.document.history.begin([this.document.feature], CONTROL_TRANSACTION,
       { present: () => this.document.recipe.layers.includes(active.layer) });
     this.active = active;
+    this.invalidated.delete(id);
     return true;
   }
   /**
@@ -46,6 +48,7 @@ export class AuthoringControlEdits {
    * implicit transaction is still closed, an explicit one stays with its control.
    */
   edit(id: string, layerId: string | undefined, action: RecipeAction): ControlEditOutcome {
+    if (this.invalidated.has(id)) return "stale";
     const owned = this.active?.id === id;
     if (!owned && !this.begin(id, layerId)) return "stale";
     const active = this.active;
@@ -72,6 +75,13 @@ export class AuthoringControlEdits {
     if (this.active?.id !== id) return;
     const active = this.active; this.active = undefined;
     active.transaction!.cancel();
+  }
+  /** Revoke the captured run before settlement publishes; only an explicit begin may reuse its ID. */
+  replacing() {
+    if (!this.active) return;
+    const { id } = this.active;
+    this.invalidated.add(id);
+    this.commit(id);
   }
   snapshot() { return this.active ? { id: this.active.id, layerId: this.active.layer.id } : undefined; }
 }
