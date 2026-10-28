@@ -18,7 +18,6 @@ import { EYE_MAKEUP_REGION } from "../src/features/eye-makeup/region";
 import { tempDir } from "./temp-dir";
 
 const sha = (bytes: Uint8Array | Uint8ClampedArray) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
-const alpha = (rgba: Uint8ClampedArray) => Uint8Array.from({ length: rgba.length / 4 }, (_, i) => rgba[i * 4 + 3]);
 const powder = (seed = 7): Mottle => mottlePreset("powder", seed);
 function mottled(settings: Mottle, edit: (layer: Layer) => void = () => {}): Layer {
   const layer = initialRecipe().layers[0];
@@ -215,17 +214,18 @@ test("the grain is floored at two export texels and measured in skin millimetres
   expect(other).not.toEqual(raster(layer, 512));
 });
 
-test("mottle stays within the raster budget (about 5–10 ns per covered texel in the design; bounded generously here)", () => {
+test("mottle stays within the raster budget (a few per cent of the unmottled raster in the design; bounded generously here)", () => {
   const plain = initialRecipe().layers[0];
   plain.opacity = .8;
   const withMottle = { ...structuredClone(plain), effects: { mottle: { ...powder(), where: "everywhere" as const } } };
   const streaked = { ...structuredClone(plain), effects: { mottle: mottlePreset("mascara", 7) } };
   raster(withMottle, 256); raster(streaked, 256);
-  const covered = alpha(raster(plain, 2048)).reduce((n, a) => n + (a ? 1 : 0), 0);
-  // The mottle adds a few milliseconds to a raster of about forty, so a collection of the suite's garbage or another process taking the
-  // core inflates one timing by more than the whole budget. Each timing starts after a full collection; the three rasters are timed
-  // back to back in a rotating order, five rounds; the fastest of each is its cost (pauses only ever add time). A measurement over budget
-  // is taken again, up to three times: a real regression is over budget every time, a slow moment on the machine is not.
+  // The mottle adds about a millisecond to a raster of about forty-five, so a collection of the suite's garbage or another process taking
+  // the core inflates one timing by more than the whole budget. Each timing starts after a full collection; the three rasters are timed
+  // back to back in a rotating order, five rounds; the fastest of each is its cost (pauses only ever add time). The budget is a ratio to
+  // the unmottled raster timed alongside, so a slower machine scales both: an absolute per-texel bound failed on slow CI runners while
+  // the same code measured 1–19 % here. A measurement over budget is taken again, up to three times: a real regression (say, the tile
+  // evaluated per texel) is over budget every time, a slow moment on the machine is not.
   const time = (l: Layer) => { Bun.gc(true); const t = performance.now(); raster(l, 2048); return performance.now() - t; };
   const layers = { base: plain, everywhere: withMottle, streaks: streaked } as const;
   const measure = () => {
@@ -234,14 +234,13 @@ test("mottle stays within the raster budget (about 5–10 ns per covered texel i
       const name = (["base", "everywhere", "streaks"] as const)[(i + k) % 3]!;
       best[name] = Math.min(best[name], time(layers[name]));
     }
-    // Per covered texel (the symmetric raster evaluates each pair once, so this counts both copies).
-    return { everywhere: (best.everywhere - best.base) * 1e6 / covered, streaks: (best.streaks - best.base) * 1e6 / covered };
+    return { everywhere: best.everywhere / best.base, streaks: best.streaks / best.base };
   };
-  const within = (m: ReturnType<typeof measure>) => m.everywhere < 150 && m.streaks < 600;
-  let extra = measure();
-  for (let attempt = 1; attempt < 3 && !within(extra); attempt++) extra = measure();
-  expect(extra.everywhere).toBeLessThan(150);
-  expect(extra.streaks).toBeLessThan(600);
+  const within = (m: ReturnType<typeof measure>) => m.everywhere < 1.4 && m.streaks < 1.6;
+  let ratio = measure();
+  for (let attempt = 1; attempt < 3 && !within(ratio); attempt++) ratio = measure();
+  expect(ratio.everywhere).toBeLessThan(1.4);
+  expect(ratio.streaks).toBeLessThan(1.6);
 }, 30_000);
 
 const FROZEN = {

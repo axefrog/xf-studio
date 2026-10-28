@@ -283,7 +283,7 @@ They were tuned on a lash-liner layer at export density, not yet against close-u
 | Where | Cost |
 |---|---|
 | Tile | Generated once per seed and version, cached in the worker |
-| Per covered texel | One trilinear tile read (eight texels) plus a few operations; seven reads along a streak. The test bounds it at 150 ns (600 ns with streaks) per covered texel so a busy machine doesn't fail; unmottled layers are unchanged ([raster performance](raster-performance.md#mottle)) |
+| Per covered texel | One trilinear tile read (eight texels) plus a few operations; seven reads along a streak. The test bounds the mottled raster at 1.4× the unmottled one timed alongside (1.6× with streaks): a ratio, so a slower machine scales both (an absolute per-texel bound failed on slow CI runners); unmottled layers are unchanged ([raster performance](raster-performance.md#mottle)) |
 | Texel skip | Mottle changes only texels with 0 < c. Fully outside texels stay culled; fully inside texels are evaluated only in "everywhere" mode |
 | Export | No extra textures; the alpha channel already exists |
 | Game | None |
