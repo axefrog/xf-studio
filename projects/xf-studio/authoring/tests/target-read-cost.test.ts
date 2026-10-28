@@ -4,20 +4,33 @@ import { FocusService } from "../src/platform/core/focus";
 import { profileContextStudio } from "./fixtures/profile-context-studio";
 import { studioReadDeps, targetReadBaseline } from "./fixtures/target-read-baseline";
 
-// Alternate order, warm both implementations, and compare medians of batches on this machine. No cross-machine microsecond budget.
+// Alternate order, warm both implementations, and compare the two on this machine. No cross-machine microsecond budget.
+// A read takes 10–100 us, so a batch of 100 lasted about a millisecond and a busy CI runner's bursts moved the median ratio from 0.9x
+// to 1.7x. Each batch now runs for at least 2 ms, and each side's cost is its fastest batch (pauses only ever add time). A ratio over
+// budget is measured again, up to three times: a real regression stays over budget, a burst of load usually doesn't.
 function compare(label: string, baseline: () => unknown, live: () => unknown) {
   expect(live()).toEqual(baseline());
   for (let i = 0; i < 100; i++) { baseline(); live(); }
-  const batch = (read: () => unknown) => { const start = performance.now(); for (let i = 0; i < 100; i++) read(); return (performance.now() - start) * 10; };
-  const before: number[] = [], after: number[] = [];
-  for (let i = 0; i < 15; i++) {
-    if (i % 2) { after.push(batch(live)); before.push(batch(baseline)); }
-    else { before.push(batch(baseline)); after.push(batch(live)); }
+  let reads = 100;
+  while (reads < 100_000) {
+    const start = performance.now();
+    for (let i = 0; i < reads; i++) baseline();
+    if (performance.now() - start >= 2) break;
+    reads *= 2;
   }
-  const median = (values: number[]) => values.sort((a, b) => a - b)[values.length >> 1]!;
-  const base = median(before), actual = median(after);
-  console.log(`target reads ${label}: baseline ${base.toFixed(2)} us, live ${actual.toFixed(2)} us, ${(actual / base).toFixed(2)}x`);
-  return actual / base;
+  const batch = (read: () => unknown) => { const start = performance.now(); for (let i = 0; i < reads; i++) read(); return (performance.now() - start) * 1000 / reads; };
+  const measure = () => {
+    let base = Infinity, actual = Infinity;
+    for (let i = 0; i < 15; i++) {
+      if (i % 2) { actual = Math.min(actual, batch(live)); base = Math.min(base, batch(baseline)); }
+      else { base = Math.min(base, batch(baseline)); actual = Math.min(actual, batch(live)); }
+    }
+    return { base, actual };
+  };
+  let m = measure();
+  for (let attempt = 1; attempt < 3 && m.actual / m.base >= 1.5; attempt++) m = measure();
+  console.log(`target reads ${label}: baseline ${m.base.toFixed(2)} us, live ${m.actual.toFixed(2)} us, ${(m.actual / m.base).toFixed(2)}x (${reads} reads a batch)`);
+  return m.actual / m.base;
 }
 
 test("live target reads stay close to the c87a734e cost reference (real three-view composition)", async () => {
