@@ -148,7 +148,8 @@ test("the presentation never imports the composition root, trusted services or l
 
 test("the one composition root hands the view only the public presentation port", () => {
   const source = readFileSync(join(root, "compose", "studio-startup.ts"), "utf8");
-  expect(source).toContain("bootstrap.mount(publicPort => { port = publicPort; mountStudio(publicPort, root, viewComposition); })");
+  // The mount callback hands the view only the public port, the root and the view composition (it may keep the shell's dispose).
+  expect(source).toMatch(/bootstrap\.mount\(publicPort => \{\s*port = publicPort;\s*const shell = mountStudio\(publicPort, root, viewComposition\);\s*releaseShell = shell\.dispose;\s*\}\);/);
   expect((source.match(/mountStudio\(/g) ?? []).length).toBe(1);
   const importers = files(root).filter(file => !file.startsWith(ui) && readFileSync(file, "utf8").includes("studio-ui/app"));
   expect(importers.map(file => relative(root, file).replaceAll("\\", "/"))).toEqual(["compose/studio-startup.ts"]);
