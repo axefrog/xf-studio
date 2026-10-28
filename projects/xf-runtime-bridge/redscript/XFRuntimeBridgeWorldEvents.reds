@@ -1,6 +1,6 @@
 module XFRuntimeBridge
 
-// Passive feed. No timer: script producers are game notifications. Listener lifetime belongs to XFBridgeSystem.
+// Passive feed. No timer: script producers are game notifications (the district record alone waits one tick, once per crossing). Listener lifetime belongs to XFBridgeSystem.
 public abstract class XFWorldOut {
   public static func On() -> Bool { return (XFBridge_ProbeFlags() & 32) != 0; }
   public static func GameTimeSeconds() -> String {
@@ -54,8 +54,20 @@ public class XFWorldSessions extends ScriptableService {
   private cb func End(event: ref<GameSessionEvent>) { this.Note("end", event); }
 }
 
+// The district record waits one tick: Refresh writes the name before the first-visit flag
+// (2.31 districtManager.script:175-177), so the name's own callback would read the previous refresh's flag.
+public class XFWorldDistrictLater extends DelayCallback {
+  public let feed: wref<XFWorldFeed>;
+  public let attach: Int32;
+  public func Call() -> Void {
+    if IsDefined(this.feed) { this.feed.DistrictSettled(this.attach); }
+  }
+}
+
 public class XFWorldFeed extends ScriptableSystem {
   private let m_on: Bool;
+  private let m_attach: Int32;
+  private let m_districtPending: Bool;
   private let m_quests: ref<QuestsSystem>;
   private let m_journal: ref<JournalManager>;
   private let m_interactions: ref<IBlackboard>;
@@ -85,6 +97,7 @@ public class XFWorldFeed extends ScriptableSystem {
   }
   public func Attach() -> Void {
     if this.m_on || !XFWorldOut.On() || !XFBridge_Live() { return; }
+    this.m_attach += 1; this.m_districtPending = false;
     let game = this.GetGameInstance();
     this.m_quests = GameInstance.GetQuestsSystem(game);
     this.m_journal = GameInstance.GetJournalManager(game);
@@ -109,6 +122,7 @@ public class XFWorldFeed extends ScriptableSystem {
   public func Detach() -> Void {
     if !this.m_on { return; }
     this.m_on = false;
+    this.m_attach += 1; this.m_districtPending = false;
     let defs = GetAllBlackboardDefs();
     if IsDefined(this.m_interactions) { this.m_interactions.UnregisterListenerInt(defs.UIInteractions.SelectedIndex, this.m_index); }
     if IsDefined(this.m_phone) { this.m_phone.UnregisterListenerVariant(defs.UI_ComDevice.PhoneCallInformation, this.m_call); }
@@ -128,15 +142,29 @@ public class XFWorldFeed extends ScriptableSystem {
     this.m_lastIndex = ""; this.m_lastHubs = ""; this.m_lastCall = "";
     this.m_map = null; this.m_purchase = null; this.m_district = null; this.m_acquired = null; this.m_lastDistrict = "";
   }
+  // At most one pending callback: a burst of crossings in one tick settles once, on the final name.
   protected cb func District(value: String) -> Bool {
-    if !this.m_on || !XFWorldOut.On() || !XFBridge_Live() { return false; }
-    let discovered = this.m_map.GetBool(GetAllBlackboardDefs().UI_Map.newLocationDiscovered);
+    if !this.m_on || !XFWorldOut.On() || !XFBridge_Live() || this.m_districtPending { return false; }
+    let later = new XFWorldDistrictLater();
+    later.feed = this;
+    later.attach = this.m_attach;
+    this.m_districtPending = true;
+    GameInstance.GetDelaySystem(this.GetGameInstance()).DelayCallback(later, 0.0, false);
+    return false;
+  }
+  public func DistrictSettled(attach: Int32) -> Void {
+    if attach != this.m_attach { return; }
+    this.m_districtPending = false;
+    if !this.m_on || !IsDefined(this.m_map) || !XFWorldOut.On() || !XFBridge_Live() { return; }
+    let defs = GetAllBlackboardDefs();
+    let value = this.m_map.GetString(defs.UI_Map.currentLocationEnumName);
+    if Equals(StrLeft(value, 128), this.m_lastDistrict) { return; }
+    let discovered = this.m_map.GetBool(defs.UI_Map.newLocationDiscovered);
     let fields = "\"name\":" + XFJson.Str(StrLeft(value, 128)) + ",\"previous\":" + XFJson.Str(this.m_lastDistrict)
       + ",\"new_location_discovered\":" + XFJson.Flag(discovered) + ",\"truncated\":" + XFJson.Flag(StrLen(value) > 128);
     this.m_lastDistrict = StrLeft(value, 128);
     XFWorldOut.Emit("district", fields);
     XFWorldHooks.Probe("district", fields);
-    return false;
   }
   protected cb func Acquired(value: Variant) -> Bool {
     if !this.m_on || !XFWorldOut.On() || !XFBridge_Live() { return false; }

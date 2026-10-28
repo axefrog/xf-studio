@@ -12,6 +12,10 @@ public abstract class XFWorldHooks {
   }
   @if(!ModuleExists("XFRuntimeBridge.Autonomous"))
   public static func Incident(victim: ref<ScriptedPuppet>, instigator: ref<GameObject>, token: String) -> Void {}
+  public static func InVehicle(player: ref<PlayerPuppet>, info: MountingInfo) -> Bool {
+    if !IsDefined(player) || info.childId != player.GetEntityID() { return false; }
+    return IsDefined(GameInstance.FindEntityByID(player.GetGame(), info.parentId) as VehicleObject);
+  }
   @if(ModuleExists("XFRuntimeBridge.Autonomous"))
   public static func Theft(vehicle: ref<VehicleObject>, thief: ref<GameObject>) -> Void {
     if XFIncidentTap.On() { XFIncidentTap.Theft(vehicle, thief); }
@@ -122,11 +126,12 @@ protected cb func OnCombatStateChanged(newState: Int32) -> Bool {
   return result;
 }
 
-// 2.31 player.script:1359,1391. Return the original result on every path.
+// 2.31 player.script:1359,1391. Return the original result on every path. The same events carry grapples and
+// carried bodies (an NPC mounted onto V): only V as the child of a vehicle is a vehicle event.
 @wrapMethod(PlayerPuppet)
 protected cb func OnMountingEvent(evt: ref<MountingEvent>) -> Bool {
   let result = wrappedMethod(evt);
-  if XFBridge_Live() && IsDefined(evt) && IsDefined(evt.request) {
+  if XFBridge_Live() && IsDefined(evt) && IsDefined(evt.request) && XFWorldHooks.InVehicle(this, evt.request.lowLevelMountingInfo) {
     let info = evt.request.lowLevelMountingInfo;
     let fields = "\"what\":\"mount\",\"parent\":" + XFJson.Str(EntityID.ToDebugStringDecimal(info.parentId))
       + ",\"child\":" + XFJson.Str(EntityID.ToDebugStringDecimal(info.childId)) + ",\"slot\":" + XFJson.Str(NameToString(info.slotId.id));
@@ -138,7 +143,7 @@ protected cb func OnMountingEvent(evt: ref<MountingEvent>) -> Bool {
 @wrapMethod(PlayerPuppet)
 protected cb func OnUnmountingEvent(evt: ref<UnmountingEvent>) -> Bool {
   let result = wrappedMethod(evt);
-  if XFBridge_Live() && IsDefined(evt) && IsDefined(evt.request) {
+  if XFBridge_Live() && IsDefined(evt) && IsDefined(evt.request) && XFWorldHooks.InVehicle(this, evt.request.lowLevelMountingInfo) {
     let info = evt.request.lowLevelMountingInfo;
     let fields = "\"what\":\"unmount\",\"parent\":" + XFJson.Str(EntityID.ToDebugStringDecimal(info.parentId))
       + ",\"child\":" + XFJson.Str(EntityID.ToDebugStringDecimal(info.childId)) + ",\"slot\":" + XFJson.Str(NameToString(info.slotId.id));

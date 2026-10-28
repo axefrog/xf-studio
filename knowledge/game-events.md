@@ -156,7 +156,7 @@ The prevention system is a `ScriptableSystem` named `PreventionSystem` (`core/sy
 
 - **The stack pops back to the parent.** Leaving a place fires `entered=false` and `Refresh` then writes the parent's name. A feed built on `currentLocationEnumName` sees "enter Kabuki_NoTellMotel", then "Kabuki"; it should emit `left` itself by remembering the previous value.
 - **`Refresh` returns early when the stack is empty** (`districtManager.script:160-165`): leaving the last district leaves the old name on the blackboard. Do not treat a stale name as a position.
-- **`newLocationDiscovered` is a bool that is set on every refresh,** true or false. A listener that fires only on change sees it flip. Read it in the same callback as the name.
+- **`newLocationDiscovered` is a bool that is set on every refresh,** true or false, but `Refresh` writes it *after* the name (`districtManager.script:175-177`). A listener on the name runs inside the name's write, so a read there returns the previous refresh's flag (session 15's "first visit" on a Kabuki entry in a save that had been there is probably this). Read the flag once the refresh has finished: the bridge's feed (0.8.25) waits one tick and then reads the name and the flag together.
 - **District is not position.** `world.probe` and `player.state` carry the coordinates; the district is the level above. A fast travel or teleport pops and pushes the stack, which is a burst of two to four events.
 
 ## 6. Vehicles
@@ -179,6 +179,7 @@ The prevention system is a `ScriptableSystem` named `PreventionSystem` (`core/sy
 
 - **`UI_ActiveVehicleData.IsPlayerMounted` is written by the vehicle HUD controller** (`cyberpunk/UI/vehicles/vcar_controller.script:238`), not by the game core. With the HUD hidden or a mod that replaces it, the bool does not move. Use the PSM bool or the mount wrap.
 - **A passenger seat is a mount too.** Filter on `seat_front_left` (and the player-driver PSM bool) for "V is driving".
+- **Grapples and carried bodies are mounts too:** an NPC grabbed or carried is mounted onto V (slots `grapple`, `leftShoulder`), and `PlayerPuppet`'s mounting callbacks see those requests. A vehicle event needs V as the child and a `VehicleObject` as the parent; the bridge's feed checks both.
 - **A "purchase" has several routes.** The web shop sets an ownership fact; story and gift vehicles unlock with quest nodes; the engine writes `PurchasedVehicleRecordID`. Which of them write which signal is a game question ([questions](#questions-only-the-game-can-answer), rows 8 and 9). The ownership facts are data (offer records in TweakDB), not names in the scripts.
 - **A stolen NCPD car is also a crime hook** (section 4): `PlayerStoleVehicle` is a heat reason, and `StealVehicle` is how V's mount becomes one.
 - **Summoned, delivered and spawned cars are mounts like any other.** A summon arrival does not mount V.

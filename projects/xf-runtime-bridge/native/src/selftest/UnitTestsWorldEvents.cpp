@@ -38,6 +38,8 @@ int WorldEventsUnitTests() {
         check(!sample(16, 19908), "threshold scales with real elapsed time");
         check(!sample(47, 40000), "long sampling gaps rebaseline rather than invent coverage");
         check(!sample(48, 100, {8, 2}) && !sample(49, 30000, {8, 3}) && !sample(50, 100, {8, 3}, 2), "world, session and recorder restart each reset the baseline");
+        check(!sample(51, 200, {8, 3}, 2) && !clock.Observe(nlohmann::json(), 52, {8, 3}, 2) && !sample(53, 50000, {8, 3}, 2),
+              "a failed sample (the plugin passes null when the script call throws) breaks continuity: no jump across it");
         check(!sample(50, 30000, {8, 3}, 2) && !sample(49, 100, {8, 3}, 2), "equal or backward source clocks rebaseline");
         for (const auto& bad : {json(), json{{"valid", false}, {"game_time_s", 30000}}, json{{"valid", true}, {"game_time_s", nullptr}},
                                 json{{"valid", true}, {"game_time_s", "30000"}}, json{{"valid", true}, {"game_time_s", -1}}}) {

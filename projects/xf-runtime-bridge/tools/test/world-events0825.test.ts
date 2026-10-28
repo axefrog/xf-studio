@@ -44,7 +44,13 @@ test("second-cut packages share each wrap once and keep listener ownership in th
     expect(source.match(/UnregisterListenerString\(defs.UI_Map.currentLocationEnumName/g)).toHaveLength(1);
     expect(source.match(/RegisterListenerVariant\(defs.VehiclePurchaseData.PurchasedVehicleRecordID/g)).toHaveLength(1);
     expect(source.match(/UnregisterListenerVariant\(defs.VehiclePurchaseData.PurchasedVehicleRecordID/g)).toHaveLength(1);
-    expect(source).toContain("this.m_map.GetBool(GetAllBlackboardDefs().UI_Map.newLocationDiscovered)");
+    // Refresh writes the first-visit flag after the name: the record settles one tick later and reads both then.
+    expect(source).toContain("DelayCallback(later, 0.0, false)");
+    expect(source).toContain("this.m_map.GetBool(defs.UI_Map.newLocationDiscovered)");
+    expect(source.indexOf("public func DistrictSettled(")).toBeLessThan(source.indexOf("this.m_map.GetBool(defs.UI_Map.newLocationDiscovered)"));
+    // grapples and carried bodies are mounts onto V, not vehicle events
+    expect(source.match(/XFWorldHooks\.InVehicle\(this, evt\.request\.lowLevelMountingInfo\)/g)).toHaveLength(2);
+    expect(source).toContain("FindEntityByID(player.GetGame(), info.parentId) as VehicleObject");
     expect(source).toContain("this.m_map = null; this.m_purchase = null");
     if (hooks) expect(source).toContain("XFIncidentTap.Theft(vehicle, thief)");
   }
@@ -112,7 +118,10 @@ test("shared producer signatures and fact subscriptions match the source contrac
     expect(source).toContain(`UnregisterListener(n"${fact.name}"`);
   }
   expect(source).toContain("protected func UpdateDialogsData(const data: script_ref<DialogChoiceHubs>) -> Void");
-  expect(source).not.toContain("DelayCallback");
+  // No timer: the only delay is the district record's one-shot settle, scheduled once per crossing.
+  expect(source.match(/\bDelayCallback\b/g)).toHaveLength(2);
+  expect(source).toContain("public class XFWorldDistrictLater extends DelayCallback");
+  expect(source).toContain("GetDelaySystem(this.GetGameInstance()).DelayCallback(later, 0.0, false)");
   expect(source).toContain("private func Hub(const hub: script_ref<ListChoiceHubData>) -> String");
   expect(source).toContain("this.Hub(Deref(data).choiceHubs[i])");
   expect(source).not.toMatch(/let\s+\w+\s*=\s*Deref\(data\)\.choiceHubs\[i\];/);
