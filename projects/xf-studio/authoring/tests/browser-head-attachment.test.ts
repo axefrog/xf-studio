@@ -70,9 +70,9 @@ test("aborting an owned preload clears its polling timer before release finishes
   const set = spyOn(globalThis, "setTimeout").mockImplementation(Object.assign((...args: Parameters<typeof setTimeout>) => {
     const timer = originalSet(...args); timers.push(timer); live.add(timer); return timer;
   }, originalSet));
-  const clear = spyOn(globalThis, "clearTimeout").mockImplementation((...args: Parameters<typeof clearTimeout>) => {
+  const clear = spyOn(globalThis, "clearTimeout").mockImplementation(((...args: Parameters<typeof clearTimeout>) => {
     live.delete(args[0]); originalClear(...args);
-  });
+  }) as typeof clearTimeout);
   const controller = new AbortController();
   let sends = 0;
   const device = detailDevice.createBrowserCharacterDetailDevice({ details: {}, setCharacterDetails() {}, prepareDetails: async () => {} } as never,
