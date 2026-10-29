@@ -69,6 +69,24 @@ const want = (jobs: JobScheduler, requester: string, key: string, lane: JobLane,
   jobs.want(requester, { key, lane, run, ...extra });
 
 describe("the job scheduler", () => {
+  test("an ahead job's cooperative dependency finishes before yielding its occupied slot to a queued shown job", async () => {
+    const { jobs, flush, advance } = setup();
+    const read = Promise.withResolvers<void>(), entered = Promise.withResolvers<void>();
+    const log: string[] = [];
+    const ahead = want(jobs, "prefetch", "check", "ahead", async () => {
+      await jobs.cooperate("ahead", async context => {
+        entered.resolve(); await read.promise; await context.turn(); log.push("catalogue");
+      });
+      log.push("check");
+    });
+    await flush(); await entered.promise;
+    const shown = want(jobs, "preview", "source", "shown", async () => { log.push("shown"); });
+    read.resolve(); await flush(); await advance(400);
+    expect(log).toEqual(["catalogue", "check", "shown"]);
+    expect((await ahead.settled).status).toBe("done");
+    expect((await shown.settled).status).toBe("done");
+  });
+
   test("cooperative shown reads pause ahead reads and jobs without occupying the person preparation slot", async () => {
     const { jobs, advance, flush } = setup();
     const life = new AbortController(), shownDone = Promise.withResolvers<void>(), personDone = Promise.withResolvers<void>();

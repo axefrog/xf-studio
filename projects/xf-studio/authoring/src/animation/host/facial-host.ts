@@ -35,6 +35,7 @@ import { findRelations } from "../../engines/facial-rig/relations";
 import { timeSlicer } from "../../host/event-loop";
 import { currentTurn, hostWork } from "../../host/host-jobs";
 import type { JobScheduler } from "../../platform/api/jobs";
+import { hostClock, type Clock } from "../../platform/core/clock";
 import { posedLocals, worldPositions, type Vec3 } from "../../engines/facial-rig/pose";
 import { clipValuesAt, type ClipTracks } from "../../engines/facial-rig/anim-tracks";
 import { denseTracks, vectorIssue } from "../../engines/facial-rig/vector";
@@ -92,7 +93,8 @@ export function locateFacialSolver(options: { env?: Readonly<Record<string, stri
 export interface FacialSolverProcess {
   /** Resolves once the solver compiled the setup (or failed to, with its plain error). */
   ready: Promise<{ ok: true; compileMs: number } | { ok: false; error: string }>;
-  solve(frames: readonly Float32Array[]): Promise<{ q: string; t: string; ms: number }>;
+  /** Cooperative solvers honour cancellation and take the supplied turn, whose scheduling waits don't spend the solve deadline. */
+  solve(frames: readonly Float32Array[], options?: { signal?: AbortSignal; turn?: () => Promise<void> }): Promise<{ q: string; t: string; ms: number }>;
   readonly exited: boolean;
   dispose(): void;
 }
@@ -123,6 +125,7 @@ const base64Of = (values: Float32Array) => Buffer.from(values.buffer, values.byt
  */
 export function inAppSolver(source: CompiledFacialRig | (() => CompiledFacialRig)): FacialSolverProcess {
   let rig: CompiledFacialRig | null = null, disposed = false;
+  const lifetime = new AbortController();
   const ready = Promise.resolve().then(() => {
     const started = performance.now();
     try { rig = typeof source === "function" ? source() : source; return { ok: true as const, compileMs: performance.now() - started }; }
@@ -132,21 +135,24 @@ export function inAppSolver(source: CompiledFacialRig | (() => CompiledFacialRig
   return {
     ready,
     get exited() { return disposed; },
-    async solve(frames) {
-      await ready;
+    async solve(frames, options = {}) {
+      const signal = options.signal ? AbortSignal.any([options.signal, lifetime.signal]) : lifetime.signal;
+      await whileWanted(ready, signal);
+      signal.throwIfAborted();
       if (disposed || !rig) throw Error("The solver stopped.");
       const compiled: CompiledFacialRig = rig, pose = scratch ??= createFacialPose(compiled);
       const J = compiled.jointNames.length, q = new Float32Array(frames.length * J * 4), t = new Float32Array(frames.length * J * 3);
       const started = performance.now();
-      const turn = currentTurn() ?? timeSlicer();
+      const turn = options.turn ?? currentTurn() ?? timeSlicer();
       for (const [f, frame] of frames.entries()) {
-        if (disposed) throw Error("The solver stopped.");
+        signal.throwIfAborted();
         solveFace(compiled, frame, pose); q.set(pose.rotations, f * J * 4); t.set(pose.translations, f * J * 3);
-        await turn();
+        await whileWanted(turn(), signal);
       }
+      signal.throwIfAborted();
       return { q: base64Of(q), t: base64Of(t), ms: Math.round((performance.now() - started) * 1000) / 1000 };
     },
-    dispose() { disposed = true; },
+    dispose() { disposed = true; lifetime.abort(Error("The solver stopped.")); },
   };
 }
 
@@ -273,8 +279,10 @@ export type FacialHostOptions = {
   /** Where the solver is (checked at each preparation). */
   solver: () => FacialSolverLocation;
   log?: (message: string) => void;
-  /** How long one solve may take before the solver is taken as stuck and started again (`SOLVE_TIMEOUT_MS`). */
+  /** How long one solve may work before it is taken as stuck; cooperative scheduling waits are excluded (`SOLVE_TIMEOUT_MS`). */
   solveTimeoutMs?: number;
+  /** Clock for solve deadlines (the host's monotonic clock by default). */
+  clock?: Clock;
   /** Most bytes the cached JSON of the face and its animation sets may take (`FACIAL_JSON_BUDGET`). */
   jsonBudget?: number;
   /** Which facial setup to solve with (`facialSetupSource()` from the environment when unset). */
@@ -310,7 +318,7 @@ type Rig = { vocabulary: FacialVocabulary; rest: RigRest; blink: { clip: ClipTra
   gazeSameWay?: boolean | null;
   /** Controls that move nothing on this face, found by the solver once it is ready (`findInert`); undefined until then or if it failed. */
   inert?: readonly string[];
-  /** The check ran (once per face; a restarted solver doesn't repeat it). */
+  /** The analysis succeeded (once per face; a failed/cancelled check remains retryable). */
   probed?: boolean };
 type Preparation = { key: string; controller: AbortController; promise: Promise<void>;
   /** Settles once the face (rig and setup) is read or has failed: what the idle's face and the blink wait for. */
@@ -374,6 +382,7 @@ const CLIENT = /^[A-Za-z0-9-]{1,64}$/;
 export class FacialHost {
   private current: Preparation | null = null;
   private readonly installations: InstallationRegistry;
+  private readonly clock: Clock;
   private running: Promise<void> | null = null;
   /** Each page's newest waiting solve, oldest page first. */
   private readonly waiting = new Map<string, { request: FacialSolveRequest; resolve(answer: FacialSolveAnswer): void }>();
@@ -383,6 +392,7 @@ export class FacialHost {
   private clearing: Promise<void> | null = null;
   constructor(private readonly options: FacialHostOptions) {
     this.installations = options.open ? new InstallationRegistry({ open: options.open }) : installations;
+    this.clock = options.clock ?? hostClock();
   }
   private get root() { return join(this.options.cacheRoot, "facial"); }
   private now() { return this.options.now?.() ?? Date.now(); }
@@ -642,7 +652,12 @@ export class FacialHost {
           if (this.current !== entry || entry.process !== process || entry.controller.signal.aborted) return;
           entry.solver = { phase: "ready", compileMs: result.compileMs, kind: inProcess ? "in-app" : "oracle" };
           this.options.log?.(`Facial solver ready (${inProcess ? "XF Studio's own" : "the IO Suite oracle"}; setup compiled in ${Math.round(result.compileMs)} ms).`);
-        }).catch(error => { if (!entry.controller.signal.aborted) hostFailure("facial", "inert_probe_failed", "Finding the face controls that move nothing didn't work; all are shown.", error, "warn"); });
+        }).catch(error => {
+          if (this.current !== entry || entry.process !== process || entry.controller.signal.aborted) return;
+          hostFailure("facial", "inert_probe_failed", "Finding the face controls that move nothing didn't work; the solver will be tried again.", error, "warn");
+          entry.stale = true; process.dispose();
+          entry.solver = { phase: "failed", reason: SOLVER_SLOW, kind: inProcess ? "in-app" : "oracle" };
+        });
       }
       else {
         hostFailure("facial", "solver_failed", "The facial solver couldn't start.", Error(result.error), "warn");
@@ -737,36 +752,35 @@ export class FacialHost {
   private async findInert(entry: Preparation, process: FacialSolverProcess, turn: () => Promise<void>): Promise<void> {
     const rig = entry.rigData;
     if (!rig || rig.probed) return;
-    rig.probed = true;
     const controls = rig.vocabulary.controls, context = Object.fromEntries(controls.map(control => [control.name, INERT_CONTEXT]));
     const frames = [denseTracks(rig.vocabulary, {}).tracks, denseTracks(rig.vocabulary, context).tracks];
-    try {
-      for (const base of [{}, context]) for (const control of controls) {
-        entry.controller.signal.throwIfAborted();
-        frames.push(denseTracks(rig.vocabulary, { ...base, [control.name]: 1 }).tracks);
-        if ((frames.length & 15) === 0) await turn();
-      }
-      const answer = await withTimeout(process.solve(frames), this.options.solveTimeoutMs ?? SOLVE_TIMEOUT_MS);
-      const q = floats(answer.q), t = floats(answer.t), joints = rig.rest.joints.length;
-      if (q.length !== frames.length * joints * 4 || t.length !== frames.length * joints * 3) throw Error("The solver's answer has the wrong size.");
-      const moved = (frame: number, base: number) => differs(q, frame, base, joints * 4) || differs(t, frame, base, joints * 3);
-      const wrinkles = new Set(rig.wrinkleSources);
-      rig.inert = controls.filter((control, index) => !wrinkles.has(control.track) && !moved(2 + index, 0) && !moved(2 + controls.length + index, 1))
-        .map(control => control.name);
-      hostTrace().event("facial", "inert", { count: rig.inert.length });
-      // Opposing pairs and gaze counterparts, from the same solves (each control alone at full weight) in world space.
-      const rest = worldPositions(rig.rest), pose = { q, t };
-      const displacement: (Vec3[] | undefined)[] = [];
-      for (const [index] of controls.entries()) {
-        entry.controller.signal.throwIfAborted();
-        displacement.push(!moved(2 + index, 0) ? undefined : worldPositions(rig.rest, posedLocals(rig.rest, pose, 2 + index))
-          .map((p, j) => [p[0] - rest[j]![0], p[1] - rest[j]![1], p[2] - rest[j]![2]] as Vec3));
-        if ((index & 15) === 15) await turn();
-      }
-      const relations = findRelations({ rest: rig.rest, controls, displacement, eyeTracks: new Set(rig.eyeTracks) });
-      rig.axes = relations.axes; rig.gazeSameWay = relations.gazeSameWay;
-      hostTrace().event("facial", "relations", { axes: relations.axes.length, gazeSameWay: relations.gazeSameWay });
-    } catch (error) { if (!entry.controller.signal.aborted) hostFailure("facial", "inert_probe_failed", "Finding the face controls that move nothing didn't work; all are shown.", error, "warn"); }
+    for (const base of [{}, context]) for (const control of controls) {
+      entry.controller.signal.throwIfAborted();
+      frames.push(denseTracks(rig.vocabulary, { ...base, [control.name]: 1 }).tracks);
+      if ((frames.length & 15) === 0) await turn();
+    }
+    const answer = await solveWithBudget(process, frames, this.options.solveTimeoutMs ?? SOLVE_TIMEOUT_MS, entry.controller.signal, this.clock);
+    entry.controller.signal.throwIfAborted();
+    const q = floats(answer.q), t = floats(answer.t), joints = rig.rest.joints.length;
+    if (q.length !== frames.length * joints * 4 || t.length !== frames.length * joints * 3) throw Error("The solver's answer has the wrong size.");
+    const moved = (frame: number, base: number) => differs(q, frame, base, joints * 4) || differs(t, frame, base, joints * 3);
+    const wrinkles = new Set(rig.wrinkleSources);
+    const inert = controls.filter((control, index) => !wrinkles.has(control.track) && !moved(2 + index, 0) && !moved(2 + controls.length + index, 1))
+      .map(control => control.name);
+    // Opposing pairs and gaze counterparts, from the same solves (each control alone at full weight) in world space.
+    const rest = worldPositions(rig.rest), pose = { q, t };
+    const displacement: (Vec3[] | undefined)[] = [];
+    for (const [index] of controls.entries()) {
+      entry.controller.signal.throwIfAborted();
+      displacement.push(!moved(2 + index, 0) ? undefined : worldPositions(rig.rest, posedLocals(rig.rest, pose, 2 + index))
+        .map((p, j) => [p[0] - rest[j]![0], p[1] - rest[j]![1], p[2] - rest[j]![2]] as Vec3));
+      if ((index & 15) === 15) await turn();
+    }
+    const relations = findRelations({ rest: rig.rest, controls, displacement, eyeTracks: new Set(rig.eyeTracks) });
+    entry.controller.signal.throwIfAborted();
+    rig.inert = inert; rig.axes = relations.axes; rig.gazeSameWay = relations.gazeSameWay; rig.probed = true;
+    hostTrace().event("facial", "inert", { count: inert.length });
+    hostTrace().event("facial", "relations", { axes: relations.axes.length, gazeSameWay: relations.gazeSameWay });
   }
   /**
    * A ready solver that stopped (a crash) or is stuck is started again while the restart budget allows; past it the state says so
@@ -777,7 +791,7 @@ export class FacialHost {
     if (entry.controller.signal.aborted) return false;
     if (!entry.process || entry.solver.phase === "missing" || entry.solver.phase === "starting") return false;
     if (!entry.process.exited && !entry.stale) return false;
-    if (entry.solver.phase === "failed" && entry.solver.reason !== SOLVER_STOPPED) return false;
+    if (entry.solver.phase === "failed" && entry.solver.reason !== SOLVER_STOPPED && !entry.stale) return false;
     const now = this.now();
     entry.restarts = entry.restarts.filter(at => now - at < RESTART_WINDOW_MS);
     if (entry.restarts.length >= MAX_RESTARTS) { entry.solver = { phase: "failed", reason: SOLVER_STOPPED }; return false; }
@@ -974,7 +988,7 @@ export class FacialHost {
       frames.push(denseTracks(rig.vocabulary, request.controls, clipValuesAt(rig.blink!.clip, blink.closure * rig.blink!.closedTime)).tracks);
     } else frames.push(_probe);
     let answer: { q: string; t: string; ms: number };
-    try { answer = await withTimeout(process.solve(frames), this.options.solveTimeoutMs ?? SOLVE_TIMEOUT_MS); }
+    try { answer = await solveWithBudget(process, frames, this.options.solveTimeoutMs ?? SOLVE_TIMEOUT_MS, entry.controller.signal, this.clock); }
     catch (error) {
       if (!(error instanceof SolveTimeout)) throw error;
       // Stuck, or its answer was lost: stopped now, started again for the next solve (CORE-100).
@@ -1025,6 +1039,40 @@ function differs(values: Float32Array, frame: number, base: number, size: number
 }
 
 class SolveTimeout extends Error {}
+/** An owner ending abandons the wait immediately; late answers cannot resume the solve. */
+function whileWanted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    if (signal.aborted) abort(); else signal.addEventListener("abort", abort, { once: true });
+    work.then(value => { signal.removeEventListener("abort", abort); signal.aborted ? reject(signal.reason) : resolve(value); },
+      error => { signal.removeEventListener("abort", abort); reject(error); });
+  });
+}
+/** Bound actual solve work, excluding time the cooperative solver spends yielding to the scheduler. Oracle waits still spend time. */
+async function solveWithBudget(process: FacialSolverProcess, frames: readonly Float32Array[], ms: number, owner: AbortSignal, clock: Clock) {
+  owner.throwIfAborted();
+  const lifetime = new AbortController(), signal = AbortSignal.any([owner, lifetime.signal]);
+  let timer: AbortController | undefined, remaining = ms, began = clock.monotonic();
+  const timedOut = () => lifetime.abort(new SolveTimeout(`No answer within ${Math.round(ms)} ms of solve work.`));
+  const arm = () => {
+    began = clock.monotonic(); timer = new AbortController();
+    clock.after(remaining, timedOut, AbortSignal.any([timer.signal, signal]));
+  };
+  const turn = currentTurn() ?? timeSlicer();
+  arm();
+  try {
+    const answer = await whileWanted(process.solve(frames, { signal, turn: async () => {
+      timer?.abort(); remaining -= clock.monotonic() - began;
+      if (remaining <= 0) timedOut();
+      signal.throwIfAborted();
+      try { await whileWanted(turn(), signal); }
+      finally { if (!signal.aborted) arm(); }
+    } }), signal);
+    if (clock.monotonic() - began >= remaining) timedOut();
+    signal.throwIfAborted();
+    return answer;
+  } finally { timer?.abort(); lifetime.abort(); }
+}
 /** `work`, or a `SolveTimeout` after `ms`. */
 function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;

@@ -84,6 +84,24 @@ test.each(["ready", "abort", "failed"] as const)("parts load and prepare before 
   } finally { actions.dispose(); }
 });
 
+test("cancellation between scene readiness and its await continuation releases parts without placing them", async () => {
+  const complete = Promise.withResolvers<Parameters<typeof createBrowserCharacterDetailDevice>[0]>(), prepared = Promise.withResolvers<void>();
+  const life = new AbortController();
+  let placements = 0, releases = 0;
+  const loaded = { reused: 0, components: [], limits: [], problems: [], dispose() { releases++; } };
+  const details = { load: async () => loaded };
+  const device = createBrowserCharacterDetailDevice(complete.promise as never, async () => Response.json(record), undefined,
+    Promise.resolve({ details, prepareDetails: async () => { prepared.resolve(); } }) as never);
+  const pending = device.show(file, life.signal);
+  await prepared.promise;
+  // Let show subscribe to readiness first. This reaction then runs after wanted resolves, before show's continuation can place.
+  await Promise.resolve(); await Promise.resolve();
+  void complete.promise.then(() => life.abort());
+  complete.resolve({ details, setCharacterDetails: () => { placements++; return null; } } as never);
+  await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  expect([placements, releases]).toEqual([0, 1]);
+});
+
 test.each([false, true])("a delayed head requests and reads V first, placing it once only if still wanted (cancelled=%s)", async cancelled => {
   const scene = Promise.withResolvers<Parameters<typeof createBrowserCharacterDetailDevice>[0]>();
   const read = Promise.withResolvers<void>();

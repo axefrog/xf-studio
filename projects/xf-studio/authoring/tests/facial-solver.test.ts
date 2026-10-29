@@ -324,6 +324,22 @@ describe("face bakes from the solver", () => {
     const broken = inAppSolver(() => compileFacialRig(RIG, {}));
     expect(await broken.ready).toMatchObject({ ok: false });
   });
+
+  test.each(["abort", "dispose"] as const)("an abandoned in-app solve stops during its pending turn (%s)", async ending => {
+    const solver = inAppSolver(compiled), life = new AbortController();
+    const entered = Promise.withResolvers<void>(), late = Promise.withResolvers<void>();
+    let turns = 0;
+    const pending = solver.solve([solveFrame({ b: 1 }), solveFrame({})], { signal: life.signal,
+      turn: async () => { turns++; entered.resolve(); await late.promise; } });
+    try {
+      await entered.promise;
+      if (ending === "abort") life.abort(Error("The owner stopped.")); else solver.dispose();
+      await expect(pending).rejects.toThrow("stopped");
+      if (ending === "abort") expect((await solver.solve([solveFrame({})])).q).toBeString();
+      late.resolve(); await Promise.resolve(); await Promise.resolve();
+      expect(turns).toBe(1);
+    } finally { solver.dispose(); late.resolve(); }
+  });
 });
 function solveFrame(values: Record<string, number>) {
   const v = compiled.referenceTracks();

@@ -1,22 +1,22 @@
 # PREV-196: warm restart preparation
 
-Step 1 is merged at **main `19c366b7`**. Independent re-review: **MERGE**; coordinator gates: full suite **4,875/0**, GPU **124/0**, browser and resource proofs green. Warm restart improves from **9.9–10.6 s to 5.6–7.7 s**. The **<2 s budget remains open**. Step 2 is uncommitted on `claude/perf-restart-2`, based on `19c366b7`; its browser timing, typecheck, broad gates and independent review remain coordinator-owned.
+Step 1 is merged at **main `19c366b7`** (MERGE review; full suite **4,875/0**, GPU **124/0**, browser/resource proofs green). It improved warm restart from **9.9–10.6 s to 5.6–7.7 s**. Step 2 is committed as **`d418e83f`** on `claude/perf-restart-2` and reaches **2.92–2.95 s warm**. The **<2 s budget remains open**. Its review verdict is **FIX**, with three Medium findings corrected in the current uncommitted follow-up; re-review and remaining gates belong to the coordinator.
 
-## Measured critical path on `19c366b7`
+## Measured critical path on `d418e83f`
 
-Coordinator-reported warm page marks (milliseconds; the `+` offsets are retained as reported):
+Coordinator-reported warm page marks (milliseconds):
 
 ```text
-ask 1000
-answer 1200–1600
-record 1300–1800
-loaded 4100–6200
-details:uploads +400
-details:drained +850–1200
-frame 5600–7700
+ask 900–1050
+loaded 1770
+details:uploads 2140
+details:drained 2860
+frame 2920–2950
 ```
 
-The page asks for the blink at about 1.9–2.1 s and receives it at 3.9–6.1 s. The host logs “Facial solver ready” at 4.8–6.8 s server time; the page starts about 0.9 s after the server. Creator presentation (4.0–4.8 s), background V resolve (3.6–3.9 s) and archive-index reads share the host. Step 1 made CPU work fair; it did not give the first frame priority over editor catalogues/analysis.
+Before step 2, loaded was 4.1–6.2 s and blink answered at 3.9–6.1 s while creator presentation, background V resolve and archive indexes competed with facial work. The new measurement confirms the combined priority/overlap improvement; it does not isolate each change's contribution. The 720 ms uploads → drained interval still includes bake/program/link work and completion waits.
+
+Coordinator gates on `d418e83f` before stopping for review fixes: typecheck clean; desktop **135/0**, 038 **11/0**, startup browser **6/0**, substitution **2/0**, resources **8/0**, GPU **124/0**, suite batches **1–2 green**. This is a partial gate run, not a completed full-suite result for step 2.
 
 ## 1. Host: first-frame demand uses the shared lanes
 
@@ -32,7 +32,7 @@ The page asks for the blink at about 1.9–2.1 s and receives it at 3.9–6.1 s.
 
 Both host roots pass the same scheduler into the facial, idle and pose hosts; the creator already receives it. Creator and pose scan turns participate in the lane. Idle catalogue reads yield between patches/sets. The facial rig releases its shown scope before waiting for an Expressions request; blink demand holds shown priority through its bake. The in-app solver inherits the calling cooperative turn, so its many-frame control probe yields to person/shown demand.
 
-**What “solver ready” means [source + CPU regression]:** blink waits for `rigReady`, which is resolved **before** `startSolver()` and the editor's control probe. The matching measured log is correlation under contention, not a direct promise dependency. Readiness includes `2 + 2 × controls` solved poses (controls alone and over a common context), inert-control detection, world-space displacement and relation analysis. That analysis now runs ahead. The actual setup still needs resource reads, parsing and synchronous `compileFacialRig`; a separate “Facial setup compiled in … ms” line now measures that compile rather than conflating it with readiness. Individual solves, setup compilation and blink baking retain their arithmetic. Their remaining real cost needs measurement after priority contention is removed.
+**What “solver ready” means [source + CPU regression]:** blink waits for `rigReady`, which is resolved **before** `startSolver()` and the editor's control probe. The matching measured log was correlation under contention, not a direct promise dependency. Readiness includes `2 + 2 × controls` solved poses (controls alone and over a common context), inert-control detection, world-space displacement and relation analysis. That analysis now runs ahead. The actual setup still needs resource reads, parsing and synchronous `compileFacialRig`; a separate “Facial setup compiled in … ms” line measures that compile rather than conflating it with readiness. Individual solves, setup compilation and blink baking retain their arithmetic.
 
 **Files** under `projects/xf-studio/authoring/`: `src/platform/api/jobs.ts`, `src/platform/core/jobs.ts`, `src/host/host-jobs.ts`; `src/character/host/cc-catalogue-service.ts`; `src/animation/host/facial-host.ts`, `idle-host.ts`, `pose-catalogue-host.ts`; `server.ts`, `desktop/server.ts` (wiring only).
 
@@ -62,18 +62,28 @@ The captured fence is preparation-owned, cleaned in `finally`, and deleted immed
 
 **Tests:** fifteen-frame fence reports plus twenty simulated link frames take **35 frames**, rather than the former serial **50**. A draw arriving during the links requires the full renewed barrier and takes **50**; the first-use assertions check that it is not read early. A held-link cancellation deletes all live fences. Existing quiet-page window throughput remains **45 frames for 24 bands**, versus **345** under per-band barriers; continuous draws, spent-window backpressure and context-generation tests remain unchanged.
 
+## Review follow-up on `d418e83f` (uncommitted)
+
+1. **Cancelled placement:** `wanted()` checked the signal when resolving, but a readiness reaction could cancel before the awaiting continuation ran. `browser-character-detail-device.ts` now rechecks immediately after that await, inside the catch that releases loaded parts. The `character-detail-context` regression cancels in exactly that microtask gap and verifies zero placements and one release. It fails on `d418e83f`.
+
+2. **Nested scheduler dependency:** a prefetch check holds the single job slot while awaiting a cooperative catalogue build. Waiting for a queued shown job then forms a cycle: the build waits for that job, which waits for the check's slot. `platform/core/jobs.ts` now defers cooperative reads to queued higher work only while the slot is free. While occupied, running higher work, holds and quiet periods still take priority; dependent reads can finish so the slot can be released. This is the scheduler's general admission rule, with no creator-specific bypass. A simulated-time `jobs` regression reproduces the occupied-slot cycle, retains the shown quiet period, then verifies catalogue → check → shown completion. It also fails on `d418e83f`.
+
+3. **Facial probe deadline and retry:** its 15 s wall-clock timeout counted priority waits, and the old early `probed` flag permanently suppressed a retry. `facial-host.ts` now gives each solve an AbortSignal and a monotonic work budget, pausing its deadline around cooperative turns. Oracle waits still spend the budget. Abandonment cancels in-app work even during a pending turn; deadline timers follow their owner and are cleared on success, failure, pause and release. Inert controls and relations publish together, with `probed` set only after successful analysis. A failed probe disposes the process and retries through the existing bounded restart policy, rather than publishing readiness without analysis. `facial-host` tests keep a real in-app probe healthy through a 30 s simulated person preparation, expire a genuinely stuck probe and verify complete retry, and assert immediate timer cancellation on release. `facial-solver` tests abort/dispose a solve during a pending turn and reject its late continuation.
+
+**Files in this follow-up:** three production files above; `tests/character-detail-context.test.ts`, `jobs.test.ts`, `facial-host.test.ts`, `facial-solver.test.ts`; the performance/ledger and knowledge notes. No upload-window, GPU barrier, cache identity or authored-state policy changes.
+
 ## Validation and handoff
 
-**181 targeted tests pass across 16 files**, one Bun process under the required **4 GB memory guard**, reported peak **0.5 GB**: `jobs`, `host-jobs`, `cc-catalogue-service`, `pose-catalogue-host`, `facial-host`, `idle-body`, `game-blink`, `game-blink-composition`, `character-detail-context`, `character-renderer`, `browser-head-attachment`, `browser-viewport-device`, `head-rig-motion`, `gpu-upload-work`, `link-pacing`, `runtime-preparation` (`tests/*.test.ts`). No existing assertion or timing gate is weakened. Recording WebGL fixtures execute without a browser or GPU. No Chrome/browser, GPU, typecheck, desktop, full-suite, real-data oracle or latency gate ran for step 2.
+**150 targeted tests pass across eight files**, one Bun process under the required **4 GB guard**, peak **0.5 GB**: `jobs`, `host-jobs`, `choice-prefetch`, `cc-catalogue-service`, `character-detail-context`, `facial-host`, `facial-solver`, `facial-lifetime` (`tests/*.test.ts`). No existing assertion or timing gate is weakened. Recording WebGL fixtures execute without a browser or GPU. No browser, GPU, typecheck, desktop, full-suite, real-data oracle or latency gate ran in the follow-up.
 
-After the final scene-lifetime edits, the three scene/device/attachment files pass again (**21/0**, guard peak **0.0 GB**). Link and private-path checks and `git diff --check` pass. The footprint report shows **292.7 GB free on C**, this worktree **0.5 GB**; no task scratch output or new payload above 5 GB is retained. Other reported large folders belong to existing work and are untouched.
+Link checking reports **0 broken links/paths in 508 Markdown files**; the tracked-file privacy check and `git diff --check` pass. The footprint report shows **290.8 GB free on C**, this worktree **0.5 GB**, and no task scratch or new payload above 5 GB retained. Existing large folders are untouched.
 
-The coordinator should remeasure blink request/answer, actual facial compile/probe time, `loaded` while blink is pending, `details:uploads`, `details:drained` and first frame, then run type/broad/GPU/resource gates and independent review. Include a hairstyle change while the creator idle plays and cancellation while motion/preparation is still pending.
+The coordinator owns re-review, remaining gates and remeasurement. Exercise cancellation between scene readiness and placement, a preview-source request during another body's catalogue rebuild, and facial analysis interrupted by a long person preparation.
 
-**Remaining path to 2 s:** the ordinary request still starts around 1 s; head/core fetch/decode and initial motion requests start later. Setup compilation/individual bakes, driver linking, necessary completion waits and hidden warm-up still cost time. The current baseline is 5.6–7.7 s, not a measured step-2 result. Determine the largest residual stage from the new marks before extending scope. No game or mod-manager operation is needed for this checkpoint.
+**Remaining path to 2 s:** the request still starts around 0.9–1.05 s, parts finish loading at 1.77 s, and preparation continues through uploads at 2.14 s and drained at 2.86 s. Core loading, setup/bakes, driver linking, necessary completion waits and hidden warm-up retain their costs. Use residual stage measurements to choose the next change; the three review fixes make no new timing claim. No game or mod-manager operation is needed for this checkpoint.
 
 ## Step 1 evidence retained
 
 The first candidate `2e57ae9f` regressed to 20.3–20.7 s despite asking for the V at 1 s: per-band fences multiplied quiet-context reports of 200–250 ms. The window commit `da926994` reached 6.4–6.8 s, with uploads 0.4 s after loaded. Subsequent review fixed later-work admission, warm-character fence retention, the pose poll's unowned 700 ms timer and a separate one-second face poll; continuous rendering then exposed fence replacement starvation. The merged design retains pending admission barriers, grants a bounded burst on completion and carries intervening work into the next checkpoint. The shell-repaint explanation for delayed Chrome reporting remains a hypothesis. Those fixes are now MERGE-reviewed and validated by the coordinator's green full/GPU/browser/resource gates on `19c366b7`.
 
-**Knowledge used:** [WebGL linking/uploads](../../knowledge/webgl-program-linking.md), [mod loading §6](../../knowledge/mod-loading.md#6-implementation-and-reproduction), [facial animation](../../knowledge/facial-animation.md), [body animation](../../knowledge/body-animation.md), [knowledge rules](../../knowledge/README.md). Updated current loading, blink-readiness and fence-overlap findings; browser evidence for step 2 remains pending.
+**Knowledge used:** [WebGL linking/uploads](../../knowledge/webgl-program-linking.md), [mod loading §6](../../knowledge/mod-loading.md#6-implementation-and-reproduction), [facial animation](../../knowledge/facial-animation.md), [body animation](../../knowledge/body-animation.md), [knowledge rules](../../knowledge/README.md). Updated measured step-2 progress, cancellation/admission findings and probe deadline/retry ownership; browser evidence for the review follow-up remains pending.

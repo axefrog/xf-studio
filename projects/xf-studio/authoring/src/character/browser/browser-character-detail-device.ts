@@ -138,7 +138,7 @@ export function createBrowserCharacterDetailDevice(source: Scene | Promise<Scene
         markCharacter("prepared");
       }
       let completed: Scene;
-      try { completed = await wanted(ready, signal); }
+      try { completed = await wanted(ready, signal); signal.throwIfAborted(); }
       catch (error) { loaded.dispose(); throw error; }
       const placed = completed.setCharacterDetails(loaded);
       markCharacter("placed");

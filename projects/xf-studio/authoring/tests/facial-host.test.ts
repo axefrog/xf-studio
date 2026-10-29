@@ -7,7 +7,7 @@
 import { expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createFacialHandler, facialSetupSource, FacialHost, IN_APP_SOLVER, locateFacialSolver, MAX_RESTARTS, PREPARE_RETRY_MS, RESTART_WINDOW_MS, SOLVER_MISSING, SOLVER_NOT_SET_UP, spawnFacialSolver, type FacialExtractor,
+import { createFacialHandler, facialSetupSource, FacialHost, IN_APP_SOLVER, inAppSolver, locateFacialSolver, MAX_RESTARTS, PREPARE_RETRY_MS, RESTART_WINDOW_MS, SOLVER_MISSING, SOLVER_NOT_SET_UP, spawnFacialSolver, type FacialExtractor,
   type FacialSolverProcess, type FacialSolverSpawner } from "../src/animation/host/facial-host";
 import { EXPRESSION_TABLE, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG, readFaceRigSetup } from "../src/animation/facial-catalogue";
 import { ENVELOPE_NAMES } from "../src/engines/facial-rig/solver";
@@ -18,6 +18,7 @@ import { cn, cr2w, fixtureInstallation, handle, rh } from "./resolver-fixtures";
 import { tempDir } from "./temp-dir";
 import { hostJobs } from "../src/host/host-jobs";
 import type { JobScheduler } from "../src/platform/api/jobs";
+import type { Clock } from "../src/platform/core/clock";
 
 const SET = "base\\animations\\ui\\photomode\\test_faces.anims";
 const MAIN = ["eye_l_blink", "eye_r_blink", "lips_l_corner_up", "lips_r_corner_up", "jaw_mid_open", "lips_tighten_up"];
@@ -82,7 +83,7 @@ const solvableSetup = cr2w({ $type: "animFacialSetup", version: 8,
 const solvableAdditives = animSet([["additive__blink_normal__01", "AdditiveFromRefPose", 0.5,
   [[0, E13, 0], [0.1, E13, 1], [0.5, E13, 0], [0, E13 + 1, 0], [0.1, E13 + 1, 1], [0.5, E13 + 1, 0]], []]]);
 
-type WorldOptions = { jobs?: JobScheduler; spawn?: FacialSolverSpawner; solveTimeoutMs?: number; now?: () => number; jsonBudget?: number;
+type WorldOptions = { jobs?: JobScheduler; clock?: Clock; spawn?: FacialSolverSpawner; solveTimeoutMs?: number; now?: () => number; jsonBudget?: number;
   /** A mod archive that also provides the animation set, with these faces. */
   setOverride?: object;
   /** Awaited before extraction number `n` (from 1) writes anything; a throw fails that extraction. */
@@ -137,7 +138,7 @@ function world(root: string, options: WorldOptions = {}) {
     solver: () => options.inApp ? IN_APP_SOLVER : { addon: "addon", python: "python", script: "server.py" },
     open: () => ({ ...fixture, fetcher: options.native ? { ...fixture.graph.port, nativeDecoder } : fixture.graph.port }) as unknown as Installation, extract,
     ...(options.inApp && !options.spawn ? {} : { spawn: options.spawn ?? (() => process) }),
-    solveTimeoutMs: options.solveTimeoutMs, now: options.now, jsonBudget: options.jsonBudget, setupSource: options.setupSource ?? "face-rig" });
+    solveTimeoutMs: options.solveTimeoutMs, clock: options.clock, now: options.now, jsonBudget: options.jsonBudget, setupSource: options.setupSource ?? "face-rig" });
   return { host, solves, extractions: () => extractions };
 }
 const zeros = (n: number) => btoa(String.fromCharCode(...new Uint8Array(n * 4)));
@@ -534,6 +535,110 @@ test("the idle's face and the blink read only the face: the installed expression
     expect(host.expressions()).toMatchObject({ phase: "ready", items: [{ label: "Happy" }, { label: "Grin" }] });
     expect(extractions()).toBeGreaterThan(read);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+/** Drive the solve deadline without sleeping or changing process-wide timers. */
+function solveClock() {
+  let now = 0;
+  const timers = new Set<{ at: number; run(): void }>();
+  const clock: Clock = { now: () => now, monotonic: () => now,
+    after(ms, run, signal) {
+      if (signal?.aborted) return;
+      const timer = { at: now + ms, run }; timers.add(timer);
+      signal?.addEventListener("abort", () => timers.delete(timer), { once: true });
+    }, frame() {} };
+  return { clock, timers, advance(ms: number) {
+    now += ms;
+    for (const timer of [...timers]) if (timer.at <= now) { timers.delete(timer); timer.run(); }
+  } };
+}
+
+test("a real in-app probe keeps its analysis after a person pauses it longer than the solve deadline", async () => {
+  const root = tempDir("xfs-facial-priority-"), time = solveClock(), jobs = hostJobs({ clock: time.clock, quietMs: 0 });
+  const entered = Promise.withResolvers<void>(), personDone = Promise.withResolvers<void>();
+  let paused = false, turns = 0, signal: AbortSignal | undefined, personEnded: Promise<unknown> | undefined;
+  const { host } = world(root, { solvable: true, inApp: true, jobs, clock: time.clock,
+    spawn: (_location, _rig, _setup, options) => {
+      const solver = inAppSolver(options!.compiled!);
+      return { ...solver, solve: (frames, own) => {
+        signal = own?.signal;
+        return solver.solve(frames, { ...own, turn: async () => {
+          turns++;
+          if (!paused) {
+            paused = true;
+            personEnded = jobs.want("page", { key: "V", lane: "person", run: () => personDone.promise }).settled;
+            entered.resolve();
+          }
+          await own!.turn!();
+        } });
+      } };
+    } });
+  try {
+    host.state(); await entered.promise;
+    time.advance(30_000);
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(signal?.aborted).toBe(false);
+    expect(host.state().solver.phase).toBe("starting");
+    expect(turns).toBe(1);
+    personDone.resolve(); await personEnded;
+    for (let i = 0; i < 100 && host.state().solver.phase === "starting"; i++) await new Promise<void>(done => setImmediate(done));
+    const state = host.state();
+    expect(state.solver.phase).toBe("ready");
+    expect(state.rig.inert).toBeArray(); expect(state.rig.axes).toBeArray();
+    expect(turns).toBeGreaterThan(1);
+  } finally { personDone.resolve(); host.dispose(); await personEnded; rmSync(root, { recursive: true, force: true }); }
+  expect(time.timers.size).toBe(0);
+});
+
+test("a timed-out probe cancels its solve and retries all analysis instead of marking the rig probed", async () => {
+  const root = tempDir("xfs-facial-retry-"), time = solveClock(), started = Promise.withResolvers<void>();
+  const late = Promise.withResolvers<{ q: string; t: string; ms: number }>();
+  let spawned = 0, probes = 0, disposed = 0, signal: AbortSignal | undefined;
+  const { host } = world(root, { clock: time.clock, spawn: () => {
+    const first = spawned++ === 0;
+    return { ready: Promise.resolve({ ok: true, compileMs: 1 }), exited: false, dispose() { disposed++; },
+      solve(frames, options) {
+        probes++;
+        if (!first) return Promise.resolve(toyFace(frames));
+        signal = options?.signal; started.resolve(); return late.promise;
+      } };
+  } });
+  try {
+    host.state(); await started.promise; time.advance(15_001);
+    for (let i = 0; i < 100 && !disposed; i++) await Promise.resolve();
+    expect(signal?.aborted).toBe(true); expect(disposed).toBe(1);
+    const retrying = host.state();
+    expect(retrying.rig.inert).toBeUndefined(); expect(retrying.rig.axes).toBeUndefined();
+    expect(retrying.solver.phase).toBe("starting");
+    for (let i = 0; i < 100 && host.state().solver.phase === "starting"; i++) await new Promise<void>(done => setImmediate(done));
+    expect(host.state().solver.phase).toBe("ready");
+    expect(host.state().rig.inert).toEqual(["lips_tighten_up"]);
+    expect(host.state().rig.axes).toBeArray();
+    expect(probes).toBe(2);
+    late.resolve({ q: "", t: "", ms: 0 }); await Promise.resolve();
+    expect(host.state().rig.inert).toEqual(["lips_tighten_up"]);
+  } finally { host.dispose(); late.resolve({ q: "", t: "", ms: 0 }); rmSync(root, { recursive: true, force: true }); }
+  expect(time.timers.size).toBe(0);
+});
+
+test("releasing the facial host cancels an abandoned probe and its deadline immediately", async () => {
+  const root = tempDir("xfs-facial-release-"), time = solveClock(), started = Promise.withResolvers<void>();
+  const late = Promise.withResolvers<{ q: string; t: string; ms: number }>();
+  let signal: AbortSignal | undefined, disposed = 0, spawned = 0;
+  const { host } = world(root, { clock: time.clock, spawn: () => {
+    spawned++;
+    return { ready: Promise.resolve({ ok: true, compileMs: 1 }), exited: false, dispose() { disposed++; },
+      solve(_frames, options) { signal = options?.signal; started.resolve(); return late.promise; } };
+  } });
+  try {
+    host.state(); await started.promise;
+    expect(time.timers.size).toBe(1);
+    host.dispose();
+    expect(signal?.aborted).toBe(true); expect(disposed).toBe(1); expect(time.timers.size).toBe(0);
+    time.advance(30_000); late.resolve({ q: "", t: "", ms: 0 });
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(spawned).toBe(1); expect(time.timers.size).toBe(0);
+  } finally { host.dispose(); late.resolve({ q: "", t: "", ms: 0 }); rmSync(root, { recursive: true, force: true }); }
 });
 
 test("the shown blink completes while the editor's ahead control probe is deferred (PREV-196 step 2)", async () => {

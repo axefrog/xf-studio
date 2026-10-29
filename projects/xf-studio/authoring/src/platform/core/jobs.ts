@@ -255,7 +255,9 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
           if (now() - lastYield >= sliceMs) { await yieldTurn(); lastYield = now(); }
           signal.throwIfAborted();
           await until(() => {
-            if (running && RANK[running.lane] < RANK[lane] || queue.some(job => RANK[job.lane] < RANK[lane])) return false;
+            // A queued job cannot start while the slot is occupied. A read that the slot's owner awaits must be allowed to
+            // finish and release it; otherwise each waits for the other. Active higher work/holds still take priority.
+            if (running ? RANK[running.lane] < RANK[lane] : queue.some(job => RANK[job.lane] < RANK[lane])) return false;
             const at = quietFrom(lane, quietMs);
             if (at <= now()) return true;
             if (Number.isFinite(at)) wakeAtTime(at);
