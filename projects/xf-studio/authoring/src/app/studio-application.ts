@@ -928,6 +928,7 @@ export class StudioApplication {
         const result = spec.apply(document.state(), concrete);
         if (!result.changed) return result.effect;
         if (!app.look && app.routes.undoPolicy(concrete) !== "none") app.lookDocument.history.checkpoint([feature], spec.label(concrete));
+        if (result.selectionChanged) app.lookDocument.history.declareSelectionChange([feature]);
         document.set(result.part, result.editor);
         if ("partChanged" in app.services.document) app.services.document.partChanged();
         return result.effect;

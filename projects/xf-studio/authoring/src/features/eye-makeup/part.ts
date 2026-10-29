@@ -67,9 +67,8 @@ export const eyeMakeupEditor: EditorCodec<EyeMakeupEditor, Recipe> = Object.free
   },
   serialize: (editor: EyeMakeupEditor) => ({ active: editor.active, selected: editor.selected,
     ...(editor.fieldSelection ? { fieldSelection: structuredClone(editor.fieldSelection) } : {}) }),
-  // Topology edits can select a different point at the same index; moving a point leaves this count unchanged.
   selection: (editor: EyeMakeupEditor, recipe: Recipe) => ({ selected: editor.selected,
-    layerId: recipe.layers[editor.active]?.id, pointCount: recipe.layers[editor.active]?.points.length ?? 0,
+    layerId: recipe.layers[editor.active]?.id,
     ...(editor.fieldSelection ? { fieldSelection: structuredClone(editor.fieldSelection) } : {}) }),
 });
 

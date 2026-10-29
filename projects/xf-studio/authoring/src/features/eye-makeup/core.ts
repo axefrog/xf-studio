@@ -52,7 +52,9 @@ export function applyEyeMakeup(state: EyeMakeupState, action: EyeMakeupAction): 
     // The same selection rule AuthoringDocument.replaceRecipe applies after a stack edit.
     const recipe = next.recipe, active = clampIndex(next.active, recipe.layers.length);
     const sameLayer = state.part.layers[editor.active]?.id === recipe.layers[active]?.id;
-    return { part: recipe, changed: true, effect: { kind: "structure" }, editor: { ...editor, active,
+    const selectionChanged = !sameLayer || action.kind === "layer.edit" && action.command.kind === "reset" &&
+      action.command.id === state.part.layers[editor.active]?.id;
+    return { part: recipe, changed: true, effect: { kind: "structure" }, ...(selectionChanged ? { selectionChanged: true as const } : {}), editor: { ...editor, active,
       selected: sameLayer ? clampIndex(editor.selected, recipe.layers[active]?.points.length ?? 0) : 0,
       fieldSelection: parseFieldSelection(editor.fieldSelection, recipe) } };
   }
@@ -64,7 +66,9 @@ export function applyEyeMakeup(state: EyeMakeupState, action: EyeMakeupAction): 
   const nextChoices: Record<string, LayerChoices> = {};
   for (const [key, remembered] of Object.entries(result.choices))
     if (key.startsWith(`${SCOPE}/`)) nextChoices[key.slice(SCOPE.length + 1)] = remembered;
-  return { part: result.state.recipe, changed: true, effect: result.effect,
+  const selectionChanged = action.kind === "point.insert" || action.kind === "point.remove" &&
+    state.part.layers[editor.active]?.id === action.layerId && action.index <= editor.selected;
+  return { part: result.state.recipe, changed: true, effect: result.effect, ...(selectionChanged ? { selectionChanged: true as const } : {}),
     editor: { active: result.state.active, selected: result.state.selected, fieldSelection: result.state.fieldSelection,
       choices: nextChoices } };
 }

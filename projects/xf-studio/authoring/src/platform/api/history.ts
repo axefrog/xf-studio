@@ -73,7 +73,9 @@ export const LOOK_HISTORY_1 = "xfs/look-history-1";
  * One kept step as the look history stores it: the parts it touched, each as the chunk list of its
  * body before the step, or `null` when the look did not have that part yet.
  */
-export type HistorySelection = Readonly<Record<string, { readonly before: unknown; readonly after: unknown }>>;
+export type HistorySelection = Readonly<Record<string, { readonly before: unknown; readonly after: unknown;
+  /** An edit explicitly replaced the selected item, even when its saved position is unchanged. */
+  readonly structural?: true }>>;
 export type StoredLookEntry = { scope: HistoryScope; before: Readonly<Record<string, readonly ChunkId[] | null>>;
   /** Only selections changed by this step; absent in older saved histories. */
   selection?: HistorySelection };

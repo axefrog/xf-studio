@@ -33,6 +33,25 @@ function selectableStore(limit = HISTORY_LIMIT) {
   return { ...content, scope, selection, set };
 }
 
+test.each(["cancel", "empty commit"] as const)("a reused checkpoint restores its previous selection metadata on %s", ending => {
+  const { scope, selection, set, values } = selectableStore();
+  scope.checkpoint(["a"]);
+  set("a", 1, "a1");
+  set("a", 0, "a1");
+  const before = scope.data();
+  const run = scope.begin(["a"], CONTROL_TRANSACTION);
+  set("a", 2, "a2"); run.applied(true, () => label("Temporary change"));
+  if (ending === "cancel") run.cancel();
+  else { set("a", 0, "a1"); run.commit(); }
+  expect([values.a, selection.a]).toEqual([0, "a1"]);
+  expect(scope.data()).toEqual(before);
+  selection.a = "navigation";
+  expect(scope.undo()).toBe(true);
+  expect(selection.a).toBe("a0");
+  expect(scope.redo()).toBe(true);
+  expect(selection.a).toBe("a1");
+});
+
 test("selection endpoints survive refused moves and a displaced limit step, without recording navigation", () => {
   const { scope, selection, set, refuseNext } = selectableStore(2);
   for (let i = 1; i <= 3; i++) { scope.checkpoint(["a"], label(`Step ${i}`)); set("a", i, `a${i}`); }

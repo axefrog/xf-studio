@@ -60,6 +60,7 @@ export function eyeMakeupPort(editing: EditingDocument,
       if (action.kind === "layer.edit" || action.kind === "layer.setEnabled") {
         // A layer-stack edit always changes the stack (its apply reports `changed`), so it checkpoints when recorded.
         if (record) editing.checkpoint();
+        if (result.selectionChanged) editing.history.declareSelectionChange([editing.feature]);
         if (result.effect.kind === "structure") {
           const previous = editing.recipe;
           editing.replaceRecipe(result.part, result.editor.active);
@@ -69,7 +70,8 @@ export function eyeMakeupPort(editing: EditingDocument,
       }
       if (!result.changed || result.effect.kind === "none" || result.effect.kind === "structure") return;
       const { active, selected, fieldSelection, choices } = result.editor;
-      recipe.commit(action as RecipeAction, { recipe: result.part, active, selected, fieldSelection }, result.effect, choices, record);
+      recipe.commit(action as RecipeAction, { recipe: result.part, active, selected, fieldSelection }, result.effect, choices, record,
+        result.selectionChanged ? () => editing.history.declareSelectionChange([editing.feature]) : undefined);
     },
     gesture(gestures, edit) {
       const changed = gestures.apply(editing.recipe, edit);
@@ -111,9 +113,10 @@ export class RecipeActions {
    * state and its effect.
    */
   commit(action: RecipeAction, next: RecipeActionState, effect: RecipeActionEffect,
-    choices: Readonly<Record<string, LayerChoices>>, record: boolean) {
+    choices: Readonly<Record<string, LayerChoices>>, record: boolean, selectionChanged?: () => void) {
     if (this.signal?.aborted) throw Error("This recipe editor has ended.");
     if (record && effect.kind !== "selection") this.history.checkpoint(this.read().recipe);
+    selectionChanged?.();
     if (remembers(action.kind)) {
       const prefix = `${this.presetId()}/`;
       for (const [layerId, remembered] of Object.entries(choices)) this.choices[prefix + layerId] = remembered;

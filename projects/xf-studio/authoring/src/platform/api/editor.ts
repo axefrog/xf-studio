@@ -45,6 +45,7 @@ export interface FeatureEditHost {
   readonly history: {
     readonly id: HistoryScopeId;
     checkpoint(keys: readonly string[], label?: HistoryLabel): HistoryEntryId | undefined;
+    declareSelectionChange(keys: readonly string[]): void;
     begin(keys: readonly string[], policy: { empty: "unchanged" | "same-content"; revert: "changed" | "content-differs" },
       options?: { present?: () => boolean }): { readonly changed: boolean; applied(changed: boolean, label: () => HistoryLabel): void; commit(): void; cancel(): void };
   };

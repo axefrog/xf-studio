@@ -35,6 +35,8 @@ export interface TransactionHost<Id> {
   content(): string;
   /** Told when a commit keeps a change (its own step, or the top step that already reverts to the start). */
   kept?(): void;
+  /** The run cancelled or committed empty: return any metadata borrowed from a reused checkpoint. */
+  abandoned?(): void;
   /** Release the owner's adjustment hold after commit or cancel, including an empty run. */
   closed?(): void;
 }
@@ -85,10 +87,11 @@ export class HistoryTransaction<Id> {
   }
   private keep() {
     if (this.checkpoint === undefined) {
-      if (this.top !== undefined && this.label && !this.empty()) { this.host.relabel(this.top, this.label); this.host.kept?.(); }
+      if (this.empty()) this.host.abandoned?.();
+      else if (this.top !== undefined && this.label) { this.host.relabel(this.top, this.label); this.host.kept?.(); }
       return;
     }
-    if (this.empty()) this.host.discard(this.checkpoint);
+    if (this.empty()) { this.host.discard(this.checkpoint); this.host.abandoned?.(); }
     else this.host.kept?.();
   }
   /**
@@ -96,7 +99,7 @@ export class HistoryTransaction<Id> {
    * step). Only the transaction's own step is ever taken off.
    */
   cancel() {
-    try { this.revert(); } finally { this.host.closed?.(); }
+    try { this.host.abandoned?.(); this.revert(); } finally { this.host.closed?.(); }
   }
   private revert() {
     const revert = this.policy.revert === "changed" ? this.changedAny && this.present()

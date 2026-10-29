@@ -233,15 +233,33 @@ export class HistoryStack {
     if (entry?.id !== step || !entry.selection) return;
     const selection = { ...entry.selection };
     for (const key of keys) if (Object.hasOwn(selection, key))
-      selection[key] = { before: selection[key].before, after: structuredClone(read(key)) };
+      selection[key] = { ...selection[key], after: structuredClone(read(key)) };
     entry.selection = selection;
+  }
+  /** An operation replaced a selected item; its endpoints matter even when their saved positions match. */
+  declareSelectionChange(step: HistoryEntryId, keys: readonly string[]) {
+    const entry = this.entries.at(-1);
+    if (entry?.id !== step || !entry.selection) return;
+    const selection = { ...entry.selection };
+    for (const key of keys) if (Object.hasOwn(selection, key)) selection[key] = { ...selection[key], structural: true };
+    entry.selection = selection;
+  }
+  /** A transaction may borrow the top step; abandonment restores the metadata it held before the checkpoint. */
+  preserveSelection(): () => void {
+    const step = this.topId, selection = structuredClone(this.entries.at(-1)?.selection);
+    return () => {
+      const top = this.entries.at(-1);
+      if (!top || top.id !== step) return;
+      if (selection === undefined) delete top.selection;
+      else top.selection = structuredClone(selection);
+    };
   }
   selection(index: number, endpoint: "before" | "after"): Record<string, unknown> {
     return this.selectionOf(this.entries[index]?.selection, endpoint);
   }
   private selectionOf(selection: HistorySelection | undefined, endpoint: "before" | "after"): Record<string, unknown> {
     return Object.fromEntries(Object.entries(selection ?? {}).filter(([, change]) =>
-      JSON.stringify(change.before) !== JSON.stringify(change.after)).map(([key, change]) => [key, structuredClone(change[endpoint])]));
+      change.structural || JSON.stringify(change.before) !== JSON.stringify(change.after)).map(([key, change]) => [key, structuredClone(change[endpoint])]));
   }
   /** End the current continuous edit: the next checkpoint starts a step of its own even with the same key (CORE-95). */
   seal() { const top = this.entries.at(-1); if (top) delete top.coalesce; }
@@ -373,7 +391,7 @@ export class HistoryStack {
       for (const refs of Object.values(entry.before)) for (const id of refs ?? [])
         if (!Object.hasOwn(chunks, id)) chunks[id] = this.store.value(id);
       const selection = Object.fromEntries(Object.entries(entry.selection ?? {}).filter(([, change]) =>
-        JSON.stringify(change.before) !== JSON.stringify(change.after)));
+        change.structural || JSON.stringify(change.before) !== JSON.stringify(change.after)));
       return { scope: entry.scope, before: Object.fromEntries(Object.entries(entry.before).map(([feature, refs]) =>
         [feature, refs && [...refs]])), ...(Object.keys(selection).length ? { selection: structuredClone(selection) } : {}) };
     });

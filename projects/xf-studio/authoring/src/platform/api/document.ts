@@ -119,7 +119,9 @@ export type FeatureState<P, E> = { readonly part: P; readonly editor: E };
  * What an action produced. `effect` is opaque to the platform (the feature's renderer reads it);
  * `changed` is false when nothing changed, and then no Undo entry is recorded.
  */
-export type FeatureResult<P, E, X = unknown> = { part: P; editor: E; effect: X; changed: boolean };
+export type FeatureResult<P, E, X = unknown> = { part: P; editor: E; effect: X; changed: boolean;
+  /** The edit replaced the selected item; record selection endpoints even if their saved positions compare equal. */
+  selectionChanged?: true };
 
 /**
  * Data written by a newer XF Studio than this build: a part schema its feature does not accept yet,

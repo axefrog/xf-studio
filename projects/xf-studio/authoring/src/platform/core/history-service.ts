@@ -88,6 +88,8 @@ export interface HistoryScope {
   checkpoint(keys: readonly string[], label?: HistoryLabel, options?: CheckpointFlags): HistoryEntryId | undefined;
   /** Complete the checkpoint's selection endpoints when its content is published; selection-only navigation is ignored. */
   recordSelection(keys: readonly string[]): void;
+  /** Declare an operation's structural selection change before publishing its content. */
+  declareSelectionChange(keys: readonly string[]): void;
   relabel(step: HistoryEntryId, label: HistoryLabel): void;
   /** Remove `step` only while it is the top step (an empty transaction's checkpoint). */
   discard(step: HistoryEntryId): boolean;
@@ -213,6 +215,10 @@ class Scope implements HistoryScope {
       if (!pending.keys.size) this.pendingSelection = undefined;
     }
   }
+  declareSelectionChange(keys: readonly string[]) {
+    const pending = this.pendingSelection;
+    if (pending) this.stack.declareSelectionChange(pending.step, keys.filter(key => pending.keys.has(key)));
+  }
   relabel(step: HistoryEntryId, label: HistoryLabel) { this.stack.relabel(step, label); }
   discard(step: HistoryEntryId) { const removed = this.stack.discard(step); if (removed) this.changed(); return removed; }
   seal() { this.stack.seal(); }
@@ -231,12 +237,14 @@ class Scope implements HistoryScope {
     let open = true;
     // Cancellation belongs to this run, even if its checkpoint reuses a step or its selection never changed with content.
     const selection = this.target.selection && Object.fromEntries(keys.map(key => [key, structuredClone(this.target.selection!(key))]));
+    const restoreSelection = this.stack.preserveSelection();
     const host: TransactionHost<HistoryEntryId> = {
       checkpoint: () => this.checkpointOpen(keys, options.label, options.scope), top: () => this.stack.topId,
       relabel: (step, label) => this.relabel(step, label), discard: step => this.discard(step),
       revert: step => { this.revertToSelection(step, selection); }, content: () => this.target.fingerprint?.(keys) ?? "",
       // A kept step is a change to this scope like any other checkpoint.
       kept: () => { this.reset = false; this.historySeen = true; this.service.changed(this, true); },
+      abandoned: restoreSelection,
       closed: () => { if (open) { open = false; this.adjustments--; this.pendingSelection = undefined; this.changed(); } },
     };
     this.adjustments++;

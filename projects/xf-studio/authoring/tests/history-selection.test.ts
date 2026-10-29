@@ -76,6 +76,19 @@ test.each(["remove", "insert"] as const)("point %s restores selection when topol
     expect(document.selected).toBe(1);
     const replacement = structuredClone(document.recipe.layers[0].points[1]);
     expect(replacement).not.toEqual(original);
+    const endpoints = document.history.data().entries.at(-1)!.selection?.["eye-makeup"];
+    expect(endpoints?.structural).toBe(true);
+    expect(endpoints?.before).toEqual(endpoints?.after);
+    const stored = serializeWorkspace({ ...freshWorkspace(), ...document.export() }, STUDIO_DOCUMENTS);
+    const reloaded = new AuthoringDocument(parseWorkspace(JSON.parse(JSON.stringify(stored)), STUDIO_DOCUMENTS));
+    try {
+      reloaded.selected = 0;
+      expect(reloaded.history.undo()).toBe(true);
+      expect(reloaded.selected).toBe(1);
+      reloaded.selected = 0;
+      expect(reloaded.history.redo()).toBe(true);
+      expect(reloaded.selected).toBe(1);
+    } finally { reloaded.dispose(); }
     dispatch({ kind: "point.select", layerId: id, index: 0 });
     dispatch({ kind: "history.undo" });
     expect(document.selected).toBe(1);
@@ -84,6 +97,65 @@ test.each(["remove", "insert"] as const)("point %s restores selection when topol
     dispatch({ kind: "history.redo" });
     expect(document.selected).toBe(1);
     expect(document.recipe.layers[0].points[1]).toEqual(replacement);
+  } finally { dispose(); }
+});
+
+test("one transaction replacing the selected point at the same index and count restores both selections", () => {
+  const { app, document, dispatch, dispose } = fixture(squareWorkspace());
+  try {
+    const id = document.recipe.layers[0].id, original = structuredClone(document.recipe.layers[0].points[1]);
+    dispatch({ kind: "point.select", layerId: id, index: 1 });
+    expect(app.transaction({ label: "Replace point", actionKind: "test.replacePoint" }, ["eye-makeup"], () => {
+      dispatch({ kind: "point.remove", layerId: id, index: 1 });
+      dispatch({ kind: "point.insert", layerId: id, u: .5, v: .2 });
+      return { ok: true };
+    }).ok).toBe(true);
+    expect(document.recipe.layers[0].points).toHaveLength(4);
+    expect(document.selected).toBe(1);
+    const replacement = structuredClone(document.recipe.layers[0].points[1]);
+    expect(replacement).not.toEqual(original);
+    dispatch({ kind: "point.select", layerId: id, index: 0 });
+    dispatch({ kind: "history.undo" });
+    expect(document.selected).toBe(1);
+    expect(document.recipe.layers[0].points[1]).toEqual(original);
+    dispatch({ kind: "point.select", layerId: id, index: 0 });
+    dispatch({ kind: "history.redo" });
+    expect(document.selected).toBe(1);
+    expect(document.recipe.layers[0].points[1]).toEqual(replacement);
+  } finally { dispose(); }
+});
+
+test.each(["same", "other"] as const)("deleting an unselected point in the %s contour preserves later navigation", contour => {
+  const { document, dispatch, dispose } = fixture(squareWorkspace());
+  try {
+    const selectedLayer = document.recipe.layers[0], editedLayer = document.recipe.layers[contour === "same" ? 0 : 1];
+    dispatch({ kind: "point.select", layerId: selectedLayer.id, index: 0 });
+    dispatch({ kind: "point.remove", layerId: editedLayer.id, index: editedLayer.points.length - 1 });
+    dispatch({ kind: "point.select", layerId: selectedLayer.id, index: 1 });
+    dispatch({ kind: "history.undo" });
+    expect(document.selected).toBe(1);
+    expect(document.recipe.layers[document.active].id).toBe(selectedLayer.id);
+    dispatch({ kind: "history.redo" });
+    expect(document.selected).toBe(1);
+    expect(document.recipe.layers[document.active].id).toBe(selectedLayer.id);
+  } finally { dispose(); }
+});
+
+test("a failed insertion restores a reused step's saved endpoints and its later Undo and Redo", () => {
+  const core = fixture(squareWorkspace()), { app, document, dispatch, dispose } = core;
+  try {
+    const id = dragOutAndBack(core), before = document.history.data();
+    expect(app.transaction({ label: "Failed insertion", actionKind: "test.insertFailure" }, ["eye-makeup"], () => {
+      dispatch({ kind: "point.insert", layerId: id, u: .5, v: .2 });
+      return { ok: false, message: "Refused after insertion" };
+    }).ok).toBe(false);
+    expect(document.selected).toBe(1);
+    expect(document.history.data()).toEqual(before);
+    dispatch({ kind: "point.select", layerId: id, index: 0 });
+    dispatch({ kind: "history.undo" });
+    expect(document.selected).toBe(0);
+    dispatch({ kind: "history.redo" });
+    expect(document.selected).toBe(0);
   } finally { dispose(); }
 });
 
