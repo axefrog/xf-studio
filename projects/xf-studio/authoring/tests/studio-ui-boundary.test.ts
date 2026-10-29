@@ -63,6 +63,10 @@ const VIEW_TOOLKIT = new Map<string, readonly string[]>([
   // Pure text/reference builders for registered guidance contributions; no runner, overlay or runtime access.
   ["studio-ui/guidance/tours", ["toursFor", "ONBOARDING_TOUR_ID"]],
   ["studio-ui/guidance/help-topics", ["helpTopicsFor", "helpReference"]],
+  // Pure readiness wording (UI-92), shared with the shell's Preview quality and feature context so all three say it the same way. Eye makeup
+  // contributes the status-bar text with it (CORE-03 13d). Removal: CORE-249 moves the wording into the feature once those shell reads use the
+  // contribution.
+  ["studio-ui/readiness-text", ["readinessText"]],
   // Preset sets (part-preset-sets.ts): pure naming, membership and result-key rules, so a set's view names its mod as its export does and
   // tells a stale result the way the service does (PIPE-120).
   ["library/part-preset-sets", ["defaultSetModName", "setExportKey", "setMembers", "setModName"]],
