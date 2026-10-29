@@ -40,6 +40,57 @@ test.each(["render", "compile", "compileAsync", "initTexture", "copyTextureToTex
   expect(device.fences.every(fence => fence.deleted)).toBe(true);
 });
 
+test.each([1, 15])("continuous draws with %i-frame fence reports keep a pending barrier and admit several bands per burst (PREV-196 starvation)", latency => {
+  let frame = 0, releasing = false, sent = 0;
+  const fences: { ready: number; deleted: boolean }[] = [];
+  const gl = { isContextLost: () => false, UNSIGNALED: 0, SYNC_STATUS: 2, SYNC_GPU_COMMANDS_COMPLETE: 3,
+    fenceSync() { const fence = { ready: frame + latency, deleted: false }; fences.push(fence); return fence; },
+    getSyncParameter: (fence: typeof fences[number]) => frame >= fence.ready ? 1 : 0,
+    deleteSync(fence: typeof fences[number]) {
+      // Cancellation may delete a pending fence; ongoing rendering must never replace one before it completes.
+      expect(releasing || frame >= fence.ready).toBe(true); fence.deleted = true;
+    }, flush() {} };
+  const renderer = { getContext: () => gl, render() {} }, budget = acquireUploadBudget(renderer);
+  const bursts: number[] = [];
+  try {
+    for (; sent < 24 && frame < 200; frame++) {
+      renderer.render(); // Includes the frame in which the previous fence first reports completion.
+      let bands = 0;
+      while (bands < 3 && sent < 24 && budget.canSend(UPLOAD_TEXELS / 8)) { budget.sent(UPLOAD_TEXELS / 8); sent++; bands++; }
+      if (bands) bursts.push(bands);
+      budget.checkpoint();
+    }
+    expect(sent).toBe(24);
+    expect(bursts).toEqual(Array(8).fill(3));
+    expect(frame).toBeLessThan(200);
+  } finally { releasing = true; budget.dispose(); }
+  expect(fences.every(fence => fence.deleted)).toBe(true);
+});
+
+test("draws during a pending barrier wait do not replace it, and still need completion after its admitted burst", () => {
+  const device = fenced({ render() {} }), budget = acquireUploadBudget(device.renderer);
+  try {
+    device.fences[0]!.signalled = true;
+    expect(budget.canSend(1)).toBe(true);
+    device.renderer.render();
+    expect(budget.canSend(1)).toBe(false);
+    const pending = device.fences[1]!;
+    for (let frame = 0; frame < 15; frame++) {
+      device.renderer.render(); expect(budget.canSend(1)).toBe(false);
+      expect(device.fences).toHaveLength(2); expect(pending.deleted).toBe(false);
+    }
+    pending.signalled = true;
+    device.renderer.render();
+    for (let band = 0; band < 4; band++) { expect(budget.canSend(1)).toBe(true); budget.sent(1); }
+    expect(device.fences).toHaveLength(2);
+    budget.checkpoint(); // Ends the completion's burst; the intervening draws have not been forgotten.
+    expect(device.fences).toHaveLength(3);
+    expect(budget.canSend(1)).toBe(false);
+    expect(device.fences).toHaveLength(4);
+  } finally { budget.dispose(); }
+  expect(device.fences.every(fence => fence.deleted)).toBe(true);
+});
+
 test("actual map storage/bands do not invalidate admission; a draw or another texture upload inside the map scope still does", () => {
   const { renderer, fences } = fenced({ capabilities: { maxTextureSize: 16384 }, initTexture() {}, copyTextureToTexture() {}, render() {}, setRenderTarget(_target: unknown) {} });
   const budget = acquireUploadBudget(renderer), texture = new THREE.Texture({ width: 4096, height: 4096 });

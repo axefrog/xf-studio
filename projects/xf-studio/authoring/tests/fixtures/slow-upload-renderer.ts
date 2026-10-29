@@ -1,8 +1,9 @@
 import * as THREE from "three";
 
-/** No draws; a fence reports completion only after fifteen 60-Hz frames. Uploads cost 1 ms of page time, not real GPU time. */
-export function slowUploadRenderer(options: { stuckAfterOpening?: boolean; uploadMs?: number } = {}) {
-  let frames = 0, clock = 0, acknowledged = 0, peak = 0, busyUntil = 15;
+/** Configurable fence-report/draw delay, fifteen frames by default. Upload costs are fake page time, not real GPU work. */
+export function slowUploadRenderer(options: { stuckAfterOpening?: boolean; uploadMs?: number; fenceFrames?: number; drawWorkFrames?: number } = {}) {
+  const latency = options.fenceFrames ?? 15;
+  let frames = 0, clock = 0, acknowledged = 0, peak = 0, busyUntil = latency;
   const sends: { frame: number; texels: number }[] = [];
   const fences: { frame: number; end: number; deleted: boolean }[] = [];
   const properties = new WeakMap<object, { __version?: number }>();
@@ -15,13 +16,13 @@ export function slowUploadRenderer(options: { stuckAfterOpening?: boolean; uploa
   const gl = { isContextLost: () => false, UNSIGNALED: 0, SIGNALED: 1, SYNC_STATUS: 2, SYNC_GPU_COMMANDS_COMPLETE: 3,
     fenceSync() { const fence = { frame: frames, end: sends.length, deleted: false }; fences.push(fence); return fence; },
     getSyncParameter(fence: typeof fences[number]) {
-      if (frames - fence.frame < 15 || options.stuckAfterOpening && fence.end > 0) return 0;
+      if (frames - fence.frame < latency || options.stuckAfterOpening && fence.end > 0) return 0;
       acknowledged = Math.max(acknowledged, fence.end);
       return 1;
     }, deleteSync(fence: typeof fences[number]) { fence.deleted = true; }, flush() {} };
   const renderer = { capabilities: { getMaxAnisotropy: () => 8, maxTextureSize: 16384 }, extensions: { has: () => true },
     getContext: () => gl, properties: { get: entry },
-    render() { busyUntil = frames + 15; },
+    render() { busyUntil = frames + (options.drawWorkFrames ?? latency); },
     initTexture(texture: THREE.Texture) {
       entry(texture).__version = texture.version;
       const image = texture.image as { width: number; height: number };

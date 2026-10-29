@@ -19,8 +19,10 @@ function makeBudget(renderer: Renderer) {
   const checkpoints: Checkpoint[] = [];
   const barrier = gpuGate(renderer);
   barrier.mark();
+  // Completion grants one burst. Keep work that arrived during the wait dirty for the following turn, without replacing its fence.
+  let admission: "waiting" | "burst" | "open" = "waiting";
   let dirty = false;
-  const stopObserving = observeGpuWork(renderer, () => { dirty = true; });
+  const stopObserving = observeGpuWork(renderer, () => { dirty = true; if (admission === "burst") admission = "open"; });
   const current = () => {
     if (inGeneration(renderer, generation)) return true;
     for (const entry of checkpoints) entry.gate.dispose();
@@ -28,14 +30,16 @@ function makeBudget(renderer: Renderer) {
     checkpoints.length = 0; used = pending = 0;
     generation = contextGeneration(renderer);
     if (generation.aborted) return false;
-    barrier.mark(); dirty = false;
+    barrier.mark(); admission = "waiting"; dirty = false;
     return true;
   };
   const collect = () => {
     while (checkpoints.length && checkpoints[0]!.gate.idle()) used -= checkpoints.shift()!.texels;
   };
   const checkpoint = () => {
-    if (!current() || !pending) return;
+    if (!current()) return;
+    if (admission === "burst") admission = "open";
+    if (!pending) return;
     collect();
     const gate = gpuGate(renderer);
     gate.mark();
@@ -45,10 +49,14 @@ function makeBudget(renderer: Renderer) {
   return {
     canSend(texels: number): boolean {
       if (!current()) return false;
-      // Non-map submissions invalidate admission regardless of spare texel credit. Many passes/rounds before this attempt need only one
-      // barrier. Map-only turns never dirty it, so their progress is still bounded by the window rather than one fence per band/frame.
-      if (dirty) { barrier.mark(); dirty = false; }
-      if (!barrier.idle()) return false;
+      // Never replace a pending barrier: a draw every frame would otherwise keep restarting its wait. Completion admits a burst even
+      // with this frame's draw after the fence (as the former per-band gate allowed). Retain that dirty work for the next checkpoint;
+      // new work during the burst closes it immediately. Map-only turns need no new admission barrier.
+      if (admission === "open" && dirty) { barrier.mark(); admission = "waiting"; dirty = false; }
+      if (admission === "waiting") {
+        if (!barrier.idle()) return false;
+        admission = "burst";
+      }
       if (used + texels > UPLOAD_TEXELS) collect();
       if (used + texels <= UPLOAD_TEXELS) return true;
       checkpoint();

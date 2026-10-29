@@ -10,7 +10,8 @@ export function withMapUpload<T>(renderer: object, texture: object, send: () => 
 
 /**
  * Observe the renderer's submission boundary, including internal Three passes (PMREM, shadows, bakes) and morph texture uploads. A
- * notification invalidates upload admission; it does not insert a fence. The next admission checkpoints all intervening work together.
+ * notification dirties upload admission; it does not insert a fence. Admission checkpoints intervening work when no barrier is pending;
+ * an existing barrier may complete and admit one burst before the next turn covers work submitted during its wait.
  * Only admitted map init/copy calls are exempt; a draw or another texture's upload inside an onUpdate still invalidates admission.
  *
  * One shared upload-budget owner installs this observer while any uploader wants the renderer. Restoring the original methods on release

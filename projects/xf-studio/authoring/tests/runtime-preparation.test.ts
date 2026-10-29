@@ -285,6 +285,23 @@ test("later draw work stops runtime map uploads with spare credit until its fres
   expect(slow.fences.every(fence => fence.deleted)).toBe(true);
 });
 
+test("runtime map uploads finish in bounded bursts while every frame draws and fences report one frame later (PREV-196 starvation)", async () => {
+  const { offerUploadSource } = await import("../src/character/render/character-detail-loader");
+  const { UPLOAD_TEXELS, UPLOAD_WAIT_FRAMES } = await import("../src/platform/scene/gpu-upload-budget");
+  const slow = slowUploadRenderer({ uploadMs: 3, fenceFrames: 1, drawWorkFrames: 0 }), textures = uploadMaps();
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera();
+  for (const texture of textures) offerUploadSource(texture, { width: 4096, height: 4096, close() {} } as ImageBitmap);
+  try {
+    await prepareRuntime({ renderer: slow.renderer, scene, camera, lighting: noLighting, textures: () => textures,
+      frame: async () => { await slow.frame(); slow.renderer.render(scene, camera); }, now: slow.now, warmUp: () => false });
+    expect(slow.sends).toHaveLength(24);
+    expect(slow.frames()).toBeLessThan(UPLOAD_WAIT_FRAMES);
+    expect(slow.peak()).toBeLessThanOrEqual(UPLOAD_TEXELS);
+    for (const frame of new Set(slow.sends.map(sent => sent.frame))) expect(slow.sends.filter(sent => sent.frame === frame).length).toBeGreaterThan(1);
+  } finally { for (const texture of textures) texture.dispose(); }
+  expect(slow.fences.every(fence => fence.deleted)).toBe(true);
+});
+
 test("every morph texture is made in the same rounds, not one geometry's fences after another's: the frames follow the rounds, not the sum of the steps", async () => {
   const { recording, fences, morphTextures } = await fencedRenderer();
   const scene = new THREE.Scene(), meshes = Array.from({ length: 6 }, () => morphMesh(100, 40));
