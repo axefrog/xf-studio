@@ -207,7 +207,9 @@ export class HistoryStack {
       this.releaseRefs(before);
       if (options.label) top!.label = { ...options.label };
       if (options.coalesce !== undefined) top!.coalesce = options.coalesce;
-      this.startSelection(top!, keys, options.selection);
+      // The content is back at the start, but selection may have navigated since that earlier edit.
+      // Unlike continuous coalescing, the edit reusing this step starts from the selection it sees now.
+      this.startSelection(top!, keys, options.selection, true);
       return undefined;
     }
     const entry: Entry = { id: newId(), scope: options.scope ?? (keys.length > 1 ? "look" : "part"),
@@ -216,10 +218,10 @@ export class HistoryStack {
     this.startSelection(entry, keys, options.selection);
     return this.push(entry);
   }
-  private startSelection(entry: Entry, keys: readonly string[], read?: LookReader) {
+  private startSelection(entry: Entry, keys: readonly string[], read?: LookReader, rebase = false) {
     if (!read) return;
     const selection = { ...entry.selection };
-    for (const key of keys) if (!Object.hasOwn(selection, key)) {
+    for (const key of keys) if (rebase || !Object.hasOwn(selection, key)) {
       const before = structuredClone(read(key));
       selection[key] = { before, after: before };
     }

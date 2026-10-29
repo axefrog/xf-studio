@@ -6,11 +6,86 @@ import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-regi
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { AuthoringDocument } from "./fixtures/makeup-document";
 
-function fixture() {
-  const core = namedCore(createTrustedAuthoringCore(freshWorkspace(), {}, STUDIO_COMPOSITION));
+function fixture(workspace = freshWorkspace()) {
+  const core = namedCore(createTrustedAuthoringCore(workspace, {}, STUDIO_COMPOSITION));
   const dispatch = (action: Parameters<typeof core.app.dispatch>[0]) => expect(core.app.dispatch(action).ok).toBe(true);
   return { ...core, dispatch, selected: () => core.document.recipe.layers[core.document.active]?.id };
 }
+
+function dragOutAndBack(core: ReturnType<typeof fixture>) {
+  const { app, document } = core, id = document.recipe.layers[0].id, u = document.recipe.layers[0].points[0].u;
+  expect(app.beginGesture("uv", id)).toBe(true);
+  expect(app.applyGesture("uv", { kind: "point.replace", index: 0, next: { u: u + .001 } })).toBe(true);
+  expect(app.applyGesture("uv", { kind: "point.replace", index: 0, next: { u } })).toBe(true);
+  app.endGesture("uv");
+  expect(app.history().depth).toBe(1);
+  core.dispatch({ kind: "point.select", layerId: id, index: 1 });
+  return id;
+}
+
+test.each([0, 1])("a reused gesture checkpoint cancels to its own selection baseline (later navigation: %i)", navigate => {
+  const core = fixture(), { app, document, dispose } = core;
+  try {
+    const id = dragOutAndBack(core), before = structuredClone(document.recipe);
+    expect(app.beginGesture("uv", id)).toBe(true);
+    const u = document.recipe.layers[0].points[1].u;
+    expect(app.applyGesture("uv", { kind: "point.replace", index: 1, next: { u: u + .001 } })).toBe(true);
+    // Exercise the owner's cancellation baseline even if editor navigation happens during the run.
+    if (navigate) document.selected = 0;
+    app.endGesture("uv", true);
+    expect(document.selected).toBe(1);
+    expect(document.recipe).toEqual(before);
+    expect(app.history()).toMatchObject({ depth: 1, redoDepth: 0 });
+  } finally { dispose(); }
+});
+
+test.each(["gesture", "finish"] as const)("a reused checkpoint rebases selection for a committed %s edit", edit => {
+  const core = fixture(), { app, document, dispatch, dispose } = core;
+  try {
+    const id = dragOutAndBack(core);
+    if (edit === "gesture") {
+      expect(app.beginGesture("uv", id)).toBe(true);
+      const u = document.recipe.layers[0].points[1].u;
+      expect(app.applyGesture("uv", { kind: "point.replace", index: 1, next: { u: u + .001 } })).toBe(true);
+      app.endGesture("uv");
+    } else dispatch({ kind: "layer.setFinish", layerId: id, finish: "metallic" });
+    expect(app.history().depth).toBe(1);
+    dispatch({ kind: "point.select", layerId: id, index: 2 });
+    dispatch({ kind: "history.undo" });
+    expect(document.selected).toBe(2);
+    dispatch({ kind: "history.redo" });
+    expect(document.selected).toBe(2);
+  } finally { dispose(); }
+});
+
+function squareWorkspace() {
+  const workspace = freshWorkspace(), layer = workspace.recipe.layers[0];
+  layer.pathMode = "catmull-rom";
+  layer.points = [ { u: .3, v: .3, weight: 0 }, { u: .7, v: .3, weight: .4 },
+    { u: .7, v: .7, weight: 1 }, { u: .3, v: .7, weight: .6 } ];
+  return workspace;
+}
+
+test.each(["remove", "insert"] as const)("point %s restores selection when topology reuses its numeric index", edit => {
+  const { document, dispatch, dispose } = fixture(squareWorkspace());
+  try {
+    const id = document.recipe.layers[0].id, original = structuredClone(document.recipe.layers[0].points[1]);
+    dispatch({ kind: "point.select", layerId: id, index: 1 });
+    if (edit === "remove") dispatch({ kind: "point.remove", layerId: id, index: 1 });
+    else dispatch({ kind: "point.insert", layerId: id, u: .5, v: .2 });
+    expect(document.selected).toBe(1);
+    const replacement = structuredClone(document.recipe.layers[0].points[1]);
+    expect(replacement).not.toEqual(original);
+    dispatch({ kind: "point.select", layerId: id, index: 0 });
+    dispatch({ kind: "history.undo" });
+    expect(document.selected).toBe(1);
+    expect(document.recipe.layers[0].points[1]).toEqual(original);
+    dispatch({ kind: "point.select", layerId: id, index: 0 });
+    dispatch({ kind: "history.redo" });
+    expect(document.selected).toBe(1);
+    expect(document.recipe.layers[0].points[1]).toEqual(replacement);
+  } finally { dispose(); }
+});
 
 test("add, finish, Undo twice and Redo twice reselect the restored layer", () => {
   const { document, dispatch, selected, dispose } = fixture();

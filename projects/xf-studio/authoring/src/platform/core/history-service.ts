@@ -229,10 +229,12 @@ class Scope implements HistoryScope {
 
   begin(keys: readonly string[], policy: TransactionPolicy, options: { present?: () => boolean; label?: HistoryLabel; scope?: StoredScope } = {}) {
     let open = true;
+    // Cancellation belongs to this run, even if its checkpoint reuses a step or its selection never changed with content.
+    const selection = this.target.selection && Object.fromEntries(keys.map(key => [key, structuredClone(this.target.selection!(key))]));
     const host: TransactionHost<HistoryEntryId> = {
       checkpoint: () => this.checkpointOpen(keys, options.label, options.scope), top: () => this.stack.topId,
       relabel: (step, label) => this.relabel(step, label), discard: step => this.discard(step),
-      revert: step => { this.revertTransaction(step); }, content: () => this.target.fingerprint?.(keys) ?? "",
+      revert: step => { this.revertToSelection(step, selection); }, content: () => this.target.fingerprint?.(keys) ?? "",
       // A kept step is a change to this scope like any other checkpoint.
       kept: () => { this.reset = false; this.historySeen = true; this.service.changed(this, true); },
       closed: () => { if (open) { open = false; this.adjustments--; this.pendingSelection = undefined; this.changed(); } },
@@ -242,7 +244,9 @@ class Scope implements HistoryScope {
     catch (error) { this.adjustments--; throw error; }
   }
   revertTransaction(step: HistoryEntryId | undefined): boolean {
-    const selection = this.stack.selection(this.stack.depth - 1, "before");
+    return this.revertToSelection(step);
+  }
+  private revertToSelection(step: HistoryEntryId | undefined, selection = this.stack.selection(this.stack.depth - 1, "before")): boolean {
     const values = step === undefined ? (this.stack.canUndo ? this.stack.stepParts(this.stack.depth - 1) : undefined)
       : this.stack.isTop(step) ? this.stack.revert() : undefined;
     if (!values) return false;
