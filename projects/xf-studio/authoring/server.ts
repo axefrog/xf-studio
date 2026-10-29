@@ -171,7 +171,7 @@ const poseSettings = () => {
   return { gameRoot: packageToolPaths(settings).gamepath, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
     mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: wolvenKit.usable() };
 };
-const poses = new PoseCatalogueHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
+const poses = new PoseCatalogueHost({ jobs, route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")), log: diagnostics.log.logger("poses") });
 const poseRequest = createPoseHandler(poses);
 // The game's preview idles (V's body idle and, solved by XF Studio's own facial solver, its face), read from the same launch route by XF
@@ -180,7 +180,7 @@ const poseRequest = createPoseHandler(poses);
 // this server shows what the desktop app shows.
 const preparedMotion = process.env.XFS_PREPARED_MOTION === "on" || process.env.XFS_IDLE_SOURCE === "prepared";
 const idleResolverCache = resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache"));
-const idles = new IdleHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
+const idles = new IdleHost({ jobs, route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
   resolverCache: idleResolverCache, source: process.env.XFS_IDLE_SOURCE === "prepared" ? "prepared" : "game",
   preparedAssets: () => preparedMotion ? (assetOverlay && existsSync(resolve(assetOverlay, "cc-idle-catalogue.json")) ? assetOverlay : resolve(import.meta.dir, "public", "assets")) : null,
   faces: () => facial.faceSource(),
@@ -199,7 +199,7 @@ const gradingLutRequest = createGradingLutHandler(gradingLut);
 // The live facial preview: V's face rig, the installed photo-mode expressions and XF Studio's own facial solver (facial-host.ts). A
 // developer's parity check swaps in the pinned IO Suite checkout with XFS_FACIAL_SOLVER_ORACLE=1 (found through XFS_FACIAL_SOLVER, XF
 // Studio's tools folder or beside the repository).
-const facial = new FacialHost({ cacheRoot: previewCacheRoot,
+const facial = new FacialHost({ jobs, cacheRoot: previewCacheRoot,
   resolverCache: resolve(process.env.XFS_RESOLVER_CACHE || resolve(import.meta.dir, "data", "resolver-cache")),
   settings: () => {
     const settings = localSettings.load().settings;

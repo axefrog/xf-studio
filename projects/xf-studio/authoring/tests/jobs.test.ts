@@ -69,6 +69,34 @@ const want = (jobs: JobScheduler, requester: string, key: string, lane: JobLane,
   jobs.want(requester, { key, lane, run, ...extra });
 
 describe("the job scheduler", () => {
+  test("cooperative shown reads pause ahead reads and jobs without occupying the person preparation slot", async () => {
+    const { jobs, advance, flush } = setup();
+    const life = new AbortController(), shownDone = Promise.withResolvers<void>(), personDone = Promise.withResolvers<void>();
+    const log: string[] = [];
+    const shown = jobs.cooperate("shown", async context => { log.push("shown start"); await shownDone.promise; await context.turn(); log.push("shown end"); }, life.signal);
+    await flush();
+    const ahead = jobs.cooperate("ahead", async () => { log.push("ahead read"); }, life.signal);
+    const background = want(jobs, "background", "background", "ahead", async () => { log.push("ahead job"); });
+    const person = want(jobs, "page", "V", "person", async () => { log.push("person"); await personDone.promise; });
+    shownDone.resolve(); await flush();
+    expect(log).toEqual(["shown start", "person"]);
+    personDone.resolve(); await person.settled; await advance(399);
+    expect(log).toEqual(["shown start", "person"]);
+    await advance(1); await shown; await advance(400); await ahead; await background.settled;
+    expect(log).toEqual(["shown start", "person", "shown end", "ahead read", "ahead job"]);
+    life.abort();
+  });
+
+  test("aborting a cooperative read waiting for priority releases its lane and listener", async () => {
+    const { jobs, flush } = setup(0), life = new AbortController(), release = jobs.hold();
+    let calls = 0;
+    const stopped = jobs.cooperate("shown", async () => { calls++; }, life.signal).catch(error => error.name);
+    life.abort(); expect(await stopped).toBe("AbortError"); expect(calls).toBe(0);
+    release();
+    await jobs.cooperate("ahead", async () => { calls++; }); await flush();
+    expect(calls).toBe(1);
+  });
+
   test("one run at a time; the person lane runs in the order asked (PIPE-103)", async () => {
     const { jobs, flush } = setup(), log: string[] = [];
     const a = manual(log, "a"), b = manual(log, "b");

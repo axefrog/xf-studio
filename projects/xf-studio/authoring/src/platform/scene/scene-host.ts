@@ -21,7 +21,7 @@ import { createFeatureRenderers, type FeatureRenderers } from "./feature-rendere
 import { characterGeometry } from "./character-geometry";
 import type { ExperimentPort } from "../api/experiments";
 import { followOptionalRenderers } from "./optional-renderers";
-import { createHeadRig, type MotionLoader } from "./head-rig";
+import { createHeadRig, type HeadRig, type MotionLoader, type RigSurfaces } from "./head-rig";
 import { afterTask, createCharacterRenderer } from "./character-renderer";
 import { createCameraSettle } from "./camera-settle";
 import { createMouthApertureSampler, headBones } from "./mouth-aperture-sampler";
@@ -53,7 +53,13 @@ import { drawOnly, isDrawable } from "./drawables";
  * shown again).
  */
 
+type CharacterRenderer = ReturnType<typeof createCharacterRenderer>;
+export type SceneDetailPreparation = Pick<CharacterRenderer, "details"> & {
+  prepareDetails(details: Parameters<CharacterRenderer["prepareDetails"]>[0], signal?: AbortSignal): Promise<void>;
+};
 export type SceneHostOptions = {
+  /** Preparation-only handoff while the hidden rig is still loading its blink. Publication remains the build promise's. */
+  detailsReady?(preparation: SceneDetailPreparation): void;
   stage?: StageTheme;
   /** The feature renderers to create once the head is ready (the composition's list, compose/renderers.ts). */
   renderers?: readonly FeatureRendererFactory[];
@@ -205,14 +211,35 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
   const coreDetail = { identity: core.record.identity, origin: core.record.origin, label: core.record.provenance.label };
   // The feature renderers (compose/renderers.ts), created once the head and its motion are ready.
   let features: FeatureRenderers | undefined;
+  let earlyCharacter: CharacterRenderer | undefined, releaseCharacter = () => {};
+  function ownCharacter(surfaces: Parameters<typeof createCharacterRenderer>[0]["rig"]) {
+    const made = createCharacterRenderer({ scene, renderer, rig: surfaces, superseded: () => features?.superseded() ?? [] });
+    let released = false;
+    releaseCharacter = () => { if (!released) { released = true; made.dispose(); } };
+    releases.push(releaseCharacter);
+    const release = releaseCharacter;
+    signal?.addEventListener("abort", release, { once: true });
+    releases.push(() => signal?.removeEventListener("abort", release));
+    return made;
+  }
   // The platform's character context: the head rig and the V drawn on it. Features' meshes attached with `morphs` and the V's drawn
   // details follow the facial shapes with the head's own surfaces.
-  const rig = await createHeadRig(scene, core, { releases, loadMotion: options.loadMotion, signal,
-    deforming: () => [...features?.followers() ?? [], ...character.drawnMeshes()] });
+  const rig: HeadRig = await createHeadRig(scene, core, { releases, loadMotion: options.loadMotion, signal,
+    deforming: () => [...features?.followers() ?? [], ...earlyCharacter?.drawnMeshes() ?? []],
+    onStable: (surfaces: RigSurfaces) => {
+      if (!options.detailsReady) return;
+      signal?.throwIfAborted();
+      // The preparation port cannot place anything. Motion is reached only after the complete scene promise resolves.
+      const made = earlyCharacter = ownCharacter({ ...surfaces, get motion() { return rig.motion; } });
+      restoreMade = () => { lighting.restore(); made.contextRestored(); };
+      options.detailsReady?.({ details: { load: (record, options) => acrossContextLoss(device,
+        signal => made.details.load(record, { ...options, signal }), { signal: options.signal }) },
+        prepareDetails: (details, signal) => made.prepareDetails(details, { signal, compile: object => lighting.prepareSteps(object, camera), frame: nextFrame }) });
+    } });
   signal?.throwIfAborted();
   const { head, eyes, surfaces, albedo, motion } = rig;
   const { idle, blink, rig: rigMotion } = motion;
-  const character = createCharacterRenderer({ scene, renderer, rig, superseded: () => features?.superseded() ?? [] });
+  const character = earlyCharacter ??= ownCharacter(rig);
   // A loss ends the old ledger's load. Wait until the device has restored every runtime's pool before retrying for a live requester.
   const details: typeof character.details = { load: (record, options) => acrossContextLoss(device,
     signal => character.details.load(record, { ...options, signal }), { signal: options.signal }) };
@@ -268,7 +295,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
    * Just after the next animation frame, in a task of its own (work prepared ahead takes its turns between frames: run inside the frame's
    * callback, a 4096² map's 40 ms upload and the scene's own draw made one long task).
    */
-  const nextFrame = () => new Promise<void>(resolve => { requestAnimationFrame(() => afterTask(resolve)); });
+  function nextFrame() { return new Promise<void>(resolve => { requestAnimationFrame(() => afterTask(resolve)); }); }
   // Reused every frame: the head centre (and, while the body shows, the body's) the clip planes are measured from.
   const centre = new THREE.Vector3(), bodyCentre = new THREE.Vector3();
   /** One drawn frame (the device calls it only while this runtime is shown). */
@@ -467,7 +494,7 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
      * Releases the V's details, the feature renderers, the core head, the rig, the stage and every listener: all it made on the renderer, which
      * it never disposes (it leaves the device, hidden first if shown). The runtime is unusable afterwards.
      */
-    dispose: () => { pendingLighting = null; unpreparedListeners.clear(); drawn.remove(); character.dispose(); releaseAll(releases); },
+    dispose: () => { pendingLighting = null; unpreparedListeners.clear(); drawn.remove(); releaseCharacter(); releaseAll(releases); },
     /** Its place on the renderer device: the device shows it by this (`device.show(runtime.slot)`). */
     slot: drawn,
     /**
@@ -673,6 +700,8 @@ async function assembleRuntime(device: SceneDevice, options: SceneHostOptions, r
   };
   // Every call that changes what is drawn requests a frame. Readers (camera state, evidence, options) don't. The host is `api` itself (as with the lighting above), so
   // its getters stay live: a spread copy read `idles` once, before the eyes section joined (PREV-187).
+  // The build signal owns early allocations until publication; the completed runtime has its own explicit release owner.
+  signal?.removeEventListener("abort", releaseCharacter);
   return Object.assign(api, invalidating(api, ["resize", "front", "frameBody", "setPose", "eyeShape", "applySavedV", "setFaceMorphs", "setEyeOptics", "setHair",
     "setCharacterDetails", "setHiddenOptions", "setPiercings", "setBody", "restoreCamera", "setFov", "setIdle", "setIdlePaused", "setIdleContributions", "setPhysics", "setDetail",
     "setBlink", "animateBlink", "setWire", "setNormals", "setResearchTools", "setStage", "setLighting",

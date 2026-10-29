@@ -7,7 +7,7 @@ import type { LoadedCoreDetail } from "../src/character/render/core-detail-loade
 import type { ParsedGeometry, WarmedFiles } from "../src/character/render/character-detail-loader";
 import { CHARACTER_DETAIL_SCHEMA, DETAIL_SLOTS, type CharacterDetail } from "../src/character/render-detail";
 import { beginContextGeneration, contextGeneration, endContextGeneration } from "../src/platform/scene/context-generation";
-import { createSceneRuntime, type SceneDevice } from "../src/platform/scene/scene-host";
+import { createSceneRuntime, type SceneDevice, type SceneHostOptions, type SceneDetailPreparation } from "../src/platform/scene/scene-host";
 import { recordingRenderer } from "./fixtures/recording-gl";
 import { createHeadRig } from "../src/platform/scene/head-rig";
 
@@ -62,6 +62,28 @@ const record: CharacterDetail = {
       profiles: {}, skinProfiles: {}, gradients: {} }] }],
 };
 
+test.each(["ready", "abort", "failed"] as const)("parts load and prepare before the blink, with placement gated by complete scene readiness (%s)", async ending => {
+  const complete = Promise.withResolvers<Parameters<typeof createBrowserCharacterDetailDevice>[0]>(), prepared = Promise.withResolvers<void>();
+  let loads = 0, preparations = 0, placements = 0, releases = 0;
+  const loaded = { reused: 0, components: [], limits: [], problems: [], dispose() { releases++; } };
+  const details = { load: async () => { loads++; return loaded; } };
+  const preparation = { details, prepareDetails: async () => { preparations++; prepared.resolve(); } };
+  const device = createBrowserCharacterDetailDevice(complete.promise as never, async (_url, init) => init?.method === "POST"
+    ? Response.json({ recordSchema: CHARACTER_DETAIL_SCHEMA, key: "fixture", phase: "ready", message: "", progress: null, record: file }) : Response.json(record),
+    undefined, Promise.resolve(preparation) as never);
+  const actions = new CharacterDetailActions(device), pending = actions.setCharacter(DEFAULT_CHARACTER);
+  try {
+    await prepared.promise;
+    expect([loads, preparations, placements]).toEqual([1, 1, 0]);
+    if (ending === "abort") { actions.dispose(); await pending; expect(releases).toBe(1); }
+    if (ending === "failed") complete.reject(Error("The head failed while reading its blink."));
+    else complete.resolve({ details, setCharacterDetails: () => { placements++; return null; } } as never);
+    await pending;
+    expect(placements).toBe(ending === "ready" ? 1 : 0);
+    if (ending === "failed") expect(releases).toBe(1);
+  } finally { actions.dispose(); }
+});
+
 test.each([false, true])("a delayed head requests and reads V first, placing it once only if still wanted (cancelled=%s)", async cancelled => {
   const scene = Promise.withResolvers<Parameters<typeof createBrowserCharacterDetailDevice>[0]>();
   const read = Promise.withResolvers<void>();
@@ -89,7 +111,7 @@ test.each([false, true])("a delayed head requests and reads V first, placing it 
   } finally { actions.dispose(); }
 });
 
-async function harness() {
+async function harness(options: Pick<SceneHostOptions, "loadMotion" | "detailsReady" | "signal"> = {}) {
   const { renderer } = recordingRenderer();
   // Use the lighting stage's supported probe fallback: this CPU test never draws or prefilters a room.
   renderer.extensions.has = () => false;
@@ -117,7 +139,7 @@ async function harness() {
   };
   const runtime = await createSceneRuntime(device, { loadCore: async () => core(), loadMotion: async () => ({ idleError: "fixture", blinkError: "fixture" }),
     loadLut: async () => ({ lut: null, source: { kind: "neutral", depotPath: null, archive: null, group: null, provider: null,
-      alternatives: [], rule: null, size: null, note: "fixture", skipped: [] } }) });
+      alternatives: [], rule: null, size: null, note: "fixture", skipped: [] } }), ...options });
   const started = Promise.withResolvers<void>(), first = Promise.withResolvers<ParsedGeometry>();
   const generations: AbortSignal[] = [];
   const files: WarmedFiles = {
@@ -144,6 +166,28 @@ async function harness() {
     },
   };
 }
+
+test("the real scene host hands off stable part loading/preparation while blink motion remains pending", async () => {
+  const stable = Promise.withResolvers<SceneDetailPreparation>(), blink = Promise.withResolvers<void>();
+  let complete = false;
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "requestAnimationFrame");
+  Object.defineProperty(globalThis, "requestAnimationFrame", { configurable: true, value: (run: FrameRequestCallback) => { queueMicrotask(() => run(performance.now())); return 1; } });
+  const building = harness({ detailsReady: stable.resolve, loadMotion: async (_scene, _eye, _body, signal, ready) => {
+    ready?.(); await blink.promise; signal?.throwIfAborted(); return { idleError: "fixture", blinkError: "fixture" };
+  } }).then(value => { complete = true; return value; });
+  let loaded: Awaited<ReturnType<SceneDetailPreparation["details"]["load"]>> | undefined;
+  try {
+    const early = await stable.promise;
+    loaded = await early.details.load(record, { fetcher: async () => Response.json(record), signal: new AbortController().signal,
+      warmed: { bytes: () => undefined, texture: async () => ({ image: { width: 1, height: 1 } as HTMLImageElement, bitmap: null, reduced: null }), geometry: async () => geometry() } });
+    expect(loaded.components).toHaveLength(1);
+    await early.prepareDetails(loaded);
+    expect(complete).toBe(false);
+  } finally {
+    loaded?.dispose(); blink.resolve(); (await building).dispose();
+    if (previous) Object.defineProperty(globalThis, "requestAnimationFrame", previous); else Reflect.deleteProperty(globalThis, "requestAnimationFrame");
+  }
+});
 
 test("context loss mid-load waits for restoration, retries once in the new generation and reaches ready", async () => {
   const h = await harness();

@@ -33,6 +33,8 @@ import { BLINK_CLIP, EXPRESSION_TABLE, EYE_MORPHS, FACE_MORPHS, FACE_SETUP, FACE
   eyeTracks, faceSetupPath, readFaceRig, readFaceRigSets, readFaceRigSetup, readTable, startPoints, wrinkleSourceTracks, type SetClip } from "../facial-catalogue";
 import { findRelations } from "../../engines/facial-rig/relations";
 import { timeSlicer } from "../../host/event-loop";
+import { currentTurn, hostWork } from "../../host/host-jobs";
+import type { JobScheduler } from "../../platform/api/jobs";
 import { posedLocals, worldPositions, type Vec3 } from "../../engines/facial-rig/pose";
 import { clipValuesAt, type ClipTracks } from "../../engines/facial-rig/anim-tracks";
 import { denseTracks, vectorIssue } from "../../engines/facial-rig/vector";
@@ -136,7 +138,7 @@ export function inAppSolver(source: CompiledFacialRig | (() => CompiledFacialRig
       const compiled: CompiledFacialRig = rig, pose = scratch ??= createFacialPose(compiled);
       const J = compiled.jointNames.length, q = new Float32Array(frames.length * J * 4), t = new Float32Array(frames.length * J * 3);
       const started = performance.now();
-      const turn = timeSlicer();
+      const turn = currentTurn() ?? timeSlicer();
       for (const [f, frame] of frames.entries()) {
         if (disposed) throw Error("The solver stopped.");
         solveFace(compiled, frame, pose); q.set(pose.rotations, f * J * 4); t.set(pose.translations, f * J * 3);
@@ -262,6 +264,7 @@ export const facialSetupSource = (env: Readonly<Record<string, string | undefine
   env.XFS_FACIAL_SETUP === "female-head" ? "female-head" : "face-rig";
 
 export type FacialHostOptions = {
+  jobs?: JobScheduler;
   /** Host-owned private preview cache; the facial data lives in `facial/`. */
   cacheRoot: string;
   /** Resolver JSON and archive-index cache (shared with the character details). */
@@ -472,7 +475,7 @@ export class FacialHost {
     return entry.failedAt !== undefined && entry.failures <= MAX_PREPARE_RETRIES && this.now() - entry.failedAt >= PREPARE_RETRY_MS * 2 ** (entry.failures - 1);
   }
 
-  private async prepare(entry: Preparation, settings: CharacterDetailSettings) {
+  private async prepareRig(entry: Preparation, settings: CharacterDetailSettings, turn: () => Promise<void>) {
     const signal = entry.controller.signal, superseded = () => { if (signal.aborted) throw new Superseded(); };
     if (!settings.gameRoot) {
       entry.rig = { phase: "unconfigured", reason: NOT_SET_UP };
@@ -495,6 +498,7 @@ export class FacialHost {
     const [skeletonRef, additivesRef] = [FACE_SKELETON, FACIAL_ADDITIVES].map(refFromPath) as [DepotRef, DepotRef], setupRef = setup.ref;
     const documents = new Map<string, unknown>(), identity: string[] = [];
     for (const ref of [skeletonRef, setupRef]) {
+      await turn();
       const located = graph.locate(ref), archive = located.lookup.winner;
       if (!archive) continue;
       identity.push(`${fingerprint(archive.id)}|${located.entry.hash}`);
@@ -522,11 +526,14 @@ export class FacialHost {
     const { vocabulary, rest } = readFaceRig(skeletonDocument, setupDocument, setup.path);
     const wrinkleSources = wrinkleSourceTracks(setupDocument), eyes = eyeTracks(setupDocument);
     let compiled: CompiledFacialRig | null = null, compileError: string | undefined;
+    await turn();
+    const compileStarted = performance.now();
     try { compiled = compileFacialRig(skeletonDocument, setupDocument); }
     catch (error) {
       compileError = error instanceof Error ? error.message : String(error);
       hostFailure("facial", "face_not_compiled", "XF Studio's facial solver couldn't take V's facial setup.", error, "warn");
     }
+    this.options.log?.(`Facial setup compiled in ${Math.round(performance.now() - compileStarted)} ms.`);
     let blink: Rig["blink"] = null;
     try {
       const located = graph.locate(additivesRef), archive = located.lookup.winner;
@@ -549,17 +556,26 @@ export class FacialHost {
     entry.rig = { phase: "ready" };
     entry.rigSettled?.();
     this.startSolver(entry);
+    return { installation, cli, tool, vocabulary, setup, rest };
+  }
+
+  private async prepare(entry: Preparation, settings: CharacterDetailSettings) {
+    const signal = entry.controller.signal, superseded = () => { if (signal.aborted) throw new Superseded(); };
+    const ready = await hostWork(this.options.jobs, "shown", turn => this.prepareRig(entry, settings, turn), signal);
+    if (!ready) return;
+    const { installation, cli, tool, vocabulary, setup, rest } = ready;
     // The installed expressions, after the face (the editor works without them), and only once something asks for them (PREV-179).
     await new Promise<void>(settle => { if (signal.aborted) return settle(); void entry.startPointsWanted.then(settle); signal.addEventListener("abort", () => settle(), { once: true }); });
     superseded();
-    try { entry.expressions = await this.readStartPoints(installation, cli, tool, vocabulary, signal, () => entry.startPointsBackground ? "background" : undefined, setup.ref); }
+    try { entry.expressions = await hostWork(this.options.jobs, entry.startPointsBackground ? "ahead" : "shown",
+      () => this.readStartPoints(installation, cli, tool, vocabulary, signal, () => entry.startPointsBackground ? "background" : undefined, setup.ref), signal); }
     catch (error) {
       if (error instanceof Superseded || signal.aborted) throw error;
       hostFailure("facial", "start_points_failed", "The installed expressions couldn't be read.", error, "warn");
       entry.expressions = { phase: "failed", reason: "The installed photo-mode expressions couldn't be read from your game files. Start from rest instead.", items: [] };
     }
     // The face's own files stay; the animation sets beyond the budget go, least recently used first.
-    this.keepJsonWithinBudget(new Set([entry.rigData.rigJson, entry.rigData.setupJson].filter(Boolean)));
+    this.keepJsonWithinBudget(new Set([entry.rigData!.rigJson, entry.rigData!.setupJson].filter(Boolean)));
     hostTrace().event("facial", "prepared", { controls: vocabulary.controls.length, joints: rest.joints.length, startPoints: entry.expressions.items.length,
       solver: entry.solver.phase, setup: setup.path, setupSource: setup.source });
   }
@@ -622,11 +638,11 @@ export class FacialHost {
       if (result.ok) {
         // The controls that move nothing are found before the solver is ready, so the drawer never offers them (the preview polls while
         // the solver starts). A failed probe hides nothing.
-        entry.starting = this.findInert(entry, process).then(() => {
-          if (this.current !== entry || entry.process !== process) return;
+        entry.starting = hostWork(this.options.jobs, "ahead", turn => this.findInert(entry, process, turn), entry.controller.signal).then(() => {
+          if (this.current !== entry || entry.process !== process || entry.controller.signal.aborted) return;
           entry.solver = { phase: "ready", compileMs: result.compileMs, kind: inProcess ? "in-app" : "oracle" };
           this.options.log?.(`Facial solver ready (${inProcess ? "XF Studio's own" : "the IO Suite oracle"}; setup compiled in ${Math.round(result.compileMs)} ms).`);
-        });
+        }).catch(error => { if (!entry.controller.signal.aborted) hostFailure("facial", "inert_probe_failed", "Finding the face controls that move nothing didn't work; all are shown.", error, "warn"); });
       }
       else {
         hostFailure("facial", "solver_failed", "The facial solver couldn't start.", Error(result.error), "warn");
@@ -673,6 +689,9 @@ export class FacialHost {
     // With the IO Suite oracle in use the whole face is the oracle's: the page reads the developer's prepared blink instead.
     if (!("inProcess" in this.options.solver())) return { reason: ORACLE_BLINK };
     const entry = this.ensure();
+    return hostWork(this.options.jobs, "shown", () => this.readBlink(entry), entry.controller.signal);
+  }
+  private async readBlink(entry: Preparation): Promise<FacialBlinkRecord | { reason: string }> {
     await entry.rigReady;
     const rig = entry.rigData;
     if (!rig?.compiled || !rig.blink) return { reason: !rig ? entry.rig.reason ?? "V's face couldn't be read from your game files." : "The game's blink couldn't be read from your game files." };
@@ -715,12 +734,11 @@ export class FacialHost {
    * needs an open jaw, a control that only undoes another); one that changes no joint in either, and feeds no wrinkle output, is inert.
    * Read from the setup the host solves with, so another setup or a mod's setup gets its own answer; nothing is named.
    */
-  private async findInert(entry: Preparation, process: FacialSolverProcess): Promise<void> {
+  private async findInert(entry: Preparation, process: FacialSolverProcess, turn: () => Promise<void>): Promise<void> {
     const rig = entry.rigData;
     if (!rig || rig.probed) return;
     rig.probed = true;
     const controls = rig.vocabulary.controls, context = Object.fromEntries(controls.map(control => [control.name, INERT_CONTEXT]));
-    const turn = timeSlicer();
     const frames = [denseTracks(rig.vocabulary, {}).tracks, denseTracks(rig.vocabulary, context).tracks];
     try {
       for (const base of [{}, context]) for (const control of controls) {
@@ -748,7 +766,7 @@ export class FacialHost {
       const relations = findRelations({ rest: rig.rest, controls, displacement, eyeTracks: new Set(rig.eyeTracks) });
       rig.axes = relations.axes; rig.gazeSameWay = relations.gazeSameWay;
       hostTrace().event("facial", "relations", { axes: relations.axes.length, gazeSameWay: relations.gazeSameWay });
-    } catch (error) { hostFailure("facial", "inert_probe_failed", "Finding the face controls that move nothing didn't work; all are shown.", error, "warn"); }
+    } catch (error) { if (!entry.controller.signal.aborted) hostFailure("facial", "inert_probe_failed", "Finding the face controls that move nothing didn't work; all are shown.", error, "warn"); }
   }
   /**
    * A ready solver that stopped (a crash) or is stuck is started again while the restart budget allows; past it the state says so

@@ -256,12 +256,12 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
     return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct" as const, mo2Root: settings?.mo2Root ?? null,
       mo2ProfileId: settings?.mo2ProfileId ?? null, manualModRoot: settings?.manualModRoot ?? null, wolvenKitCli: wolvenKit.usable() };
   };
-  const poses = new PoseCatalogueHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
+  const poses = new PoseCatalogueHost({ jobs, route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
     resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"), log: logTo("poses") });
   const poseRequest = createPoseHandler(poses);
   // The game's preview idles (V's body idle and its face, solved by XF Studio's own facial solver), read by XF Studio's own reader from the
   // same route; no Python, no prepared files.
-  const idles = new IdleHost({ route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
+  const idles = new IdleHost({ jobs, route: () => characterRoute(poseSettings()), fingerprint: () => installationFingerprint(poseSettings()),
     resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"), faces: () => facial.faceSource(), log: logTo("preview") });
   const idleRequest = createIdleHandler(idles);
   // The creator lighting preset's grading LUT, resolved on the same launch route into the same private cache.
@@ -275,7 +275,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const gradingLutRequest = createGradingLutHandler(gradingLut);
   // The live facial preview (facial-host.ts), solved by XF Studio's own facial solver in this process: no Python. The desktop never reads
   // developer environment paths, so the IO Suite oracle is never used here.
-  const facial = new FacialHost({ cacheRoot: desktopPreviewCache(dataRoot), resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
+  const facial = new FacialHost({ jobs, cacheRoot: desktopPreviewCache(dataRoot), resolverCache: resolve(desktopPreviewCache(dataRoot), "resolver"),
     settings: () => {
       const settings = savedSettings();
       return { gameRoot: settings?.gameRoot ?? null, launchRoute: settings?.launchRoute ?? "direct", mo2Root: settings?.mo2Root ?? null,

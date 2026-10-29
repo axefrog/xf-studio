@@ -51,7 +51,11 @@ export type CoreEye = { readonly mesh: THREE.Mesh; readonly material: THREE.Mate
  * probes inject their own. `signal` stops it between steps (the scene runtime's build was aborted): it rejects with the signal's reason, and
  * what it registered with the eye (`replace`) is released with the rig.
  */
-export type MotionLoader = (scene: THREE.Scene, eye: CoreEye, body?: CoreBody, signal?: AbortSignal) => Promise<RigMotionAssets>;
+export type MotionLoader = (scene: THREE.Scene, eye: CoreEye, body?: CoreBody, signal?: AbortSignal,
+  stable?: () => void) => Promise<RigMotionAssets>;
+/** Stable material/geometry context after gaze re-rigging, before the blink clip finishes. No motion/placement capability. */
+export type RigSurfaces = Pick<LoadedCoreDetail, "head" | "eyes"> & { skin: THREE.MeshStandardMaterial;
+  coreEye: ReturnType<typeof createEyeMaterial>; albedo: THREE.Texture; roughness: THREE.Texture };
 
 /**
  * The loader's motion with the rig's composed motion beside it, as the same live object: the catalogue (`idles`, a getter whose eyes
@@ -68,7 +72,7 @@ export function withRigMotion<M extends RigMotionAssets, R>(motion: M, rig: R): 
  * host; where the face can't be read it holds still (`faceError`, the host's reason). The idle is the feminine V's, so a masculine head
  * holds still (`IDLE_MASCULINE`); the blink checks its own joints against the head (game-blink.ts).
  */
-export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", signal) => {
+export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", signal, stable) => {
   let idle: IdleAnimation | undefined, idleError = "", faceError = "";
   let source: IdleSource | undefined;
   // The first idle's clips, as loaded with the rig (so returning to it from a pose loads nothing).
@@ -143,11 +147,12 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", 
   // The game's own blink (game-blink.ts), bound by name to every rig bone present now (the eyeball joints above included);
   // each V's details join it with the idle. Without the local asset the blink controls stay off with plain guidance.
   let blink: GameBlink | undefined, blinkError = "";
+  stable?.();
   try {
     const targets: THREE.Object3D[] = [];
     scene.updateMatrixWorld(true);
     scene.traverse(o => { if (o instanceof THREE.Bone) targets.push(o); });
-    blink = await loadGameBlink(targets);
+    blink = await loadGameBlink(targets, undefined, undefined, signal);
   } catch (error) {
     blink = undefined; blinkError = (error as Error).message || GAME_BLINK_MISSING;
   }
@@ -209,6 +214,8 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
   /** Releases for what the rig owns, run with the host's (newest first). */
   releases: (() => void)[];
   loadMotion?: MotionLoader;
+  /** Preparation only: gaze geometry/materials are final, but motion still gates scene publication. */
+  onStable?(surfaces: RigSurfaces): void;
   /** Stops the motion's load (the scene runtime's build was aborted); what the rig made is in `releases`. */
   signal?: AbortSignal;
 }) {
@@ -257,7 +264,7 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
   const motion = await (options.loadMotion ?? loadGameMotion)(scene, { get mesh() { return eyes; }, material: eyeMat,
     // The rig's skinned copy of the eye (gaze joints) has its own geometry and skeleton, freed with the rig; the core's own go with the core.
     replace(next) { meshes[meshes.indexOf(eyes)] = next; eyes.removeFromParent(); eyes = next; options.releases.push(() => { next.geometry.dispose(); next.skeleton.dispose(); }); } },
-    core.body, motionSignal);
+    core.body, motionSignal, () => options.onStable?.({ head, eyes, skin, coreEye, albedo, roughness }));
   const { idle, blink } = motion;
   const finalEyes = eyes;
   // The held expression's face driver (face-driver.ts): bound to the head's bones now, at their neutral pose, like the blink; its rig

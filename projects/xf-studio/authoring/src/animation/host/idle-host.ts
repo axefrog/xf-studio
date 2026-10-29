@@ -44,6 +44,8 @@ import type { PoseSample } from "../pose-sample";
 import { packageChunks, type JsonObject } from "../../game/red-json";
 import type { Installation, InstallationOptions } from "../../game/host/resolver-host";
 import { keptSource, type PreparedPartition } from "../../host/prepared-files";
+import { hostWork } from "../../host/host-jobs";
+import type { JobScheduler } from "../../platform/api/jobs";
 
 /** Version of what this host derives (the catalogue rule, the sample's shape); part of the disk cache's key with the decoder's. */
 export const IDLE_HOST_VERSION = 1;
@@ -75,6 +77,7 @@ type NativeIdles = { entries: GraphIdle[]; left: { clip: string; why: string }[]
   rig: { path: string; joints: RestJoint[] }; face: { path: string; joints: RestJoint[] } | null; clips: Record<string, ClipSource> };
 
 export type IdleHostOptions = {
+  jobs?: JobScheduler;
   /** The launch route (WolvenKit optional), or null while the game folder isn't set up. */
   route: () => PoseRoute | null;
   /** The installation fingerprint (character-detail-host.ts `installationFingerprint`). */
@@ -143,7 +146,7 @@ export class IdleHost {
     if (this.entry?.key === key && !this.entry.error) return this.entry.promise;
     const entry = { key, promise: null as unknown as Promise<NativeIdles>, done: null as NativeIdles | null, error: null as string | null };
     this.bodies.clear();
-    entry.promise = (async () => {
+    entry.promise = hostWork(this.options.jobs, "shown", async turn => {
       const file = join(this.cacheDir(key), "idles.json");
       const cached = readJson(file) as { version?: number; idles?: NativeIdles } | null;
       if (cached?.version === IDLE_HOST_VERSION && cached.idles) {
@@ -154,7 +157,7 @@ export class IdleHost {
       const started = performance.now();
       const open = this.options.open ?? (await import("../../game/host/installation-registry")).acquireInstallation;
       const installation = await open({ ...route, cacheDir: this.options.resolverCache, log: this.options.log });
-      const idles = await readIdles(installation, this.options.log);
+      const idles = await readIdles(installation, this.options.log, turn);
       this.options.log?.(`Idles read from the game in ${((performance.now() - started) / 1000).toFixed(1)} s: ${idles.entries.map(e => e.clip).join(", ")}.`);
       try {
         // One cache folder per installation; the few most recently used are kept (another host sharing the resolver cache keeps its own).
@@ -163,7 +166,7 @@ export class IdleHost {
         writeFileAtomic(file, JSON.stringify({ version: IDLE_HOST_VERSION, idles }));
       } catch { /* Advisory: read again next time. */ }
       return idles;
-    })();
+    });
     entry.promise.then(done => { entry.done = done; }, error => {
       entry.error = (error as Error)?.message ?? String(error);
       if (!(error instanceof IdleSetupError)) this.options.log?.(`The idles were not read: ${(error as Error)?.stack ?? error}`);
@@ -348,7 +351,7 @@ export class IdleHost {
   body(id: string): Promise<PoseSample | null> {
     let pending = this.bodies.get(id);
     if (!pending) {
-      pending = this.readBody(id);
+      pending = hostWork(this.options.jobs, "shown", () => this.readBody(id));
       pending.catch(() => this.bodies.delete(id));
       this.bodies.set(id, pending);
     }
@@ -400,7 +403,7 @@ export function idleSample(id: string, clip: AnimClip, rig: AnimRig, source: { s
 }
 
 /** Read the idles from an opened installation. Throws with a technical reason (logged; the page words it plainly). */
-export async function readIdles(installation: Installation, log?: (message: string) => void): Promise<NativeIdles> {
+export async function readIdles(installation: Installation, log?: (message: string) => void, turn: () => Promise<void> = async () => {}): Promise<NativeIdles> {
   const graph = installation.graph, decode = decoderOf(installation);
   if (!decode) throw Error("XF Studio's reader for game files isn't running.");
   const ref = refFromPath(PLAYER_ENTITIES.female);
@@ -409,6 +412,7 @@ export async function readIdles(installation: Installation, log?: (message: stri
   // The entity and its ArchiveXL patches: a later `root` wins, sets add up in order.
   const roots: JsonObject[] = [entity.root];
   for (const patch of graph.patchesFor(ref.hash)) {
+    await turn();
     const source = await graph.load(refFromHash(patch.source, patch.sourcePath), "ent");
     if (source) roots.push(source.root);
   }
@@ -431,6 +435,7 @@ export async function readIdles(installation: Installation, log?: (message: stri
   const wanted = new Set(entries.map(entry => entry.clip));
   let setPath: string | null = null;
   for (const set of [...new Map(declared.map(item => [item.hash, item] as const)).values()]) {
+    await turn();
     if (![...wanted].some(clip => !clips[clip])) break;
     const archive = graph.lookup(set.hash).winner;
     if (!archive) continue;

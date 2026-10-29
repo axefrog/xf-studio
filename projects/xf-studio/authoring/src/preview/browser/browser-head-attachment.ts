@@ -40,6 +40,7 @@ import type { PreparationProgress } from "../scene-residency";
 import type { ViewId } from "../../platform/api/view-graph";
 import { previewFields } from "../preview-view-graph";
 import { lightingSource, type LightingSource } from "../lighting-setups";
+import type { SceneDetailPreparation } from "../../platform/scene/scene-host";
 
 type ViewportDevice = ReturnType<typeof createBrowserViewportDevice>;
 type Scene = Awaited<ReturnType<ViewportDevice["buildHead"]>>;
@@ -188,8 +189,11 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     context.setBodyShown((fields?.display ?? ports.workspace.preview).body !== false);
     context.setUncensored((fields?.scene ?? ports.workspace.preview).uncensored === true);
     // A build that fails releases what it made itself (createSceneRuntime does).
-    const sceneReady = ports.viewport.buildHead(body, signal);
-    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(sceneReady, undefined, ports.warmStart));
+    const preparing = Promise.withResolvers<SceneDetailPreparation>();
+    void preparing.promise.catch(() => { /* The complete scene build reports this failure. */ });
+    const sceneReady = ports.viewport.buildHead(body, signal, preparing.resolve);
+    void sceneReady.then(preparing.resolve, preparing.reject); // Hosts without an early handoff retain the complete-scene path.
+    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(sceneReady, undefined, ports.warmStart, preparing.promise));
     const stopDetails = () => characterDetails.dispose();
     signal.addEventListener("abort", stopDetails, { once: true });
     releases.push(() => { signal.removeEventListener("abort", stopDetails); stopDetails(); });

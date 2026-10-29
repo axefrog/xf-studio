@@ -15,20 +15,21 @@ type Checkpoint = { gate: ReturnType<typeof gpuGate>; texels: number };
  * time passing never does. A separate barrier covers preceding non-map work (G2), initially and whenever the renderer submits more.
  */
 function makeBudget(renderer: Renderer) {
-  let generation = contextGeneration(renderer), used = 0, pending = 0;
+  let generation = contextGeneration(renderer), used = 0, pending = 0, revision = 0;
   const checkpoints: Checkpoint[] = [];
   const barrier = gpuGate(renderer);
   barrier.mark();
   // Completion grants one burst. Keep work that arrived during the wait dirty for the following turn, without replacing its fence.
   let admission: "waiting" | "burst" | "open" = "waiting";
   let dirty = false;
-  const stopObserving = observeGpuWork(renderer, () => { dirty = true; if (admission === "burst") admission = "open"; });
+  const stopObserving = observeGpuWork(renderer, () => { revision++; dirty = true; if (admission === "burst") admission = "open"; });
   const current = () => {
     if (inGeneration(renderer, generation)) return true;
     for (const entry of checkpoints) entry.gate.dispose();
     barrier.dispose();
     checkpoints.length = 0; used = pending = 0;
     generation = contextGeneration(renderer);
+    revision++;
     if (generation.aborted) return false;
     barrier.mark(); admission = "waiting"; dirty = false;
     return true;
@@ -47,6 +48,7 @@ function makeBudget(renderer: Renderer) {
     pending = 0;
   };
   return {
+    revision: () => revision,
     canSend(texels: number): boolean {
       if (!current()) return false;
       // Never replace a pending barrier: a draw every frame would otherwise keep restarting its wait. Completion admits a burst even
@@ -64,6 +66,7 @@ function makeBudget(renderer: Renderer) {
       return used === 0;
     },
     sent(texels: number): void {
+      revision++;
       used += texels; pending += texels;
       if (used >= UPLOAD_TEXELS) checkpoint();
     },
@@ -94,6 +97,8 @@ export function acquireUploadBudget(renderer: Renderer) {
   const shared = entry;
   let disposed = false;
   return {
+    /** Submission revision: lets a completion checkpoint be reused only while no map/non-map GPU work followed it. */
+    revision: () => shared.budget.revision(),
     canSend: (texels: number) => !disposed && shared.budget.canSend(texels),
     sent: (texels: number) => { if (!disposed) shared.budget.sent(texels); },
     checkpoint: () => { if (!disposed) shared.budget.checkpoint(); },

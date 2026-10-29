@@ -42,7 +42,7 @@ import { modMakers } from "./mod-makers";
 import { vortexShortcutDiscovery, type VortexShortcutDiscovery } from "../../installation/host/vortex-data-host";
 import type { Installation, InstallationOptions } from "../../game/host/resolver-host";
 import type { JobScheduler } from "../../platform/api/jobs";
-import { timeSlicer, yieldToEventLoop } from "../../host/event-loop";
+import { hostWork } from "../../host/host-jobs";
 
 export type CreatorRoute = Omit<InstallationOptions, "cacheDir" | "log">;
 export type CreatorHostOptions = {
@@ -204,11 +204,12 @@ export class CreatorCatalogueHost {
     return entry.promise;
   }
 
-  private async build(route: CreatorRoute, gender: BodyGender, fingerprint: string): Promise<Loaded> {
+  private build(route: CreatorRoute, gender: BodyGender, fingerprint: string): Promise<Loaded> {
+    return hostWork(this.options.jobs, "ahead", turn => this.buildNow(route, gender, fingerprint, turn));
+  }
+  private async buildNow(route: CreatorRoute, gender: BodyGender, fingerprint: string, turn: () => Promise<void>): Promise<Loaded> {
     const started = performance.now();
-    // Catalogue work never occupies the scheduler's single running slot: a person's V needs only its structural catalogue.
-    // Between slices, let waiting requests in and wait until the person's lane is clear before continuing.
-    const turn = timeSlicer(undefined, undefined, async () => { await yieldToEventLoop(); await this.options.jobs?.idle("person"); });
+    // Presentation is ahead work: a person's V uses its separate structural catalogue, and shown motion reads come first too.
     const open = this.options.open ?? (await import("../../game/host/installation-registry")).acquireInstallation;
     const installation = await open({ ...route, cacheDir: this.options.resolverCache, log: this.options.log });
     const load = await (this.options.load ?? ((inst: Installation, r: CreatorRoute, g: BodyGender) => loadCreatorCatalogue({ installation: inst,

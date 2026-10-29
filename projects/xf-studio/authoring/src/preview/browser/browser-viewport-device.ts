@@ -1,5 +1,5 @@
 import type * as THREE from "three";
-import { createSceneRuntime, type SceneDevice, type SceneRuntime } from "../../platform/scene/scene-host";
+import { createSceneRuntime, type SceneDevice, type SceneRuntime, type SceneDetailPreparation } from "../../platform/scene/scene-host";
 import { createRendererDevice, type RendererDevice, type RendererDeviceOptions } from "../../platform/scene/renderer-device";
 import type { FeatureRendererFactory } from "../../platform/api/scene";
 import type { CoreBody } from "../../character/render-detail";
@@ -94,14 +94,14 @@ export function createBrowserViewportDevice(options: {
      * Build a head with a body's core (the feminine V's by default), hidden on the pane's renderer device, whatever is shown meanwhile.
      * It rejects with `signal.reason` once the signal aborts (a newer subject or body change superseded it), having released what it made.
      */
-    buildHead(body: CoreBody = "female", signal?: AbortSignal) {
+    buildHead(body: CoreBody = "female", signal?: AbortSignal, detailsReady?: (preparation: SceneDetailPreparation) => void) {
       if (disposed) return Promise.reject(new DOMException("The viewport was closed.", "AbortError"));
       device ??= (options.deviceFactory ?? createRendererDevice)(options.headHost, { onContext: event => {
         options.onContext?.(event);
         for (const listener of [...contextListeners]) listener(event);
       } });
       return (options.sceneFactory ?? createSceneRuntime)(device, { body, renderers: options.renderers, optionalRenderers: options.optionalRenderers,
-        referenceTextures: options.referenceTextures, signal });
+        referenceTextures: options.referenceTextures, signal, detailsReady });
     },
     /** Draw `scene` (built by `buildHead`): the head shown before stops being drawn, and its on-head editor goes (a gesture is settled). */
     showHead(scene: Scene) {

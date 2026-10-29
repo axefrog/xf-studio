@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import * as THREE from "three";
-import { activeEyeShape, GAME_BLINK_SCHEMA, GameBlink, parseGameBlink, type GameBlinkDescription } from "../src/animation/render/game-blink";
+import { activeEyeShape, GAME_BLINK_SCHEMA, GameBlink, loadGameBlink, parseGameBlink, type GameBlinkDescription } from "../src/animation/render/game-blink";
 import { MotionActions, type MotionPort } from "../src/animation/motion-actions";
 import { localMotionScene } from "../src/animation/scene-motion";
 
@@ -13,6 +13,16 @@ const ROW = new THREE.Vector3(0, 0.01, -0.012), LASH = new THREE.Vector3(0, 0, -
 /** The lid root's full closure: the upper row swings onto the lower row. */
 const CLOSED = new THREE.Quaternion().setFromUnitVectors(ROW.clone().normalize(), LOWER.clone().normalize());
 const SHIFT = new THREE.Vector3(0.002, -0.001, 0.0005);
+
+test("aborting a blink read does not bind a late result or start its prepared-asset fallback", async () => {
+  const life = new AbortController(), reply = Promise.withResolvers<Response>();
+  let calls = 0;
+  const pending = loadGameBlink([], async (_url, init) => { calls++; expect(init?.signal).toBe(life.signal); return reply.promise; }, undefined, life.signal);
+  const outcome = pending.catch(error => error.name);
+  life.abort(); reply.resolve(Response.json({ error: "Unavailable." }, { status: 404 }));
+  expect(await outcome).toBe("AbortError"); expect(calls).toBe(1);
+  await expect(loadGameBlink([], undefined, undefined, life.signal)).rejects.toMatchObject({ name: "AbortError" });
+});
 
 function rig() {
   const source = new THREE.Group();

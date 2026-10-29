@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { linkPacer } from "./link-pacing";
-import { gpuDrained } from "./gpu-gate";
+import { gpuDrained, gpuGate } from "./gpu-gate";
 import { acquireUploadBudget, UPLOAD_WAIT_FRAMES } from "./gpu-upload-budget";
 import { contextGeneration } from "./context-generation";
 import { markPhase } from "../../character/character-timing";
@@ -85,13 +85,12 @@ export function afterTask(callback: () => void): void {
 export function createCharacterRenderer(input: {
   scene: THREE.Scene;
   renderer: THREE.WebGLRenderer;
-  rig: HeadRig;
+  rig: Pick<HeadRig, "head" | "eyes" | "skin" | "coreEye" | "albedo" | "roughness" | "motion">;
   /** The resolved parts the active feature renderers replace (their `supersede` lists). */
   superseded(): readonly SupersededPart[];
 }) {
   const { scene, renderer, rig } = input;
   const { head, eyes, skin, coreEye } = rig;
-  const rigMotion = rig.motion.rig;
   // The eye's own roughness (RoughnessScale · Roughness.R) is on by default; off shows the preview's earlier flat gloss.
   let eyeOpticsEnabled = true;
   /** The resolved eyeballs drawn now (empty while the core eye shows). */
@@ -204,6 +203,7 @@ export function createCharacterRenderer(input: {
    */
   async function prepareDetails(next: LoadedCharacterDetails, preparation: DetailPreparation) {
     let gate: ReturnType<typeof acquireUploadBudget> | undefined;
+    let completion: ReturnType<typeof gpuGate> | undefined;
     const uploadGate = () => gate ??= ownUploads();
     try {
       const generation = contextGeneration(renderer);
@@ -300,6 +300,11 @@ export function createCharacterRenderer(input: {
         compiled.push(made.result());
       }
       await uploadAll(compiled.flatMap(entry => entry.textures));
+      let completedRevision = 0;
+      if (queued >= DRAIN_TEXELS && !signal.aborted) {
+        completion = gpuGate(renderer); completions.add(completion); completion.mark();
+        completedRevision = uploadGate().revision();
+      }
       // The driver's links, left (not waited for) when the preparation stops: they finish on the driver's threads either way (PREV-192).
       const linked = Promise.all(compiled.map(entry => entry.ready));
       linked.catch(() => { /* Reported below unless the preparation stopped. */ });
@@ -309,7 +314,13 @@ export function createCharacterRenderer(input: {
       if (signal.aborted) return;
       // Each linked program's first use (its uniforms and attributes read back), one at a time between frames, once the GPU is idle (when what was
       // sent could keep it busy: `queued`).
-      if (queued >= DRAIN_TEXELS) await drained();
+      if (completion) {
+        // The strict completion wait overlaps driver linking. If another uploader/draw submitted work meanwhile, refresh it here as
+        // the old post-link drain did; never use an older completion to skip a newer busy GPU queue.
+        if (uploadGate().revision() !== completedRevision) completion.mark();
+        for (let waited = 0; waited < 120 && !signal.aborted && !completion.idle(); waited++) await frame();
+        started = performance.now();
+      }
       markPhase("details:drained");
       for (const program of new Set(compiled.flatMap(entry => entry.programs()))) {
         if (signal.aborted) break;
@@ -317,7 +328,7 @@ export function createCharacterRenderer(input: {
         program.getUniforms(); program.getAttributes();
       }
       if (!signal.aborted) for (const item of fresh) ready.add(item);
-    } finally { releaseUploads(gate); }
+    } finally { if (completion) { completion.dispose(); completions.delete(completion); } releaseUploads(gate); }
   }
   head.castShadow = true;
   head.customDepthMaterial = fullSkinDepthMaterial(head);
@@ -373,6 +384,7 @@ export function createCharacterRenderer(input: {
    * instead wait only when outstanding texels fill the window, and checkpoint a turn's uploads together.
    */
   const lifetime = new AbortController();
+  const completions = new Set<ReturnType<typeof gpuGate>>();
   const uploadOwners = new Set<ReturnType<typeof acquireUploadBudget>>();
   const ownUploads = () => { const owner = acquireUploadBudget(renderer); uploadOwners.add(owner); return owner; };
   const releaseUploads = (owner?: ReturnType<typeof acquireUploadBudget>) => { if (owner) { owner.dispose(); uploadOwners.delete(owner); } };
@@ -519,6 +531,7 @@ export function createCharacterRenderer(input: {
    */
   function setCharacterDetails(next: LoadedCharacterDetails | null): { limits: { slot: DetailSlot; limit: DetailLimit }[] } {
     if (characterDetails === next) return { limits: [...skinLimits(), ...bakeLayered()] };
+    const rigMotion = rig.motion.rig; // Placement alone needs motion; loading/preparation can run before the blink arrives.
     const previous = characterDetails;
     const drawnBefore = drawnDetails();
     characterDetails = null;
@@ -662,6 +675,7 @@ export function createCharacterRenderer(input: {
     // The core head's depth material is this renderer's (made above); the head itself goes with its core.
     dispose() {
       lifetime.abort();
+      for (const completion of completions) completion.dispose(); completions.clear();
       for (const owner of uploadOwners) owner.dispose(); uploadOwners.clear(); gate = undefined;
       setCharacterDetails(null); pool.dispose(); releaseFullSkinDepth(head); disposed = true; uploads.length = 0;
     },

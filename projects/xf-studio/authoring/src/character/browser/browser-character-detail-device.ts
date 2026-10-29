@@ -10,6 +10,17 @@ import { markCharacter } from "../character-timing";
 /** The scene host's character side: its detail loader and the swap into the scene (feature-module platform §5). */
 type Scene = Pick<SceneRuntime, "setCharacterDetails" | "details"> & Partial<Pick<SceneRuntime, "onBakeLimits" | "releaseKeptParts" | "prepareDetails">>;
 
+/** Cancel waiting for the complete scene after parts were prepared, releasing those parts without waiting for a late blink reply. */
+function wanted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    promise.then(value => { signal.removeEventListener("abort", abort); signal.aborted ? reject(signal.reason) : resolve(value); },
+      error => { signal.removeEventListener("abort", abort); reject(error); });
+  });
+}
+
 /**
  * Browser device for the character-detail service: the host transport (same endpoint on both hosts)
  * and the renderer side (load a record, then swap it into the scene in one step). A load that is
@@ -51,7 +62,7 @@ const answerState = (value: unknown) => hostState(value);
  * files it read ahead.
  */
 export function createBrowserCharacterDetailDevice(source: Scene | Promise<Scene>, fetcher: CharacterDetailFetch = (url, init) => fetch(url, init),
-  warm?: Pick<CharacterWarmStart, "remember" | "files">): CharacterDetailPort {
+  warm?: Pick<CharacterWarmStart, "remember" | "files">, preparation?: Promise<Pick<Scene, "details" | "prepareDetails">>): CharacterDetailPort {
   /** This page's name, sent with each request. */
   const page = pageName();
   /** The details the scene shows now (this device put them there), whose unchanged parts the next load reuses. */
@@ -108,25 +119,28 @@ export function createBrowserCharacterDetailDevice(source: Scene | Promise<Scene
         throw error;
       }
       markCharacter("record", { components: record.components.length });
-      const scene = await ready;
+      const preparing = await (preparation ?? ready);
       signal.throwIfAborted();
       ahead?.abort();
       // Through the host's detail loader: each chunk through the adapter for its template, with the host's anisotropy and skin placement.
       await loading;
       if (signal.aborted) throw new DOMException("Superseded.", "AbortError");
-      const load = scene.details.load(record, { fetcher, signal, reuse: shown, warmed: warm?.files ?? null });
+      const load = preparing.details.load(record, { fetcher, signal, reuse: shown, warmed: warm?.files ?? null });
       loading = load.catch(() => {});
       const loaded = await load;
       if (signal.aborted) { loaded.dispose(); throw new DOMException("Superseded.", "AbortError"); }
       markCharacter("loaded", { reused: loaded.reused, components: loaded.components?.length ?? 0 });
       // New parts are made ready for their first frame while the shown V keeps drawing (PREV-189): nothing waits inside that frame.
-      if (scene.prepareDetails) {
-        try { await scene.prepareDetails(loaded, signal); }
+      if (preparing.prepareDetails) {
+        try { await preparing.prepareDetails(loaded, signal); }
         catch (error) { loaded.dispose(); throw error; }
         if (signal.aborted) { loaded.dispose(); throw new DOMException("Superseded.", "AbortError"); }
         markCharacter("prepared");
       }
-      const placed = scene.setCharacterDetails(loaded);
+      let completed: Scene;
+      try { completed = await wanted(ready, signal); }
+      catch (error) { loaded.dispose(); throw error; }
+      const placed = completed.setCharacterDetails(loaded);
       markCharacter("placed");
       if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(() => markCharacter("frame")));
       shown = loaded;

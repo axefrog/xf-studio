@@ -16,6 +16,8 @@ import { depotHash } from "../src/game/depot-path";
 import type { Installation } from "../src/game/host/resolver-host";
 import { cn, cr2w, fixtureInstallation, handle, rh } from "./resolver-fixtures";
 import { tempDir } from "./temp-dir";
+import { hostJobs } from "../src/host/host-jobs";
+import type { JobScheduler } from "../src/platform/api/jobs";
 
 const SET = "base\\animations\\ui\\photomode\\test_faces.anims";
 const MAIN = ["eye_l_blink", "eye_r_blink", "lips_l_corner_up", "lips_r_corner_up", "jaw_mid_open", "lips_tighten_up"];
@@ -80,7 +82,7 @@ const solvableSetup = cr2w({ $type: "animFacialSetup", version: 8,
 const solvableAdditives = animSet([["additive__blink_normal__01", "AdditiveFromRefPose", 0.5,
   [[0, E13, 0], [0.1, E13, 1], [0.5, E13, 0], [0, E13 + 1, 0], [0.1, E13 + 1, 1], [0.5, E13 + 1, 0]], []]]);
 
-type WorldOptions = { spawn?: FacialSolverSpawner; solveTimeoutMs?: number; now?: () => number; jsonBudget?: number;
+type WorldOptions = { jobs?: JobScheduler; spawn?: FacialSolverSpawner; solveTimeoutMs?: number; now?: () => number; jsonBudget?: number;
   /** A mod archive that also provides the animation set, with these faces. */
   setOverride?: object;
   /** Awaited before extraction number `n` (from 1) writes anything; a throw fails that extraction. */
@@ -130,7 +132,7 @@ function world(root: string, options: WorldOptions = {}) {
       return new Promise(resolve => solves.push({ frames: frames.length, resolve }));
     } };
   const cli = join(root, "wk.exe"); writeFileSync(cli, "fake");
-  const host = new FacialHost({ cacheRoot: root, resolverCache: join(root, "resolver"),
+  const host = new FacialHost({ jobs: options.jobs, cacheRoot: root, resolverCache: join(root, "resolver"),
     settings: () => ({ gameRoot: root, launchRoute: "direct", mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: cli }),
     solver: () => options.inApp ? IN_APP_SOLVER : { addon: "addon", python: "python", script: "server.py" },
     open: () => ({ ...fixture, fetcher: options.native ? { ...fixture.graph.port, nativeDecoder } : fixture.graph.port }) as unknown as Installation, extract,
@@ -532,6 +534,20 @@ test("the idle's face and the blink read only the face: the installed expression
     expect(host.expressions()).toMatchObject({ phase: "ready", items: [{ label: "Happy" }, { label: "Grin" }] });
     expect(extractions()).toBeGreaterThan(read);
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("the shown blink completes while the editor's ahead control probe is deferred (PREV-196 step 2)", async () => {
+  const root = tempDir("xfs-facial-priority-"), jobs = hostJobs({ quietMs: 0 }), release = Promise.withResolvers<void>();
+  const held = jobs.cooperate("shown", () => release.promise);
+  const { host } = world(root, { solvable: true, inApp: true, jobs });
+  try {
+    const blink = await host.blink();
+    expect("reason" in blink).toBe(false);
+    expect(host.state().solver.phase).toBe("starting");
+    release.resolve(); await held;
+    for (let i = 0; i < 30 && host.state().solver.phase === "starting"; i++) await new Promise<void>(done => setImmediate(done));
+    expect(host.state().solver.phase).toBe("ready");
+  } finally { release.resolve(); host.dispose(); await held; rmSync(root, { recursive: true, force: true }); }
 });
 
 test("the game's blink solved by XF Studio's own solver: the clip at 60 Hz and the closure in 21 steps, through its endpoint (PREV-181)", async () => {

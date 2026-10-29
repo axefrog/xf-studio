@@ -10,7 +10,7 @@
  *   may hold a resource the person now waits on.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
-import { yieldToEventLoop } from "./event-loop";
+import { timeSlicer, yieldToEventLoop } from "./event-loop";
 import { hostClock, type Clock } from "../platform/core/clock";
 import { createJobScheduler, type JobContext, type JobLane, type JobScheduler } from "../platform/core/jobs";
 import { raiseBackgroundWolvenKit } from "./wolvenkit-cli";
@@ -20,6 +20,16 @@ let personRuns = 0;
 
 /** The lane of the job the calling code runs for, or null outside any job. */
 export const currentLane = (): JobLane | null => lanes.getStore()?.lane() ?? null;
+/** The cooperative turn of the calling job/read (a solver called inside it keeps the same lane). */
+export const currentTurn = (): (() => Promise<void>) | undefined => lanes.getStore()?.turn;
+
+/** Reads outside the preparation slot still participate in its priority policy. Tests/tools without a scheduler retain fair slices. */
+export function hostWork<T>(jobs: JobScheduler | undefined, lane: JobLane, run: (turn: () => Promise<void>) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (jobs) return jobs.cooperate(lane, context => run(context.turn), signal);
+  signal?.throwIfAborted();
+  const slice = timeSlicer();
+  return run(async () => { signal?.throwIfAborted(); await slice(); signal?.throwIfAborted(); });
+}
 /** Whether the calling code runs for work below the person lane (a choice prepared ahead, the V resolved after a restart). */
 export const inLowerLane = (): boolean => { const lane = currentLane(); return lane === "shown" || lane === "ahead"; };
 /** Whether a person's job runs now in this process. */

@@ -31,6 +31,8 @@ export { POSE_SAMPLE_SCHEMA, POSE_STATE_SCHEMA, type PoseCatalogueLoad, type Pos
 import type { Installation, InstallationOptions } from "../../game/host/resolver-host";
 import { childId, TweakDbBlob, type TweakValue, tweakDbId } from "../../game/tweakdb-flats";
 import { timeSlicer } from "../../host/event-loop";
+import { hostWork } from "../../host/host-jobs";
+import type { JobScheduler } from "../../platform/api/jobs";
 
 const PUPPET_GENDERS = "Character.Player_Puppet_Photomode.genders";
 const GENDER_RECORD: Record<PoseBodyGender, string> = { female: "Gender.Female", male: "Gender.Male" };
@@ -121,10 +123,10 @@ const setIndexes = new Map<string, SetIndexCache>();
 
 /** Build one body gender's catalogue from an opened installation. */
 export async function loadPoseCatalogue(installation: Installation, options: { gameRoot: string; cacheDir: string; bodyGender: PoseBodyGender; language?: string | null;
-  log?: (message: string) => void; openMs?: number }): Promise<PoseCatalogueLoad> {
+  log?: (message: string) => void; openMs?: number; turn?: () => Promise<void> }): Promise<PoseCatalogueLoad> {
   const { gameRoot, cacheDir, bodyGender, log } = options;
   const started = performance.now();
-  const turn = timeSlicer();
+  const turn = options.turn ?? timeSlicer();
   let mark = started;
   const lap = () => { const now = performance.now(), ms = now - mark; mark = now; return Math.round(ms); };
 
@@ -235,6 +237,7 @@ export async function loadPoseCatalogue(installation: Installation, options: { g
 }
 
 export type PoseHostOptions = {
+  jobs?: JobScheduler;
   /** The launch route (WolvenKit optional), or null while the game folder isn't set up. */
   route: () => PoseRoute | null;
   /** The installation fingerprint (character-detail-host.ts `installationFingerprint`). */
@@ -260,15 +263,15 @@ export class PoseCatalogueHost {
     const key = this.key(), known = this.entries.get(gender);
     if (known && known.key === key && (!known.error || !force)) return known.promise;
     const entry: Entry = { key, promise: null as never, loaded: null, error: null };
-    entry.promise = (async () => {
+    entry.promise = hostWork(this.options.jobs, "ahead", async turn => {
       const openStarted = performance.now();
       const open = this.options.open ?? (await import("../../game/host/installation-registry")).acquireInstallation;
       const installation = await open({ ...route, cacheDir: this.options.resolverCache, log: this.options.log });
       const load = await loadPoseCatalogue(installation, { gameRoot: route.gameRoot, cacheDir: this.options.resolverCache, bodyGender: gender,
-        language: this.options.language?.() ?? null, log: this.options.log, openMs: performance.now() - openStarted });
+        language: this.options.language?.() ?? null, log: this.options.log, openMs: performance.now() - openStarted, turn });
       entry.loaded = { load, installation };
       return entry.loaded;
-    })();
+    });
     entry.promise.catch(error => { entry.error = (error as Error)?.message ?? String(error); this.options.log?.(`Poses were not read: ${(error as Error)?.stack ?? error}`); });
     this.entries.set(gender, entry);
     return entry.promise;

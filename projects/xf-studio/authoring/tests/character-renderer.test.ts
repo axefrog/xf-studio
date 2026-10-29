@@ -415,6 +415,42 @@ test("detail preparation fills a bounded window instead of waiting fifteen frame
   expect(slow.fences.every(fence => fence.deleted)).toBe(true);
 });
 
+test.each([false, true])("the first-use drain overlaps linking and refreshes after newer GPU work (later draw=%s)", async later => {
+  const slow = slowUploadRenderer(), texture = new THREE.Texture({ width: 1024, height: 1024 }); texture.needsUpdate = true;
+  const rig = headRig(), motion = rig.motion;
+  let ready = false, uses = 0;
+  Object.defineProperty(rig, "motion", { get() { if (!ready) throw Error("Blink is still loading; preparation must not read motion."); return motion; } });
+  const character = createCharacterRenderer({ scene: new THREE.Scene(), renderer: slow.renderer, rig, superseded: () => [] });
+  try {
+    const details = v("overlap", [component("hair", "hair", [skinned(quad(), "hair")], { textures: [texture] })]);
+    const linked = async () => {
+      // Start the independent link completion clock after preparation has captured its fence.
+      await new Promise<void>(resolve => setImmediate(resolve));
+      for (let i = 0; i < 20; i++) await slow.frame();
+      if (later) slow.renderer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
+    };
+    await character.prepareDetails(details, { frame: slow.frame, compile: () => ({ steps: [],
+      result: () => ({ ready: linked(), textures: [], programs: () => [{ getAttributes() {}, getUniforms() { uses++; expect(slow.frames()).toBe(later ? 50 : 35); } }] }) }) });
+    expect(uses).toBe(1);
+    expect(slow.frames()).toBe(later ? 50 : 35);
+  } finally { ready = true; character.dispose(); texture.dispose(); }
+  expect(slow.fences.every(fence => fence.deleted)).toBe(true);
+});
+
+test("release deletes an overlapped first-use fence while a non-cancellable link reply is still pending", async () => {
+  const slow = slowUploadRenderer(), texture = new THREE.Texture({ width: 1024, height: 1024 }); texture.needsUpdate = true;
+  const character = createCharacterRenderer({ scene: new THREE.Scene(), renderer: slow.renderer, rig: headRig(), superseded: () => [] });
+  const compiling = Promise.withResolvers<void>();
+  const pending = character.prepareDetails(v("cancel drain", [component("hair", "hair", [skinned(quad(), "hair")], { textures: [texture] })]), {
+    frame: slow.frame, compile: () => { compiling.resolve(); return { steps: [],
+      result: () => ({ ready: new Promise<void>(() => {}), textures: [], programs: () => [] }) }; },
+  });
+  await compiling.promise; await new Promise<void>(done => setImmediate(done));
+  expect(slow.fences.filter(fence => !fence.deleted).length).toBeGreaterThan(0);
+  character.dispose(); expect(slow.fences.every(fence => fence.deleted)).toBe(true);
+  await pending; texture.dispose();
+});
+
 test("a face option's hair strands (the beard's cards) draw with the hair's order and cast like hair; its decals keep the face order (render gap plans §6)", () => {
   const { character } = setup();
   const strand = (name: string) => {

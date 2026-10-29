@@ -395,14 +395,16 @@ export function gameBlinkFromRecord(record: FacialBlinkRecord): { scene: THREE.O
  * is there, GAME_BLINK_DAMAGED when it can't be read, the parser's own sentence when its description doesn't fit, GAME_BLINK_OTHER_HEAD
  * for another head's rig and GAME_BLINK_NO_JOINTS when none of its joints are in `targets`.
  */
-export async function loadGameBlink(targets: readonly THREE.Object3D[], fetcher: (url: string) => Promise<Response> = fetch,
-  timer?: BlinkTimer): Promise<GameBlink> {
+export async function loadGameBlink(targets: readonly THREE.Object3D[], fetcher: (url: string, init?: RequestInit) => Promise<Response> = fetch,
+  timer?: BlinkTimer, signal?: AbortSignal): Promise<GameBlink> {
+  signal?.throwIfAborted();
   let reason = GAME_BLINK_MISSING, answer: (FacialBlinkRecord & { error?: string }) | null = null, ok = false;
   try {
-    const response = await fetcher(FACIAL_BLINK_ENDPOINT);
+    const response = await fetcher(FACIAL_BLINK_ENDPOINT, { signal });
     ok = response.ok;
     answer = await response.json().catch(() => null) as (FacialBlinkRecord & { error?: string }) | null;
   } catch { /* The host couldn't be reached: a prepared asset, if any. */ }
+  signal?.throwIfAborted();
   if (ok && answer?.schema === FACE_MOTION_SCHEMA) {
     const { scene, clips } = gameBlinkFromRecord(answer);
     const blink = new GameBlink(scene, clips, targets, undefined, timer);
@@ -410,21 +412,23 @@ export async function loadGameBlink(targets: readonly THREE.Object3D[], fetcher:
     return blink;
   }
   if (typeof answer?.error === "string" && answer.error) reason = answer.error;
-  return loadPreparedBlink(targets, fetcher, timer, reason);
+  return loadPreparedBlink(targets, fetcher, timer, reason, signal);
 }
 
 /** A developer's prepared blink asset (the IO Suite oracle's bake), where the host answers none. */
-async function loadPreparedBlink(targets: readonly THREE.Object3D[], fetcher: (url: string) => Promise<Response>, timer: BlinkTimer | undefined,
-  missing: string): Promise<GameBlink> {
+async function loadPreparedBlink(targets: readonly THREE.Object3D[], fetcher: (url: string, init?: RequestInit) => Promise<Response>, timer: BlinkTimer | undefined,
+  missing: string, signal?: AbortSignal): Promise<GameBlink> {
   let bytes: ArrayBuffer;
   try {
-    const response = await fetcher(GAME_BLINK_ASSET);
+    const response = await fetcher(GAME_BLINK_ASSET, { signal });
     if (!response.ok) throw Error(missing);
     bytes = await response.arrayBuffer();
-  } catch { throw Error(missing); }
+  } catch { signal?.throwIfAborted(); throw Error(missing); }
+  signal?.throwIfAborted();
   let gltf: Awaited<ReturnType<GLTFLoader["parseAsync"]>>;
   try { gltf = await new GLTFLoader().parseAsync(bytes, ""); }
   catch { throw Error(GAME_BLINK_DAMAGED); }
+  signal?.throwIfAborted();
   const clips = parseGameBlink(gltf.asset?.extras, gltf.animations);
   const blink = new GameBlink(gltf.scene, clips, targets, undefined, timer);
   if (!blink.bindings.length) throw Error(GAME_BLINK_NO_JOINTS);
