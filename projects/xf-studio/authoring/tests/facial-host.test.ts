@@ -553,7 +553,7 @@ function solveClock() {
   } };
 }
 
-test("a real in-app probe keeps its analysis after a person pauses it longer than the solve deadline", async () => {
+test("a real in-app probe keeps its analysis when a CPU turn waits longer than the solve deadline", async () => {
   const root = tempDir("xfs-facial-priority-"), time = solveClock(), jobs = hostJobs({ clock: time.clock, quietMs: 0 });
   const entered = Promise.withResolvers<void>(), personDone = Promise.withResolvers<void>();
   let paused = false, turns = 0, signal: AbortSignal | undefined, personEnded: Promise<unknown> | undefined;
@@ -567,6 +567,7 @@ test("a real in-app probe keeps its analysis after a person pauses it longer tha
           if (!paused) {
             paused = true;
             personEnded = jobs.want("page", { key: "V", lane: "person", run: () => personDone.promise }).settled;
+            time.advance(8); // Spend the slice: its next turn waits for CPU admission, not for the person's async scope.
             entered.resolve();
           }
           await own!.turn!();
@@ -641,18 +642,16 @@ test("releasing the facial host cancels an abandoned probe and its deadline imme
   } finally { host.dispose(); late.resolve({ q: "", t: "", ms: 0 }); rmSync(root, { recursive: true, force: true }); }
 });
 
-test("the shown blink completes while the editor's ahead control probe is deferred (PREV-196 step 2)", async () => {
-  const root = tempDir("xfs-facial-priority-"), jobs = hostJobs({ quietMs: 0 }), release = Promise.withResolvers<void>();
-  const held = jobs.cooperate("shown", () => release.promise);
+test("the shown blink is admitted before the editor's ahead control probe (PREV-196 step 2)", async () => {
+  const root = tempDir("xfs-facial-priority-"), jobs = hostJobs({ quietMs: 0 });
   const { host } = world(root, { solvable: true, inApp: true, jobs });
   try {
     const blink = await host.blink();
     expect("reason" in blink).toBe(false);
     expect(host.state().solver.phase).toBe("starting");
-    release.resolve(); await held;
     for (let i = 0; i < 30 && host.state().solver.phase === "starting"; i++) await new Promise<void>(done => setImmediate(done));
     expect(host.state().solver.phase).toBe("ready");
-  } finally { release.resolve(); host.dispose(); await held; rmSync(root, { recursive: true, force: true }); }
+  } finally { host.dispose(); rmSync(root, { recursive: true, force: true }); }
 });
 
 test("the game's blink solved by XF Studio's own solver: the clip at 60 Hz and the closure in 21 steps, through its endpoint (PREV-181)", async () => {

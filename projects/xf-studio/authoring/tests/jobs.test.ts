@@ -42,7 +42,7 @@ function simulatedClock() {
     time = target;
     await flush();
   }
-  return { clock, flush, advance, now: () => time };
+  return { clock, flush, advance, now: () => time, pendingTimers: () => timers.length };
 }
 
 /** A job the test ends by hand, logging its start, stop and end. */
@@ -69,6 +69,29 @@ const want = (jobs: JobScheduler, requester: string, key: string, lane: JobLane,
   jobs.want(requester, { key, lane, run, ...extra });
 
 describe("the job scheduler", () => {
+  test.each([0, 400])("a stopped check's cooperative lookup tail drains before exclusive Clear and later person work (quiet=%s)", async quiet => {
+    const { jobs, flush, advance } = setup(quiet), life = new AbortController();
+    const read = Promise.withResolvers<void>(), log: string[] = [];
+    const parent = want(jobs, "prefetch", "check", "ahead", async context => {
+      const lookup = jobs.cooperate("ahead", async turn => { await read.promise; await turn.turn(); log.push("lookup"); }, life.signal);
+      context.afterwards(lookup);
+      await Promise.race([lookup, new Promise<void>(resolve => context.signal.addEventListener("abort", () => resolve(), { once: true }))]);
+    });
+    try {
+      await flush();
+      const clear = want(jobs, "clear", "clear", "person", async () => { log.push("clear"); }, { exclusive: true });
+      const person = want(jobs, "page", "V", "person", async () => { log.push("person"); });
+      await flush();
+      expect(parent.state().phase).toBe("stopped");
+      expect(log).toEqual([]);
+      await advance(8); read.resolve(); await flush(); await advance(400);
+      expect(log).toEqual(["lookup", "clear", "person"]);
+      expect((await clear.settled).status).toBe("done");
+      expect((await person.settled).status).toBe("done");
+      await jobs.idle();
+    } finally { life.abort(); jobs.release("prefetch"); jobs.release("clear"); jobs.release("page"); read.resolve(); await flush(); }
+  });
+
   test("an ahead job's cooperative dependency finishes before yielding its occupied slot to a queued shown job", async () => {
     const { jobs, flush, advance } = setup();
     const read = Promise.withResolvers<void>(), entered = Promise.withResolvers<void>();
@@ -87,32 +110,91 @@ describe("the job scheduler", () => {
     expect((await shown.settled).status).toBe("done");
   });
 
-  test("cooperative shown reads pause ahead reads and jobs without occupying the person preparation slot", async () => {
-    const { jobs, advance, flush } = setup();
-    const life = new AbortController(), shownDone = Promise.withResolvers<void>(), personDone = Promise.withResolvers<void>();
+  test("ready cooperative CPU turns run person, shown, ahead at admission and after a slice", async () => {
+    const { jobs, advance, flush } = setup(), next = Promise.withResolvers<void>();
     const log: string[] = [];
-    const shown = jobs.cooperate("shown", async context => { log.push("shown start"); await shownDone.promise; await context.turn(); log.push("shown end"); }, life.signal);
+    const reads = (["ahead", "shown", "person"] as const).map(lane => jobs.cooperate(lane, async context => {
+      log.push(`${lane} start`); await next.promise; await context.turn(); log.push(`${lane} end`);
+    }));
     await flush();
-    const ahead = jobs.cooperate("ahead", async () => { log.push("ahead read"); }, life.signal);
-    const background = want(jobs, "background", "background", "ahead", async () => { log.push("ahead job"); });
-    const person = want(jobs, "page", "V", "person", async () => { log.push("person"); await personDone.promise; });
-    shownDone.resolve(); await flush();
-    expect(log).toEqual(["shown start", "person"]);
-    personDone.resolve(); await person.settled; await advance(399);
-    expect(log).toEqual(["shown start", "person"]);
-    await advance(1); await shown; await advance(400); await ahead; await background.settled;
-    expect(log).toEqual(["shown start", "person", "shown end", "ahead read", "ahead job"]);
-    life.abort();
+    expect(log).toEqual(["person start", "shown start", "ahead start"]);
+    await advance(8); next.resolve(); await flush(); await Promise.all(reads);
+    expect(log).toEqual(["person start", "shown start", "ahead start", "person end", "shown end", "ahead end"]);
   });
 
-  test("aborting a cooperative read waiting for priority releases its lane and listener", async () => {
-    const { jobs, flush } = setup(0), life = new AbortController(), release = jobs.hold();
+  test("admitting a higher read never strands an already admissible preparation job", async () => {
+    const { jobs, flush } = setup(0), log: string[] = [];
+    const background = want(jobs, "background", "background", "ahead", async () => { log.push("job"); });
+    const read = jobs.cooperate("shown", async () => { log.push("read"); });
+    await flush();
+    expect(log).toEqual(["read", "job"]);
+    await read; expect((await background.settled).status).toBe("done");
+  });
+
+  test("a shown read wins admission over an ahead job, but holds no permit while awaiting an ahead dependency", async () => {
+    const { jobs, advance, flush } = setup();
+    const log: string[] = [];
+    const background = want(jobs, "background", "background", "ahead", async () => { log.push("ahead job"); });
+    const shown = jobs.cooperate("shown", async () => {
+      log.push("shown start");
+      await jobs.cooperate("ahead", async () => { log.push("dependency"); });
+      log.push("shown end");
+    });
+    await flush();
+    expect(log).toEqual(["shown start", "dependency", "shown end"]);
+    await shown; await advance(400); await background.settled;
+    expect(log).toEqual(["shown start", "dependency", "shown end", "ahead job"]);
+  });
+
+  test.each(["person", "shown", "ahead"] as const)("a running %s job may await an ahead cooperative dependency", async lane => {
+    const { jobs, flush } = setup(0), log: string[] = [];
+    const parent = want(jobs, "owner", "owner", lane, async () => {
+      await jobs.cooperate("ahead", async () => { log.push("dependency"); }); log.push("owner");
+    });
+    await flush();
+    expect(log).toEqual(["dependency", "owner"]);
+    expect((await parent.settled).status).toBe("done");
+  });
+
+  test("a person's request starts immediately while a shown read awaits I/O", async () => {
+    const { jobs, flush } = setup(), io = Promise.withResolvers<void>(), log: string[] = [];
+    const shown = jobs.cooperate("shown", async () => { log.push("shown"); await io.promise; });
+    await flush();
+    const person = want(jobs, "page", "V", "person", async () => { log.push("person"); });
+    expect(log).toEqual(["shown", "person"]);
+    io.resolve(); await shown; expect((await person.settled).status).toBe("done");
+  });
+
+  test("aborting a cooperative CPU admission removes its ready continuation and abort listener", async () => {
+    const { jobs, flush, pendingTimers } = setup(0), life = new AbortController(), release = jobs.hold();
     let calls = 0;
     const stopped = jobs.cooperate("shown", async () => { calls++; }, life.signal).catch(error => error.name);
     life.abort(); expect(await stopped).toBe("AbortError"); expect(calls).toBe(0);
     release();
-    await jobs.cooperate("ahead", async () => { calls++; }); await flush();
+    const next = jobs.cooperate("ahead", async () => { calls++; }); await flush(); await next;
     expect(calls).toBe(1);
+    expect(pendingTimers()).toBe(0);
+  });
+
+  test("aborting a read during a queued CPU turn never runs its continuation or retains a wake-up", async () => {
+    const { jobs, flush, advance, pendingTimers } = setup(0), life = new AbortController(), next = Promise.withResolvers<void>();
+    let calls = 0;
+    const read = jobs.cooperate("shown", async context => { calls++; await next.promise; await context.turn(); calls++; }, life.signal)
+      .catch(error => error.name);
+    await flush(); await advance(8); next.resolve();
+    for (let i = 0; i < 20; i++) await Promise.resolve(); // The turn is queued; the clock's dispatch has not run.
+    life.abort(); await flush();
+    expect(await read).toBe("AbortError"); expect(calls).toBe(1); expect(pendingTimers()).toBe(0);
+  });
+
+  test("a person hold can await a cooperative read without admitting background jobs", async () => {
+    const { jobs, flush, advance } = setup(), release = jobs.hold(), log: string[] = [];
+    const background = want(jobs, "background", "background", "ahead", async () => { log.push("job"); });
+    const read = jobs.cooperate("ahead", async () => { log.push("read"); });
+    await flush(); await read;
+    expect(log).toEqual(["read"]);
+    release(); await advance(400); await background.settled;
+    expect(log).toEqual(["read", "job"]);
   });
 
   test("one run at a time; the person lane runs in the order asked (PIPE-103)", async () => {

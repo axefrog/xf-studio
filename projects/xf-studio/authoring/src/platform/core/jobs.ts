@@ -9,6 +9,8 @@
  *   committed, and starts once that run returned (a committed one finishes first; its result is kept).
  * - **Work lets go before the next lower job.** What a run hands to `afterwards` keeps settling after it returned; the next job below the
  *   person lane, and every exclusive job, wait for it (PREV-102, PREV-120). Person work doesn't: a stopped batch never holds a person up.
+ * - **Read priority applies to ready CPU turns.** Cooperative reads never wait for jobs, tails, holds or another async read to end. Their
+ *   ready continuations are admitted by lane, independently of the preparation slot; no permit is held across I/O or a dependency.
  * - **Demand.** A job runs only while a want holds it: a requester's new want replaces its previous one, and a job no want holds is
  *   stopped (a waiting one is dropped) unless it committed.
  * - **Never unhandled.** `settled` never rejects, and a failure is reported once (PREV-101).
@@ -52,6 +54,7 @@ type Job = {
   context?: JobContext;
 };
 type Held = { readonly requester: string; readonly job: Job; readonly want: Want<unknown>; unlisten: (() => void) | null };
+type ReadTurn = { readonly lane: JobLane; resume(): void };
 
 /** An `AbortError` for a stopped job's `turn()`. */
 function stoppedError(signal: AbortSignal): Error {
@@ -71,7 +74,8 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
   let running: Job | null = null;
   const tails = new Set<Promise<void>>();
   const holders = new Map<string, Held>();
-  const holds: Record<JobLane, number> = { person: 0, shown: 0, ahead: 0 };
+  let holds = 0;
+  const readTurns: ReadTurn[] = [];
   let seq = 0;
   /** When each lane last had activity (a want, a run ending; a touch or a hold for the person lane). */
   const lastAt: Record<JobLane, number> = { person: -Infinity, shown: -Infinity, ahead: -Infinity };
@@ -82,12 +86,11 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
   const now = () => clock.monotonic();
   const notify = () => { for (const listener of [...listeners]) listener(); };
   /** Runs `check` on every change until it answers true; resolves then. */
-  const until = (check: () => boolean, signal?: AbortSignal): Promise<void> => {
-    if (signal?.aborted || check()) return Promise.resolve();
+  const until = (check: () => boolean): Promise<void> => {
+    if (check()) return Promise.resolve();
     return new Promise(resolve => {
-      const listener = () => { if (signal?.aborted || check()) { listeners.delete(listener); signal?.removeEventListener("abort", listener); resolve(); } };
+      const listener = () => { if (check()) { listeners.delete(listener); resolve(); } };
       listeners.add(listener);
-      signal?.addEventListener("abort", listener, { once: true });
     });
   };
   /** Pump again at `at` (monotonic), keeping only the earliest wake. */
@@ -103,10 +106,23 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
   /** When the lanes above `lane` will have been quiet long enough for `need` ms (monotonic), or now if they are; Infinity while held. */
   const quietFrom = (lane: JobLane, need: number): number => {
     if (RANK[lane] === 0) return -Infinity;
-    if (holds.person > 0 || RANK[lane] > 1 && holds.shown > 0) return Infinity;
+    if (holds > 0) return Infinity;
     let at = lastAt.person + need;
     if (RANK[lane] > 1) at = Math.max(at, lastAt.shown + quietMs);
     return at;
+  };
+
+  /** A CPU continuation, not an async scope: dispatch never waits for the job slot or for any other work to finish. */
+  const readTurn = (lane: JobLane, signal: AbortSignal): Promise<void> => {
+    signal.throwIfAborted();
+    return new Promise(resolve => {
+      const turn: ReadTurn = { lane, resume() { signal.removeEventListener("abort", cancel); resolve(); } };
+      const cancel = () => { const index = readTurns.indexOf(turn); if (index >= 0) readTurns.splice(index, 1); turn.resume(); schedule(); };
+      readTurns.push(turn);
+      signal.addEventListener("abort", cancel, { once: true });
+      lastAt[lane] = now();
+      schedule();
+    });
   };
   /** The person job asked first, if any waits. */
   const firstPerson = () => {
@@ -115,14 +131,13 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
     return found;
   };
 
-  function pump(): void {
-    if (!queue.length && !listeners.size) { wakeTimer?.abort(); wakeTimer = null; wakeAt = Infinity; }
-    if (running) { notify(); return; }
+  /** Only preparation jobs need the slot, tails, holds and quiet periods. */
+  function nextJob(): Job | undefined {
+    if (running) return;
     const person = firstPerson();
     if (person) {
       if (person.exclusive && tails.size) return; // A tail settling pumps again.
-      start(person);
-      return;
+      return person;
     }
     if (queue.length) {
       if (tails.size) return;
@@ -132,7 +147,7 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
         if (!candidates.length) continue;
         for (const job of candidates) {
           const at = quietFrom(lane, Math.max(quietMs, job.quietMs));
-          if (at <= now()) { start(job); return; }
+          if (at <= now()) return job;
           earliest = Math.min(earliest, at);
         }
         // `ahead` never starts while `shown` work waits.
@@ -140,6 +155,18 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
       }
       if (Number.isFinite(earliest)) wakeAtTime(earliest);
     }
+  }
+
+  function pump(): void {
+    if (!queue.length && !listeners.size) { wakeTimer?.abort(); wakeTimer = null; wakeAt = Infinity; }
+    const job = nextJob();
+    let turn: ReadTurn | undefined;
+    for (const ready of readTurns) if (!turn || RANK[ready.lane] < RANK[turn.lane]) turn = ready;
+    // A blocked exclusive Clear (or a running job) never blocks a read it may need to drain. Selection considers only an
+    // admissible job and ready CPU continuations; granting a continuation acquires no resource and requires no completion.
+    if (turn && (!job || RANK[turn.lane] < RANK[job.lane])) { readTurns.splice(readTurns.indexOf(turn), 1); turn.resume(); }
+    else if (job) start(job);
+    if (readTurns.length || job?.phase === "waiting") schedule();
     notify();
   }
 
@@ -248,27 +275,18 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
     async cooperate<T>(lane: JobLane, run: (context: Pick<JobContext, "signal" | "turn">) => Promise<T>, wanted?: AbortSignal): Promise<T> {
       const signal = wanted ?? new AbortController().signal;
       signal.throwIfAborted();
-      holds[lane]++; lastAt[lane] = now(); notify();
       let lastYield = now();
       const context: JobContext = { signal, lane: () => lane, progress() {}, commit() {}, afterwards() {},
         async turn() {
-          if (now() - lastYield >= sliceMs) { await yieldTurn(); lastYield = now(); }
           signal.throwIfAborted();
-          await until(() => {
-            // A queued job cannot start while the slot is occupied. A read that the slot's owner awaits must be allowed to
-            // finish and release it; otherwise each waits for the other. Active higher work/holds still take priority.
-            if (running ? RANK[running.lane] < RANK[lane] : queue.some(job => RANK[job.lane] < RANK[lane])) return false;
-            const at = quietFrom(lane, quietMs);
-            if (at <= now()) return true;
-            if (Number.isFinite(at)) wakeAtTime(at);
-            return false;
-          }, signal);
+          if (now() - lastYield >= sliceMs || readTurns.some(ready => RANK[ready.lane] < RANK[lane])) {
+            await readTurn(lane, signal); lastYield = now();
+          }
           signal.throwIfAborted();
         } };
-      try {
-        await context.turn();
-        return await (options.enter ? options.enter(context, () => run(context)) : run(context));
-      } finally { holds[lane]--; lastAt[lane] = now(); schedule(); notify(); }
+      await readTurn(lane, signal);
+      signal.throwIfAborted(); lastYield = now();
+      return options.enter ? options.enter(context, () => run(context)) : run(context);
     },
     want<T>(requester: string, spec: JobSpec<T>, signal?: AbortSignal): Want<T> {
       if (signal?.aborted) {
@@ -311,13 +329,13 @@ export function createJobScheduler(options: JobSchedulerOptions): JobScheduler {
     },
     touch() { lastAt.person = Math.max(lastAt.person, now()); notify(); },
     hold() {
-      holds.person++;
+      holds++;
       let open = true;
       notify();
       return () => {
         if (!open) return;
         open = false;
-        holds.person--;
+        holds--;
         lastAt.person = Math.max(lastAt.person, now());
         schedule();
         notify();
