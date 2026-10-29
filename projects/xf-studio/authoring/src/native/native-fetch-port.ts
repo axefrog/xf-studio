@@ -20,6 +20,9 @@
  *   WolvenKit), keyed by (depot hash, archive fingerprint, `NativeReader.identity`), never by the WolvenKit identity, so a WolvenKit
  *   update does not invalidate native answers and a reader change does not reuse old ones.
  * - Native answers are not `fresh`: the resource graph's prefetch exists to batch WolvenKit launches, which native reads don't need.
+ * - The host supplies lane priority at this public port. When another consumer joins a graph/model read, `promote` raises the same
+ *   queued archive/hash to that consumer's lane. Shared reads inherit their most urgent consumer; promotion appends to the higher
+ *   lane once, never demotes/reorders equal work, duplicates a decode, or interrupts the active resource. Queue order adds no waits.
  * - A fallback whose native failure may not repeat (`unavailable`, `io`) counts as transient when the fallback also
  *   fails, so the resource graph reads it again later instead of settling on the fallback's lasting failure.
  */
@@ -31,6 +34,7 @@ import { NativeArchivePool } from "./archive-reader";
 import type { Decompress } from "./kark";
 import { DEFAULT_LIMITS, type DefaultedProperty, type NativeLimits, type NativeNote } from "./limits";
 import { InProcessDecoder, type NativeDecodeOutcome, type NativeDecodeRequest, type NativeDecoder, WorkerDecoder } from "./native-decode";
+import type { NativePriority, PrioritisedNativeRequest } from "./native-priority";
 import { NATIVE_FAILURE_KINDS, type NativeFailureKind } from "./native-errors";
 import { loadGameOodle, type OodleLibrary, OodleUnavailableError, openGameOodle, type OodleVerifier, type OodleVerifierSync } from "./oodle";
 import { NATIVE_READER_VERSION } from "./resource-document";
@@ -168,6 +172,8 @@ export interface NativeAnswerLedger {
 export const TRANSIENT_NATIVE_FAILURES: ReadonlySet<NativeFailureKind> = new Set(["unavailable", "io"]);
 
 export interface NativeFirstOptions {
+  /** The host's current lane, evaluated at submission and when a consumer joins a shared read. No host scheduler dependency here. */
+  readonly priority?: () => NativePriority | undefined;
   /** Rethrow reader bugs (`internal` failures) instead of falling back, for tests and benches. */
   readonly strict?: boolean;
   /** Sees every fallback as it happens (diagnostics), with the reader's own stack for an `internal` failure (the worker's). */
@@ -179,7 +185,25 @@ export interface NativeFirstOptions {
 /** A reader bug surfaced by a strict port (`strict: true`). */
 export class NativeInternalError extends Error { override name = "NativeInternalError"; }
 
+/** Stateless priority view over the route-owned decoder: no second queue, worker or lifetime. Explicit submission priorities win. */
+function withPriority(decoder: NativeDecoder, priority: () => NativePriority | undefined): NativeDecoder {
+  const requestInLane = <T extends PrioritisedNativeRequest>(request: T): T =>
+    request.priority === undefined ? { ...request, priority: priority() } : request;
+  return {
+    get identity() { return decoder.identity; },
+    decode: request => decoder.decode(requestInLane(request)),
+    ...(decoder.decodeAnim ? { decodeAnim: (request: Parameters<NonNullable<NativeDecoder["decodeAnim"]>>[0]) => decoder.decodeAnim!(requestInLane(request)) } : {}),
+    ...(decoder.decodeTexture ? { decodeTexture: (request: Parameters<NonNullable<NativeDecoder["decodeTexture"]>>[0]) => decoder.decodeTexture!(requestInLane(request)) } : {}),
+    ...(decoder.decodeMask ? { decodeMask: (request: Parameters<NonNullable<NativeDecoder["decodeMask"]>>[0]) => decoder.decodeMask!(requestInLane(request)) } : {}),
+    ...(decoder.decodeGeometry ? { decodeGeometry: (request: Parameters<NonNullable<NativeDecoder["decodeGeometry"]>>[0]) => decoder.decodeGeometry!(requestInLane(request)) } : {}),
+    ...(decoder.promote ? { promote: (archivePath: string, hash: string, chosen?: NativePriority) => decoder.promote!(archivePath, hash, chosen ?? priority()) } : {}),
+    ...(decoder.canAnswer ? { canAnswer: () => decoder.canAnswer!() } : {}),
+    close: () => decoder.close(),
+  };
+}
+
 export class NativeFirstFetcher implements ResourceFetchPort {
+  readonly decoder: NativeDecoder;
   readonly stats: NativeFetchStats = { native: 0, fallback: 0, byKind: Object.fromEntries(NATIVE_FAILURE_KINDS.map(kind => [kind, 0])) as Record<NativeFailureKind, number>, samples: [], internal: [] };
   /**
    * Resources the last answer for came from the fallback, with the native failure's kind and whether it will hold for the session (so
@@ -187,7 +211,12 @@ export class NativeFirstFetcher implements ResourceFetchPort {
    */
   private readonly fellBack = new Map<string, { kind: NativeFailureKind; lasting: boolean }>();
 
-  constructor(readonly decoder: NativeDecoder, private readonly fallback: ResourceFetchPort, private readonly options: NativeFirstOptions = {}) {}
+  constructor(decoder: NativeDecoder, private readonly fallback: ResourceFetchPort, private readonly options: NativeFirstOptions = {}) {
+    this.decoder = options.priority ? withPriority(decoder, options.priority) : decoder;
+  }
+
+  /** The same read now serves a more urgent caller; the queue raises it monotonically. */
+  promote(archive: MountedArchive, ref: DepotRef): void { this.decoder.promote?.(archive.id, ref.hash); }
 
   /** The native reader's identity (cache keys of anything derived from native answers). */
   get identity(): string { return this.decoder.identity; }

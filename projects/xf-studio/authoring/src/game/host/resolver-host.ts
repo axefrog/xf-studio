@@ -39,8 +39,7 @@ import type { NativeDecoder } from "../../native/native-decode";
 import type { NativeFailureKind } from "../../native/native-errors";
 import { NATIVE_JSON_PAYLOADS, type NativeAnswerLedger, NativeFirstFetcher, openNativeDecoderAsync } from "../../native/native-fetch-port";
 import { GAME_OODLE_LIBRARY } from "../../native/oodle";
-import { inLowerLane, personWorking } from "../../host/host-jobs";
-import { nativeDecodeLanes } from "./native-decode-lanes";
+import { currentLane, inLowerLane, personWorking } from "../../host/host-jobs";
 
 export interface InstallationOptions {
   readonly baseOnly?: boolean;
@@ -730,7 +729,8 @@ export class ResolverFetcher implements ResourceFetchPort {
   /** `fetchJsonResource`'s null answers that may not repeat (the catalogue's texts; cc-catalogue-host.ts `readTextResources`). */
   jsonTransientNulls = 0;
   constructor(readonly wolvenKit: WolvenKitFetcher, route: NativeRoute | null | undefined, cacheDir: string) {
-    this.native = route?.decoder ? new NativeFirstFetcher(nativeDecodeLanes(route.decoder), wolvenKit, { strict: route.strict,
+    this.native = route?.decoder ? new NativeFirstFetcher(route.decoder, wolvenKit, { strict: route.strict,
+      priority: () => { const lane = currentLane(); return lane === "ahead" ? "background" : lane ?? undefined; },
       ledger: new NativeAnswerFiles(cacheDir, route.decoder.identity), onFallback: (kind, resource, message, stack) => this.fellBack(kind, resource, message, stack) }) : null;
   }
   /** WolvenKit's identity (`WolvenKitFetcher.tool`): the key of its JSON cache and of the choice manifests. */
@@ -739,6 +739,7 @@ export class ResolverFetcher implements ResourceFetchPort {
   get nativeStats(): NativeFirstFetcher["stats"] | null { return this.native?.stats ?? null; }
   /** The route's native decoder, shared with the host's other native reads (the clothing preset), or null. */
   get nativeDecoder(): NativeDecoder | null { return this.native?.decoder ?? null; }
+  promote(archive: MountedArchive, ref: DepotRef): void { this.native?.promote(archive, ref); }
   async fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null> {
     return this.counted(archive, ref, await (this.native ? this.native.fetch(archive, ref, extension) : this.wolvenKit.fetch(archive, ref, extension)));
   }

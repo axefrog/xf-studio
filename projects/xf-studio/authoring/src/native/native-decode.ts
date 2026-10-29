@@ -68,6 +68,8 @@ export interface NativeDecodeOptions {
 export interface NativeDecoder {
   readonly identity: string;
   decode(request: NativeDecodeRequest): Promise<NativeDecodeOutcome>;
+  /** Raise queued reads of this archive/hash when a higher-priority consumer joins; never duplicates or interrupts a read. */
+  promote?(archivePath: string, hash: string, priority?: NativePriority): void;
   /** One `.xbm`'s served mip as PNG (texture-decode.ts); absent on a decoder that can't. */
   decodeTexture?(request: NativeTextureRequest): Promise<NativeTextureOutcome>;
   /** One `.mlmask`'s layers as PNGs (mlmask.ts); absent on a decoder that can't. */
@@ -352,6 +354,20 @@ export class WorkerDecoder implements NativeDecoder {
 
   private queueFor(priority?: NativePriority): Pending[] {
     return priority === "person" ? this.personQueue : priority === "background" ? this.backgroundQueue : this.queue;
+  }
+
+  /** Shared reads inherit their most urgent consumer. Join the target lane's tail once; later lower/equal joins never demote/reorder. */
+  promote(archivePath: string, hash: string, priority?: NativePriority): void {
+    const target = this.queueFor(priority);
+    const lower = priority === "person" ? [this.queue, this.backgroundQueue] : priority === "background" ? [] : [this.backgroundQueue];
+    for (const queue of lower) for (let i = 0; i < queue.length;) {
+      const pending = queue[i]!;
+      if (pending.request.archivePath !== archivePath || pending.request.hash !== hash) { i++; continue; }
+      queue.splice(i, 1);
+      pending.request = { ...pending.request, priority };
+      target.push(pending);
+    }
+    this.pump();
   }
 
   private spawn(): void {

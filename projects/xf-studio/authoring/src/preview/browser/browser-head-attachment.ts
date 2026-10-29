@@ -40,9 +40,10 @@ import type { PreparationProgress } from "../scene-residency";
 import type { ViewId } from "../../platform/api/view-graph";
 import { previewFields } from "../preview-view-graph";
 import { lightingSource, type LightingSource } from "../lighting-setups";
-import type { SceneDetailPreparation } from "../../platform/scene/scene-host";
 
 type ViewportDevice = ReturnType<typeof createBrowserViewportDevice>;
+/** Preparation handoff belongs to the viewport port; the attachment does not depend on the scene implementation. */
+type SceneDetailPreparation = Parameters<NonNullable<Parameters<ViewportDevice["buildHead"]>[2]>>[0];
 type Scene = Awaited<ReturnType<ViewportDevice["buildHead"]>>;
 
 /** The head-bound services the application holds; `undefined` disconnects one. */

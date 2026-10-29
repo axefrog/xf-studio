@@ -2,6 +2,6 @@
 export type NativePriority = "person" | "shown" | "background";
 
 export interface PrioritisedNativeRequest {
-  /** Absent: ordinary FIFO. `background` serves ahead work; person requests precede shown requests and both precede background. */
+  /** Initial priority; shared reads can inherit a higher consumer's. Absent: shown/default FIFO; background serves ahead work. */
   readonly priority?: NativePriority;
 }

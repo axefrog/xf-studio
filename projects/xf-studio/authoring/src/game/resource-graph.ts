@@ -24,6 +24,8 @@ import { NO_TRACE, type DiagnosticTrace } from "../diagnostics/model";
 export interface ResourceFetchPort {
   /** `extension` is the expected resource extension when the reference carries no path (e.g. "mesh"). */
   fetch(archive: MountedArchive, ref: DepotRef, extension: string | null): Promise<FetchedResource | null>;
+  /** A consumer joins a shared read: raise pending work to its priority without starting another read. */
+  promote?(archive: MountedArchive, ref: DepotRef): void;
   /**
    * Whether the last null answer for this resource was for a reason that may not repeat (the tool did not run cleanly, or its
    * output went missing), so a later read should try again. A port without it has every null counted as such.
@@ -580,8 +582,14 @@ export class ResourceGraph {
           ...(readerNotes.length ? { readerNotes } : {}) };
       })();
       this.loads.set(named.hash, pending);
-    }
+    } else this.promote(named);
     return pending;
+  }
+
+  private promote(ref: DepotRef): void {
+    if (!this.port.promote) return;
+    const { entry, lookup } = this.locate(ref);
+    if (lookup.winner) this.port.promote(lookup.winner, entry);
   }
 
   /**
@@ -632,11 +640,14 @@ export class ResourceGraph {
    */
   private observeModel(ref: DepotRef, applies: (patch: XlPatch) => boolean = () => true): void {
     this.observe(ref);
+    this.promote(ref);
     this.record(this.named(ref).hash);
     // Patch sources are read only for a resource an archive provides (`readPatchSources`).
     const provided = this.recorders.size > 0 && !!this.locate(ref).lookup.winner;
     for (const patch of this.patchesFor(ref.hash)) if (applies(patch)) {
-      this.observe(refFromHash(patch.source, patch.sourcePath));
+      const source = refFromHash(patch.source, patch.sourcePath);
+      this.observe(source);
+      this.promote(source);
       if (provided) this.record(patch.source);
     }
   }
