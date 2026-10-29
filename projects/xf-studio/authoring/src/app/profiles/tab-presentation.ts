@@ -9,6 +9,7 @@ import type { ProfileSessions, ViewOpening } from "./profile-sessions";
 import type { ProfileServices } from "./profile-window";
 import type { SubjectRef } from "../../platform/api/subjects";
 import type { LookRef } from "../../library/collection-documents";
+import { frozenData } from "./frozen-data";
 
 /** Read-only input for layout-tab presentation. Mutations go through the registered actions. */
 export type LayoutTabsPort = {
@@ -26,11 +27,14 @@ export type LayoutTabsPort = {
 };
 export function layoutTabsPort(session: ProfileSessions, defaults: TabDefaults,
   services: Pick<ProfileServices, "defaults" | "characters" | "collections" | "profiles">): LayoutTabsPort {
+  let snapshot: ReturnType<LayoutTabsPort["snapshot"]> | undefined;
+  session.subscribe(() => { snapshot = undefined; });
   return Object.freeze({
     snapshot: () => {
+      if (snapshot) return snapshot;
       const opening = session.viewOpening();
-      return { tabs: session.tabList(), shown: session.tabId(), closed: session.closedTabs(), lastDefault: session.lastDefault(),
-        opening };
+      return snapshot = frozenData({ tabs: session.tabList(), shown: session.tabId(), closed: session.closedTabs(), lastDefault: session.lastDefault(),
+        opening });
     },
     capture: (tab = session.tabId()) => {
       const destination = tab ? session.panelTabTarget(tab) : undefined;

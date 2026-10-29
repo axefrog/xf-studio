@@ -250,6 +250,23 @@ const created = (w: Window, name: string, id = "classic-wing") => { const done =
 const stored = (w: Window) => w.documents.store.list(STARTER_DOCUMENT);
 
 describe("the default starter", () => {
+  test("read-only starter queries reuse the projection until its documents or chosen default change", async () => {
+    let reads = 0;
+    const w = windowOn(undefined, undefined, { read: shape => { reads++; return readStarterShape(shape, REGION.newLayer(), MODELS); } });
+    try {
+      await w.starters.load();
+      const own = created(w, "Mine"); await quiet(w.outbox);
+      w.starters.list(); const before = reads;
+      w.starters.get(own); w.starters.defaultId(); w.starters.shapeOf(own); w.starters.list();
+      expect(reads).toBe(before);
+      w.choice.value = own;
+      expect(w.starters.defaultId()).toBe(own);
+      expect(reads).toBeGreaterThan(before);
+      const shape = w.starters.shapeOf(own)!;
+      (shape.points[0] as { u: number }).u = -100;
+      expect(w.starters.shapeOf(own)!.points[0]!.u).not.toBe(-100);
+    } finally { await quiet(w.outbox); w.outbox.stop(); }
+  });
   test("is Lid wash until one is chosen, and a missing or deleted choice falls back to it", async () => {
     const w = windowOn(); await w.starters.load();
     expect(w.starters.defaultId()).toBe("lid-wash");

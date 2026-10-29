@@ -14,7 +14,7 @@
  *   answers them, and answers first, as TweakXL's records replace the compiled ones at run time.
  */
 import { depotHash } from "../game/depot-path";
-import { childId, type TweakDbBlob, type TweakId, tweakDbId } from "../game/tweakdb-flats";
+import { childId, type TweakDbBlob, type TweakId, type TweakValue, tweakDbId } from "../game/tweakdb-flats";
 import { overlayIcon, type TweakOverlay } from "../game/tweakxl-overlay";
 
 export const CATEGORY_LIST_RECORD = "CharacterRandomization.CharacterRandomizationCategories";
@@ -60,13 +60,30 @@ const idOf = (key: string): TweakId | null => {
  * the blob for evidence.
  */
 export function readCreatorPresentation(blob: TweakDbBlob, iconKeys: Iterable<string>, source: string, overlay: TweakOverlay | null = null): CreatorPresentation {
+  const steps = presentationSteps(iconKeys, source, overlay);
+  let step = steps.next();
+  while (!step.done) step = steps.next(blob.lookup(step.value));
+  return step.value;
+}
+
+/** Host variant: the same projection, yielding during every TweakDB scan. */
+export async function readCreatorPresentationSliced(blob: TweakDbBlob, iconKeys: Iterable<string>, source: string,
+  overlay: TweakOverlay | null, turn: () => Promise<void>): Promise<CreatorPresentation> {
+  const steps = presentationSteps(iconKeys, source, overlay);
+  let step = steps.next();
+  while (!step.done) step = steps.next(await blob.lookupSliced(step.value, turn));
+  return step.value;
+}
+
+function* presentationSteps(iconKeys: Iterable<string>, source: string, overlay: TweakOverlay | null):
+  Generator<Iterable<TweakId>, CreatorPresentation, Map<TweakId, TweakValue>> {
   const gaps: { code: string; subject: string; detail: string }[] = [];
-  const list = blob.lookup([childId(tweakDbId(CATEGORY_LIST_RECORD), ".list")]).values().next().value;
+  const list = (yield [childId(tweakDbId(CATEGORY_LIST_RECORD), ".list")]).values().next().value;
   const categories: CreatorCategory[] = [];
   if (list?.type === "array:TweakDBID") {
-    const fields = blob.lookup(list.value.flatMap(ui => [childId(ui, ".categoryName"), childId(ui, ".categoryType")]));
+    const fields = yield list.value.flatMap(ui => [childId(ui, ".categoryName"), childId(ui, ".categoryType")]);
     const types = list.value.map(ui => fields.get(childId(ui, ".categoryType")));
-    const enums = blob.lookup(types.flatMap(type => type?.type === "TweakDBID" ? [childId(type.value, ".enumName")] : []));
+    const enums = yield types.flatMap(type => type?.type === "TweakDBID" ? [childId(type.value, ".enumName")] : []);
     list.value.forEach((ui, order) => {
       const name = fields.get(childId(ui, ".categoryName")), type = types[order];
       const enumName = type?.type === "TweakDBID" ? enums.get(childId(type.value, ".enumName")) : undefined;
@@ -94,7 +111,7 @@ export function readCreatorPresentation(blob: TweakDbBlob, iconKeys: Iterable<st
     return false;
   });
   const wanted = keys.flatMap(key => { const id = idOf(key); return id === null ? [] : [[key, id] as const]; });
-  const values = blob.lookup(wanted.flatMap(([, id]) => [childId(id, ".atlasResourcePath"), childId(id, ".atlasPartName")]));
+  const values = yield wanted.flatMap(([, id]) => [childId(id, ".atlasResourcePath"), childId(id, ".atlasPartName")]);
   let missing = 0;
   for (const [key, id] of wanted) {
     const atlas = values.get(childId(id, ".atlasResourcePath")), part = values.get(childId(id, ".atlasPartName"));

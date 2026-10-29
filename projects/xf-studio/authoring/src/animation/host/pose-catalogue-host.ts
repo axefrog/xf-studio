@@ -25,11 +25,12 @@ import { writeFileAtomic } from "../../host/derived-cache";
 import { depotHash, refFromHash } from "../../game/depot-path";
 import { ANIM_DECODER_VERSION, type AnimClip, type AnimRig, type AnimSetIndex, clipSampler, sampleClip } from "../../native/anim-set";
 import type { NativeAnimOutcome, NativeAnimRequest } from "../../native/anim-decode";
-import { buildPoseCatalogue, POSE_SAMPLE_SCHEMA, POSE_STATE_SCHEMA, type PoseBodyGender, type PoseCatalogueLoad, type PoseCatalogueState, type PoseMotion, type PoseSample, type PoseSet,
+import { buildPoseCatalogueSliced, POSE_SAMPLE_SCHEMA, POSE_STATE_SCHEMA, type PoseBodyGender, type PoseCatalogueLoad, type PoseCatalogueState, type PoseMotion, type PoseSample, type PoseSet,
   type PoseTimings } from "../pose-catalogue";
 export { POSE_SAMPLE_SCHEMA, POSE_STATE_SCHEMA, type PoseCatalogueLoad, type PoseCatalogueState, type PoseSample, type PoseTimings } from "../pose-catalogue";
 import type { Installation, InstallationOptions } from "../../game/host/resolver-host";
 import { childId, TweakDbBlob, type TweakValue, tweakDbId } from "../../game/tweakdb-flats";
+import { timeSlicer } from "../../host/event-loop";
 
 const PUPPET_GENDERS = "Character.Player_Puppet_Photomode.genders";
 const GENDER_RECORD: Record<PoseBodyGender, string> = { female: "Gender.Female", male: "Gender.Male" };
@@ -123,18 +124,19 @@ export async function loadPoseCatalogue(installation: Installation, options: { g
   log?: (message: string) => void; openMs?: number }): Promise<PoseCatalogueLoad> {
   const { gameRoot, cacheDir, bodyGender, log } = options;
   const started = performance.now();
+  const turn = timeSlicer();
   let mark = started;
   const lap = () => { const now = performance.now(), ms = now - mark; mark = now; return Math.round(ms); };
 
   const db = tweakDbPath(gameRoot, installation.plan.ep1Installed);
-  const blob = db ? new TweakDbBlob(new Uint8Array(readFileSync(db.path))) : null;
+  const blob = db ? new TweakDbBlob(await Bun.file(db.path).bytes()) : null;
   if (!blob) log?.("The game's TweakDB wasn't found, so no pose can be listed.");
   const memo = new Map<string, TweakValue | null>();
-  const flats = (names: readonly string[]): Map<string, TweakValue> => {
+  const flats = async (names: readonly string[]): Promise<Map<string, TweakValue>> => {
     const missing = names.filter(name => !memo.has(name));
     if (missing.length && blob) {
       const ids = new Map(missing.map(name => [tweakDbId(name), name] as const));
-      const found = blob.lookup(ids.keys());
+      const found = await blob.lookupSliced(ids.keys(), turn);
       for (const name of missing) memo.set(name, null);
       for (const [id, value] of found) memo.set(ids.get(id)!, value);
     }
@@ -150,10 +152,10 @@ export async function loadPoseCatalogue(installation: Installation, options: { g
   // The puppet entity for this body gender.
   let puppet: { hash: string; path: string | null } | null = null;
   if (blob) {
-    const genders = blob.lookup([tweakDbId(PUPPET_GENDERS)]).get(tweakDbId(PUPPET_GENDERS));
+    const genders = (await blob.lookupSliced([tweakDbId(PUPPET_GENDERS)], turn)).get(tweakDbId(PUPPET_GENDERS));
     const wanted = tweakDbId(GENDER_RECORD[bodyGender]);
     const ids = genders?.type === "array:TweakDBID" ? genders.value : [];
-    const fields = blob.lookup(ids.flatMap(id => [childId(id, ".gender"), childId(id, ".entity")]));
+    const fields = await blob.lookupSliced(ids.flatMap(id => [childId(id, ".gender"), childId(id, ".entity")]), turn);
     for (const id of ids) {
       const gender = fields.get(childId(id, ".gender")), entity = fields.get(childId(id, ".entity"));
       if (gender?.type === "TweakDBID" && gender.value === wanted && entity?.type === "raRef:CResource") {
@@ -222,7 +224,7 @@ export async function loadPoseCatalogue(installation: Installation, options: { g
   let text = await loadTextTable(installation, language, cacheDir, log);
   if (text.gameAbsent && language !== "en-us") text = await loadTextTable(installation, "en-us", cacheDir, log);
   const textsMs = lap();
-  const catalogue = buildPoseCatalogue({ bodyGender, flats, overlay, providers, sets, text: text.table });
+  const catalogue = await buildPoseCatalogueSliced({ bodyGender, flats, overlay, providers, sets, text: text.table });
   const buildMs = lap();
   const timings: PoseTimings = { totalMs: Math.round(performance.now() - started + (options.openMs ?? 0)), openMs: Math.round(options.openMs ?? 0), tweakDbMs, overlayMs,
     ...setTimings, textsMs, buildMs };

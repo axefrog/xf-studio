@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildCatalogue, CatalogueIndex, type CcCatalogue, readCcoWithPresentation, userFacing } from "../src/character/cc-catalogue";
+import { buildCatalogue, buildCatalogueSliced, CatalogueIndex, type CcCatalogue, readCcoWithPresentation, userFacing } from "../src/character/cc-catalogue";
 import type { CcoResource } from "../src/character/cco-model";
 import { catalogueCoverage, renderCoverage, shownOutcome, type CoverageInput } from "../src/character/cc-render-coverage";
 import * as coverageModule from "../src/character/cc-render-coverage";
@@ -10,6 +10,19 @@ import { TextTable } from "../src/game/game-text";
 import { fixtureInstallation } from "./resolver-fixtures";
 
 describe("creator catalogue from the merged resource", () => {
+  test("a large option yields within its choices and preserves the complete catalogue", async () => {
+    const { graph } = fixtureInstallation([{ virtualPath: "archive/pc/content/basegame_4_gamedata.archive", files: {
+      [BASE_CCO]: creator([appearance("many", "fixture.app", Array.from({ length: 1025 }, (_, i) => `choice${i}`))], {}),
+    } }], []);
+    const cco = (await loadMergedCco(graph, "female", readCcoWithPresentation)).merged.cco;
+    const inputs = { bodyGender: "female" as const, cco, customs: [], text: new TextTable("en-us").add(TEXTS,
+      { id: "fixture", kind: "game", declaredBy: null }), presentation: PRESENTATION };
+    let turns = 0;
+    const answer = await buildCatalogueSliced(inputs, async () => { turns++; await new Promise<void>(resolve => setImmediate(resolve)); });
+    expect(answer).toEqual(buildCatalogue(inputs));
+    expect(answer.counts.choices).toBe(1025);
+    expect(turns).toBeGreaterThanOrEqual(5);
+  });
   test("vanilla options: order, rows, sections, labels, Off choices and swatches", async () => {
     const { catalogue } = await fixtureSource(false);
     const index = new CatalogueIndex(catalogue);

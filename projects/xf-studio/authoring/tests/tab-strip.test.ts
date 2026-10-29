@@ -69,6 +69,48 @@ test("fit picks the stage from measured tabs, hides what overflows and names the
   expect([view.stage, view.tabs.some(tab => tab.hidden), more.hidden]).toEqual(["full", false, true]);
 });
 
+test("unchanged tabs and available length reuse the fit without another layout measurement", async () => {
+  const view = await strip();
+  let measured = 0;
+  for (const tab of view.tabs) {
+    const measure = tab.getBoundingClientRect.bind(tab);
+    tab.getBoundingClientRect = () => { measured++; return measure(); };
+  }
+  view.fit(126);
+  const count = measured, stage = view.stage, overflow = [...view.overflowed];
+  view.update(items.map(item => ({ ...item })), "p0");
+  view.fit(126); view.fit(126);
+  expect(measured).toBe(count);
+  expect([view.stage, view.overflowed]).toEqual([stage, overflow]);
+  view.fit(480);
+  expect(measured).toBeGreaterThan(count);
+  const resized = measured;
+  view.retitle("p1", "A longer Shape title"); view.fit(480);
+  expect(measured).toBeGreaterThan(resized);
+  const retitled = measured;
+  view.update(items, "p1"); view.fit(480);
+  expect(measured).toBeGreaterThan(retitled);
+});
+
+test("tracking the same headers again does not measure their available length", async () => {
+  const { HeaderFitter, PanelHeader } = await import("../src/studio-ui/components/panel-header");
+  const view = await strip(), header = new PanelHeader({ strip: view, actions: [] });
+  document.body.append(header.element);
+  let measured = 0;
+  header.available = () => { measured++; return 480; };
+  const fitter = new HeaderFitter();
+  try {
+    fitter.track([header]);
+    const count = measured;
+    expect(count).toBe(1);
+    fitter.track([header]); fitter.track([header]);
+    expect(measured).toBe(count);
+    view.update(items, "p1"); fitter.track([header]);
+    expect(measured).toBe(count + 1);
+    fitter.fitAll(); expect(measured).toBe(count + 2);
+  } finally { fitter.disconnect(); header.element.remove(); }
+});
+
 test("update reuses tabs by ID and retitle changes a label in place", async () => {
   const chosen: string[] = [];
   const view = await strip(id => chosen.push(id));

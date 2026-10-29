@@ -92,6 +92,9 @@ export class TabStrip {
   private hidden: string[] = [];
   private current: TabStripStage = "full";
   private natural = 0;
+  private signature = "";
+  private available: number | undefined;
+  private version = 0;
   constructor(private readonly options: TabStripOptions) {
     const vertical = options.orientation === "vertical";
     this.tablist = h("div", { class: "dock-tabs", role: "tablist", "aria-label": options.label, "aria-orientation": vertical ? "vertical" : undefined });
@@ -101,6 +104,8 @@ export class TabStrip {
     this.element = h("div", { class: "tab-strip", "data-stage": "full", "data-orientation": vertical ? "vertical" : "horizontal" }, this.tablist, this.more);
   }
   get stage(): TabStripStage { return this.current; }
+  /** Changes only when the tabs or selected tab can change their measured lengths. */
+  get revision(): number { return this.version; }
   /**
    * The strip's length with every label whole (the full stage), measured by the last `fit`. It doesn't depend on the stage the strip
    * is at, so an owner can size a strip by it without the size following the condensing (UI-120).
@@ -113,6 +118,9 @@ export class TabStrip {
 
   /** Show `items` with `active` selected (entries are reused by ID, so focus and listeners survive). */
   update(items: readonly TabItem[], active: string) {
+    const signature = JSON.stringify([items, active]);
+    if (signature === this.signature) return;
+    this.signature = signature; this.available = undefined; this.version++;
     const focused = this.entries.find(entry => entry.tab === document.activeElement)?.item.id;
     this.active = active;
     const byId = new Map(this.entries.map(entry => [entry.item.id, entry]));
@@ -135,7 +143,8 @@ export class TabStrip {
   /** Change one tab's label and tooltip in place (nothing is laid out again). */
   retitle(id: string, label: string, tooltip?: string) {
     const entry = this.entries.find(item => item.item.id === id);
-    if (!entry) return;
+    if (!entry || (entry.item.label === label && entry.item.tooltip === tooltip)) return;
+    this.signature = ""; this.available = undefined; this.version++;
     entry.item = { ...entry.item, label, tooltip };
     this.describe(entry);
   }
@@ -208,6 +217,8 @@ export class TabStrip {
    * each stage it tries, so an owner calls it only after layout and on resizes, never per paint.
    */
   fit(available: number) {
+    if (available === this.available) return;
+    this.available = available;
     const vertical = this.options.orientation === "vertical";
     const size = (element: HTMLElement) => { const box = element.getBoundingClientRect(); return vertical ? box.height : box.width; };
     this.show(this.entries.map((_, index) => index), false);

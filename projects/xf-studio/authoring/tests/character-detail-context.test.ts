@@ -50,6 +50,33 @@ const record: CharacterDetail = {
       profiles: {}, skinProfiles: {}, gradients: {} }] }],
 };
 
+test.each([false, true])("a delayed head requests and reads V first, placing it once only if still wanted (cancelled=%s)", async cancelled => {
+  const scene = Promise.withResolvers<Parameters<typeof createBrowserCharacterDetailDevice>[0]>();
+  const read = Promise.withResolvers<void>();
+  let requests = 0, loads = 0, placements = 0;
+  const device = createBrowserCharacterDetailDevice(scene.promise as never, async (_url, init) => {
+    if (init?.method === "POST") {
+      requests++;
+      return Response.json({ recordSchema: CHARACTER_DETAIL_SCHEMA, key: "fixture", phase: "ready", message: "", progress: null, record: file });
+    }
+    read.resolve(); return Response.json(record);
+  });
+  const actions = new CharacterDetailActions(device);
+  const pending = actions.setCharacter(DEFAULT_CHARACTER);
+  try {
+    await read.promise;
+    expect(requests).toBe(1);
+    expect([loads, placements]).toEqual([0, 0]);
+    if (cancelled) actions.dispose();
+    scene.resolve({ setCharacterDetails: (value: unknown) => { if (value) placements++; return null; }, details: { load: async () => {
+      loads++; return { reused: 0, components: [], limits: [], problems: [], dispose() {} };
+    } } } as never);
+    await pending;
+    expect([loads, placements]).toEqual(cancelled ? [0, 0] : [1, 1]);
+    if (!cancelled) { await actions.setCharacter(DEFAULT_CHARACTER); expect([requests, placements]).toEqual([1, 1]); }
+  } finally { actions.dispose(); }
+});
+
 async function harness() {
   const { renderer } = recordingRenderer();
   // Use the lighting stage's supported probe fallback: this CPU test never draws or prefilters a room.

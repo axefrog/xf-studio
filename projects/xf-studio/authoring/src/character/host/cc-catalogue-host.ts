@@ -23,8 +23,9 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { buildCatalogue, type BodyGender, type CcCatalogue, iconRecords, readCcoWithPresentation } from "../cc-catalogue";
-import { readCreatorPresentation, type CreatorPresentation } from "../cc-presentation";
+import { buildCatalogueSliced, type BodyGender, type CcCatalogue, iconRecords, readCcoWithPresentation } from "../cc-catalogue";
+import { readCreatorPresentation, readCreatorPresentationSliced, type CreatorPresentation } from "../cc-presentation";
+import { timeSlicer } from "../../host/event-loop";
 import type { CharacterSource } from "../character-context";
 import { customLabel, loadMergedCco } from "../character-resolver";
 import { refFromPath } from "../../game/depot-path";
@@ -42,6 +43,7 @@ export interface CatalogueHostOptions {
   /** A language code (`en-us`); default: the game's own on-screen language. */
   readonly language?: string | null;
   readonly log?: (message: string) => void;
+  readonly turn?: () => Promise<void>;
 }
 /**
  * Labels the catalogue couldn't read, with the one next step: `retry` when a read may pass (the service builds again later, and Try again
@@ -180,7 +182,8 @@ export async function readTextResources(installation: Installation, paths: reado
 }
 
 /** The on-screen texts the game shows in `language`, with the mods' ArchiveXL text declarations merged in load order. */
-export async function loadTextTable(installation: Installation, language: string, cacheDir: string, log?: (message: string) => void) {
+export async function loadTextTable(installation: Installation, language: string, cacheDir: string, log?: (message: string) => void,
+  turn: () => Promise<void> = timeSlicer()) {
   const plan = textPlan(language, installation.plan.ep1Installed, installation.xl.localization);
   const { found: read, outcomes } = await readTexts(installation, plan.map(item => item.path), cacheDir, log);
   const table = new TextTable(language);
@@ -188,7 +191,10 @@ export async function loadTextTable(installation: Installation, language: string
   for (const item of plan) {
     const got = read.get(item.path);
     texts.push({ path: item.path, archive: got?.archive ?? null, entries: got?.entries.length ?? 0, kind: item.kind, replace: item.replace });
-    if (got) table.add(got.entries, { id: item.path, kind: item.kind, declaredBy: item.declaredBy }, item.replace);
+    if (got) for (let at = 0; at < got.entries.length; at += 256) {
+      table.add(got.entries.slice(at, at + 256), { id: item.path, kind: item.kind, declaredBy: item.declaredBy }, item.replace);
+      await turn();
+    }
   }
   const outcome = (item: { path: string }): TextReadOutcome => outcomes.get(item.path) ?? "absent";
   return { table: read.size ? table : null, texts,
@@ -248,11 +254,12 @@ export function installedTweakOverlay(installation: Pick<Installation, "tweaks" 
 /** Build one body gender's catalogue and the source the character context needs. */
 export async function loadCreatorCatalogue(options: CatalogueHostOptions, bodyGender: BodyGender): Promise<CatalogueLoad> {
   const { installation, cacheDir, log } = options;
+  const turn = options.turn ?? timeSlicer();
   const merged = await loadMergedCco(installation.graph, bodyGender, readCcoWithPresentation);
   const settings = options.language ? null : gameLanguage();
   let language: { code: string; from: "option" | "game-settings" | "default" } = { code: options.language ?? settings ?? "en-us",
     from: options.language ? "option" : settings ? "game-settings" : "default" };
-  let text = await loadTextTable(installation, language.code, cacheDir, log);
+  let text = await loadTextTable(installation, language.code, cacheDir, log, turn);
   const languageGaps: { code: string; subject: string; detail: string }[] = [];
   // A language whose game texts aren't installed (no mounted archive holds them: no `lang_<code>_text.archive`) shows English, and says
   // so (PIPE-51). Texts that are there but couldn't be read are not "not installed" (NATIVE-46): the labels say so instead.
@@ -260,18 +267,22 @@ export async function loadCreatorCatalogue(options: CatalogueHostOptions, bodyGe
     languageGaps.push({ code: "texts-language-missing", subject: language.code,
       detail: `The game's ${language.code} texts aren't installed, so the creator's labels are shown in English.` });
     language = { code: "en-us", from: "default" };
-    text = await loadTextTable(installation, "en-us", cacheDir, log);
+    text = await loadTextTable(installation, "en-us", cacheDir, log, turn);
   }
   let presentation: CreatorPresentation | null = null, tweakDb: string | null = null;
   try {
-    presentation = loadPresentation(options.gameRoot, installation.plan.ep1Installed, iconRecords(merged.merged.cco), installedTweakOverlay(installation, log));
+    const cache = join(options.gameRoot, "r6", "cache");
+    const name = installation.plan.ep1Installed && existsSync(join(cache, "tweakdb_ep1.bin")) ? "tweakdb_ep1.bin" : "tweakdb.bin";
+    const path = join(cache, name);
+    if (existsSync(path)) presentation = await readCreatorPresentationSliced(new TweakDbBlob(await Bun.file(path).bytes()),
+      iconRecords(merged.merged.cco), `r6\\cache\\${name}`, installedTweakOverlay(installation, log), turn);
     tweakDb = presentation?.source ?? null;
   } catch (error) { log?.(`TweakDB could not be read: ${(error as Error).message}`); }
   // A mod archive that wins the base resource's path replaces the game's creator options: they name that mod (PIPE-46).
   const baseFromMod = merged.base.group !== null && merged.base.group !== "content" && merged.base.group !== "ep1";
-  const catalogue = buildCatalogue({ bodyGender, cco: merged.merged.cco, text: text.table, presentation,
+  const catalogue = await buildCatalogueSliced({ bodyGender, cco: merged.merged.cco, text: text.table, presentation,
     base: baseFromMod ? { path: merged.base.ref.path ?? merged.base.ref.hash, mod: merged.base.provider ?? merged.base.archive ?? "a mod" } : null,
-    customs: merged.customs.map(custom => ({ path: custom.path, label: customLabel(custom.path, custom.provenance), mod: custom.provenance.provider })) });
+    customs: merged.customs.map(custom => ({ path: custom.path, label: customLabel(custom.path, custom.provenance), mod: custom.provenance.provider })) }, turn);
   const labels = labelsOf(installation, text);
   const labelGaps = labels ? [{ code: labels.next === "retry" ? "texts-transient" : "texts-need-wolvenkit", subject: "labels",
     detail: `${text.transient} text resource(s) failed in a way that may pass; ${text.unreadable} couldn't be read.` }] : [];
@@ -279,4 +290,3 @@ export async function loadCreatorCatalogue(options: CatalogueHostOptions, bodyGe
   return { source: { catalogue: { ...catalogue, gaps }, cco: merged.merged.cco }, catalogue: { ...catalogue, gaps }, labels,
     evidence: { language, texts: text.texts, tweakDb, customResources: merged.customs.length } };
 }
-

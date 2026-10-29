@@ -32,6 +32,7 @@ import { EXPRESSION_SAMPLES } from "../expression-samples";
 import { BLINK_CLIP, EXPRESSION_TABLE, EYE_MORPHS, FACE_MORPHS, FACE_SETUP, FACE_SKELETON, FACIAL_ADDITIVES, PHOTO_MODE_FACE_RIG, readAnimSet, readBlink,
   eyeTracks, faceSetupPath, readFaceRig, readFaceRigSets, readFaceRigSetup, readTable, startPoints, wrinkleSourceTracks, type SetClip } from "../facial-catalogue";
 import { findRelations } from "../../engines/facial-rig/relations";
+import { timeSlicer } from "../../host/event-loop";
 import { posedLocals, worldPositions, type Vec3 } from "../../engines/facial-rig/pose";
 import { clipValuesAt, type ClipTracks } from "../../engines/facial-rig/anim-tracks";
 import { denseTracks, vectorIssue } from "../../engines/facial-rig/vector";
@@ -135,7 +136,12 @@ export function inAppSolver(source: CompiledFacialRig | (() => CompiledFacialRig
       const compiled: CompiledFacialRig = rig, pose = scratch ??= createFacialPose(compiled);
       const J = compiled.jointNames.length, q = new Float32Array(frames.length * J * 4), t = new Float32Array(frames.length * J * 3);
       const started = performance.now();
-      frames.forEach((frame, f) => { solveFace(compiled, frame, pose); q.set(pose.rotations, f * J * 4); t.set(pose.translations, f * J * 3); });
+      const turn = timeSlicer();
+      for (const [f, frame] of frames.entries()) {
+        if (disposed) throw Error("The solver stopped.");
+        solveFace(compiled, frame, pose); q.set(pose.rotations, f * J * 4); t.set(pose.translations, f * J * 3);
+        await turn();
+      }
       return { q: base64Of(q), t: base64Of(t), ms: Math.round((performance.now() - started) * 1000) / 1000 };
     },
     dispose() { disposed = true; },
@@ -714,10 +720,14 @@ export class FacialHost {
     if (!rig || rig.probed) return;
     rig.probed = true;
     const controls = rig.vocabulary.controls, context = Object.fromEntries(controls.map(control => [control.name, INERT_CONTEXT]));
-    const frames = [denseTracks(rig.vocabulary, {}).tracks, denseTracks(rig.vocabulary, context).tracks,
-      ...controls.map(control => denseTracks(rig.vocabulary, { [control.name]: 1 }).tracks),
-      ...controls.map(control => denseTracks(rig.vocabulary, { ...context, [control.name]: 1 }).tracks)];
+    const turn = timeSlicer();
+    const frames = [denseTracks(rig.vocabulary, {}).tracks, denseTracks(rig.vocabulary, context).tracks];
     try {
+      for (const base of [{}, context]) for (const control of controls) {
+        entry.controller.signal.throwIfAborted();
+        frames.push(denseTracks(rig.vocabulary, { ...base, [control.name]: 1 }).tracks);
+        if ((frames.length & 15) === 0) await turn();
+      }
       const answer = await withTimeout(process.solve(frames), this.options.solveTimeoutMs ?? SOLVE_TIMEOUT_MS);
       const q = floats(answer.q), t = floats(answer.t), joints = rig.rest.joints.length;
       if (q.length !== frames.length * joints * 4 || t.length !== frames.length * joints * 3) throw Error("The solver's answer has the wrong size.");
@@ -728,10 +738,13 @@ export class FacialHost {
       hostTrace().event("facial", "inert", { count: rig.inert.length });
       // Opposing pairs and gaze counterparts, from the same solves (each control alone at full weight) in world space.
       const rest = worldPositions(rig.rest), pose = { q, t };
-      const displacement = controls.map((control, index): Vec3[] | undefined => {
-        if (!moved(2 + index, 0)) return undefined;
-        return worldPositions(rig.rest, posedLocals(rig.rest, pose, 2 + index)).map((p, j) => [p[0] - rest[j]![0], p[1] - rest[j]![1], p[2] - rest[j]![2]] as Vec3);
-      });
+      const displacement: (Vec3[] | undefined)[] = [];
+      for (const [index] of controls.entries()) {
+        entry.controller.signal.throwIfAborted();
+        displacement.push(!moved(2 + index, 0) ? undefined : worldPositions(rig.rest, posedLocals(rig.rest, pose, 2 + index))
+          .map((p, j) => [p[0] - rest[j]![0], p[1] - rest[j]![1], p[2] - rest[j]![2]] as Vec3));
+        if ((index & 15) === 15) await turn();
+      }
       const relations = findRelations({ rest: rig.rest, controls, displacement, eyeTracks: new Set(rig.eyeTracks) });
       rig.axes = relations.axes; rig.gazeSameWay = relations.gazeSameWay;
       hostTrace().event("facial", "relations", { axes: relations.axes.length, gazeSameWay: relations.gazeSameWay });

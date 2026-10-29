@@ -1,5 +1,6 @@
 import { layeredPreviewWiring, type LayeredSurfaceWiring } from "../src/preview/browser/layered-preview-wiring";
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
+import { CharacterDetailActions } from "../src/character/character-detail-actions";
 import { buildBrowserHead } from "../src/preview/browser/browser-head-attachment";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import type { CameraState } from "../src/app/workspace/makeup-workspace";
@@ -15,6 +16,25 @@ import { createMakeupStack, EYE_RASTER_REGION, freshWorkspace } from "./fixtures
 // bindings, service attachments, subscriptions, camera listeners, surface editors or leftover canvases.
 
 const nothingAttached = { savedV: undefined, preview: undefined, motion: undefined, characterDetails: undefined };
+
+test("the V is asked for before the core head's motion settles, then preparation joins that request", async () => {
+  const entered = Promise.withResolvers<void>(), motion = Promise.withResolvers<void>();
+  const h = harness({ build: async () => { entered.resolve(); await motion.promise; } });
+  const requests: unknown[] = [];
+  const set = spyOn(CharacterDetailActions.prototype, "setCharacter").mockImplementation(async request => { requests.push(request); });
+  let head: Awaited<ReturnType<typeof buildBrowserHead>> | undefined;
+  try {
+    const pending = buildBrowserHead(h.ports);
+    await entered.promise;
+    expect(requests).toHaveLength(1);
+    expect(h.scenes).toHaveLength(0);
+    expect(h.drawn).toHaveLength(0);
+    motion.resolve(); head = await pending;
+    await head.prepare(new AbortController().signal, () => {});
+    expect(requests).toHaveLength(1);
+    expect(h.drawn).toHaveLength(0);
+  } finally { motion.resolve(); head?.dispose(); set.mockRestore(); }
+});
 
 test("a head step failing as the head is shown releases every connection it made, and showing again connects once", async () => {
   const h = harness({ failPresent: [1] });

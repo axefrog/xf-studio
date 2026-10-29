@@ -139,7 +139,7 @@ function vector(value: unknown): [number, number, number] {
 /** Resolves record fields: the overlay first, then compiled flats (batched per phase). */
 class Records {
   private readonly compiled = new Map<string, TweakValue | null>();
-  constructor(private readonly input: PoseCatalogueInput) {}
+  constructor(private readonly input: Omit<PoseCatalogueInput, "flats">) {}
   /** The chain of record names a field may come from: the record, then its overlay `$base` records. */
   chain(record: string): string[] {
     const out = [record];
@@ -151,14 +151,14 @@ class Records {
     return out;
   }
   /** Fetch the compiled flats of these records' fields, every group in one lookup. */
-  prefetch(...groups: readonly (readonly [readonly string[], readonly string[]])[]): void {
+  *prefetch(...groups: readonly (readonly [readonly string[], readonly string[]])[]): Generator<readonly string[], void, Map<string, TweakValue>> {
     const wanted: string[] = [];
     for (const [records, fields] of groups) for (const record of records) for (const name of this.chain(record)) for (const field of fields) {
       const flat = `${name}.${field}`;
       if (!this.compiled.has(flat)) { wanted.push(flat); this.compiled.set(flat, null); }
     }
     if (!wanted.length) return;
-    const found = this.input.flats(wanted);
+    const found = yield wanted;
     for (const [flat, value] of found) this.compiled.set(flat, value);
   }
   field(record: string, field: string): Value | null {
@@ -171,13 +171,22 @@ class Records {
     return null;
   }
   /** A list flat: the compiled value with the TweakXL edits applied. */
-  list(flat: string): string[] {
-    const compiled = this.input.flats([flat]).get(flat);
+  *list(flat: string): Generator<readonly string[], string[], Map<string, TweakValue>> {
+    const compiled = (yield [flat]).get(flat);
     const base = compiled && Array.isArray(compiled.value) ? (compiled.value as unknown[]).map(item => String(item)) : null;
-    return [...(this.input.overlay ? this.input.overlay.list(flat, base, name => {
-      const value = this.input.flats([name]).get(name);
-      return value && Array.isArray(value.value) ? (value.value as unknown[]).map(item => String(item)) : null;
-    }) ?? [] : base ?? [])];
+    if (!this.input.overlay) return base ?? [];
+    const values = new Map<string, TweakValue | null>();
+    for (;;) {
+      const missing = new Set<string>();
+      const result = this.input.overlay.list(flat, base, name => {
+        if (!values.has(name)) missing.add(name);
+        const value = values.get(name);
+        return value && Array.isArray(value.value) ? (value.value as unknown[]).map(item => String(item)) : null;
+      });
+      if (!missing.size) return [...result ?? []];
+      const found = yield [...missing];
+      for (const name of missing) values.set(name, found.get(name) ?? null);
+    }
   }
   exists(record: string): boolean {
     if (this.input.overlay?.records.has(record)) return true;
@@ -201,6 +210,21 @@ export function findClip(sets: readonly PoseSet[], name: string): PoseClip | nul
 }
 
 export function buildPoseCatalogue(input: PoseCatalogueInput): PoseCatalogue {
+  const steps = poseCatalogueSteps(input);
+  let step = steps.next();
+  while (!step.done) step = steps.next(input.flats(step.value));
+  return step.value;
+}
+/** The host's projection takes the same lookup phases through a cooperative TweakDB reader. */
+export async function buildPoseCatalogueSliced(input: Omit<PoseCatalogueInput, "flats"> & {
+  flats(names: readonly string[]): Promise<Map<string, TweakValue>>;
+}): Promise<PoseCatalogue> {
+  const steps = poseCatalogueSteps(input);
+  let step = steps.next();
+  while (!step.done) step = steps.next(await input.flats(step.value));
+  return step.value;
+}
+function* poseCatalogueSteps(input: Omit<PoseCatalogueInput, "flats">): Generator<readonly string[], PoseCatalogue, Map<string, TweakValue>> {
   const records = new Records(input);
   const diagnostics = new Map<string, { count: number; detail: string; examples: string[] }>();
   const note = (code: string, detail: string, example: string) => {
@@ -216,10 +240,10 @@ export function buildPoseCatalogue(input: PoseCatalogueInput): PoseCatalogue {
   };
 
   // The lists in one lookup, then every listed record's fields in another (each lookup scans the blob's key tables).
-  input.flats([POSE_LISTS.categories, POSE_LISTS[input.bodyGender]]);
-  const categoryIds = records.list(POSE_LISTS.categories);
-  const poseIds = records.list(POSE_LISTS[input.bodyGender]);
-  records.prefetch([categoryIds, CATEGORY_FIELDS], [poseIds, POSE_FIELDS]);
+  yield [POSE_LISTS.categories, POSE_LISTS[input.bodyGender]];
+  const categoryIds = yield* records.list(POSE_LISTS.categories);
+  const poseIds = yield* records.list(POSE_LISTS[input.bodyGender]);
+  yield* records.prefetch([categoryIds, CATEGORY_FIELDS], [poseIds, POSE_FIELDS]);
 
   // Categories, in `poseCategories` order.
   const categories: { id: string; key: string; label: string; order: number; source: PoseCategory["source"] }[] = [];

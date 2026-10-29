@@ -161,6 +161,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   };
   const instancePanels = new InstancePanels(rt, { catalogue: () => typeCatalogue, make: makeInstance,
     generation: type => views.catalogue.ids.includes(type) ? 0 : optionalGeneration,
+    paint: () => rt.changed(),
     changed: () => { instanceDirty = true; rt.changed(); } });
   signal.addEventListener("abort", () => instancePanels.dispose(), { once: true });
   const rebuildCatalogue = () => {

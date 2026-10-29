@@ -1,10 +1,8 @@
 /**
  * Browser device: the V's details made ready while the head loads, after a restart (research/backlog/performance.md, warm restart).
  *
- * The page asks for its V only once the head scene is built (the head, its maps, the idle and the blink: about 1.3 s after the page
- * starts), and then fetched, verified and decoded some 80 files (about 100 MB of maps and meshes for the default V) one stage after
- * another, so V was complete about 4 s after the page started even with the host's answer kept from the last session. This device
- * remembers the last request the page asked for (in the workspace's storage, per workspace), and on the next start asks the host
+ * The head attachment asks for the current V alongside core-head construction, before its idle and blink finish. This device starts
+ * still earlier: it remembers the last request the page asked for (in the workspace's storage, per workspace), and on the next start asks the host
  * about it at once, as a page of its own and without letting the host prepare anything (`X-XFS-Warm`: a kept or known answer, else
  * nothing). When the host has it, every file its record names is fetched, verified and decoded (maps to bitmaps off the page's thread,
  * meshes parsed a stage per task) while the head loads, within the loader's budgets; the load that shows the V takes them instead of

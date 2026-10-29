@@ -263,9 +263,10 @@ export class ProfileSessions {
   }
   checkPanelTarget(target: PanelTabTarget | PanelTarget) {
     if (!target || typeof target !== "object") throw new TabRefusal("missing_target", "Name the destination panel or tab.");
-    if (target.profile !== this.profile || !this.tab(target.tab) || target.tabVersion !== (this.tabVersions.get(target.tab) ?? 0))
+    const tab = this.tabs.find(tab => tab.id === target.tab);
+    if (target.profile !== this.profile || !tab || target.tabVersion !== (this.tabVersions.get(target.tab) ?? 0))
       throw new TabRefusal("missing_target", "That layout tab changed. Open the command again.");
-    if ("instance" in target && (this.panel(target.instance)?.tab !== target.tab || target.version !== (this.panelVersions.get(target.instance) ?? 0)))
+    if ("instance" in target && (!tab.panels.some(panel => panel.id === target.instance) || target.version !== (this.panelVersions.get(target.instance) ?? 0)))
       throw new TabRefusal("missing_target", "That panel changed. Open the command again.");
   }
 

@@ -741,7 +741,12 @@ export class StudioApplication {
   /** Mottle's presets (ID, label and every setting but the seed): the inspector's preset row and which one a layer matches. */
   mottleCatalogue() { return mottleCatalogue(); }
   /** The registered Studio modules in catalogue order (the Modules menu's rows; visibility is the presentation's). */
-  modules(): readonly StudioModule[] { return structuredClone(this.services.viewActions?.registration.modules ?? []); }
+  private moduleSnapshot?: { source: readonly StudioModule[] | undefined; value: readonly StudioModule[] };
+  modules(): readonly StudioModule[] {
+    const source = this.services.viewActions?.registration.modules;
+    if (!this.moduleSnapshot || source !== this.moduleSnapshot.source) this.moduleSnapshot = { source, value: frozenData(source ?? []) };
+    return this.moduleSnapshot.value;
+  }
   /** The planned modules still to come (listed as Planned in the Modules menu; never shown). */
   plannedModules(): readonly PlannedModule[] { const registration = this.services.viewActions?.registration; return registration ? structuredClone(plannedModules(registration)) : []; }
   /** The views, what each shares, the focus and the View and lighting history (view-graph-design.md §3). Detached. */

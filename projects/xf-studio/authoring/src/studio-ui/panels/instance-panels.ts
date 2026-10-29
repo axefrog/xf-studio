@@ -15,6 +15,8 @@ export class InstancePanels {
     generation?(type: string): unknown;
     make(instance: PanelInstance, runtime: StudioRuntime): PanelController;
     changed(): void;
+    /** Content/progress changed without replacing a controller; defaults to changed for standalone owners. */
+    paint?(): void;
   }) {}
   controllers() { return [...this.mounted.values()].map(entry => entry.panel); }
   runtime(id: string) { return this.mounted.get(id)?.port; }
@@ -36,19 +38,23 @@ export class InstancePanels {
       if (!entry) {
         const inputLife = new AbortController(), input = catalogue.context(instance.type).kind === "profile" ? undefined : port.editing?.acquire(instance.id, inputLife.signal);
         const current = () => input?.current() ?? port;
-        entry = { inputLife, captureLife: new AbortController(), destination: JSON.stringify(port.panels.target?.(instance.id)), generation, current, off: input?.subscribe(this.deps.changed) ?? (() => {}), portOff: () => {}, port: current(),
+        entry = { inputLife, captureLife: new AbortController(), destination: JSON.stringify(port.panels.target?.(instance.id)), generation, current, off: input?.subscribe(() => {
+          // Content/progress in a bound facade only needs a paint. Reconcile the dock when the facade itself changes.
+          const held = this.mounted.get(instance.id);
+          if (held && held.current() === held.port) this.paint(); else this.deps.changed();
+        }) ?? (() => {}), portOff: () => {}, port: current(),
           life: new AbortController(), panel: undefined! };
         this.mounted.set(instance.id, entry);
       } else if (entry.port === entry.current()) continue;
       else { const destination = JSON.stringify(port.panels.target?.(instance.id));
         if (destination !== entry.destination) { entry.captureLife.abort(); entry.captureLife = new AbortController(); entry.destination = destination; }
         entry.portOff(); entry.life.abort(); entry.panel.dispose(); entry.panel.spec.element.remove(); entry.port = entry.current(); entry.life = new AbortController(); }
-      entry.portOff = entry.port === port ? () => {} : entry.port.subscribe(this.deps.changed);
+      entry.portOff = entry.port === port ? () => {} : entry.port.subscribe(() => this.paint());
       const rt = new Runtime(entry.port, this.root.feedback, catalogue, { id: instance.id, type: instance.type, signal: entry.life.signal, captureSignal: entry.captureLife.signal },
         this.root.anchors.scoped(instance.id, entry.life.signal), this.root.applicationSignal);
       Object.defineProperty(rt, "dock", { get: () => this.root.dock });
       Object.defineProperty(rt, "settings", { get: () => this.root.settings });
-      rt.subscribe(this.deps.changed);
+      rt.subscribe(() => this.paint());
       entry.runtime = rt;
       let panel: PanelController;
       try { panel = this.deps.make(instance, rt); panel.bind?.(instance.id); }
@@ -64,5 +70,6 @@ export class InstancePanels {
     return changed;
   }
   private release(entry: Mounted) { entry.off(); entry.portOff(); entry.captureLife.abort(); entry.life.abort(); entry.panel.spec.visibility?.(false); entry.panel.dispose(); entry.panel.bind?.(undefined); entry.inputLife.abort(); entry.panel.spec.element.remove(); }
+  private paint() { (this.deps.paint ?? this.deps.changed)(); }
   dispose() { for (const entry of this.mounted.values()) this.release(entry); this.mounted.clear(); }
 }

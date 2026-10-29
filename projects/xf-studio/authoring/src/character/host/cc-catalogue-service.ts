@@ -41,6 +41,8 @@ import { personalDataIn } from "../../app/private-data";
 import { modMakers } from "./mod-makers";
 import { vortexShortcutDiscovery, type VortexShortcutDiscovery } from "../../installation/host/vortex-data-host";
 import type { Installation, InstallationOptions } from "../../game/host/resolver-host";
+import type { JobScheduler } from "../../platform/api/jobs";
+import { timeSlicer, yieldToEventLoop } from "../../host/event-loop";
 
 export type CreatorRoute = Omit<InstallationOptions, "cacheDir" | "log">;
 export type CreatorHostOptions = {
@@ -49,6 +51,7 @@ export type CreatorHostOptions = {
   /** The installation fingerprint (character-detail-host.ts `installationFingerprint`). */
   fingerprint: () => string;
   resolverCache: string;
+  jobs?: JobScheduler;
   open?: (options: InstallationOptions) => Installation | Promise<Installation>;
   /** Test seam over the catalogue build. */
   load?: (installation: Installation, route: CreatorRoute, gender: BodyGender) => Promise<CatalogueLoad>;
@@ -203,10 +206,13 @@ export class CreatorCatalogueHost {
 
   private async build(route: CreatorRoute, gender: BodyGender, fingerprint: string): Promise<Loaded> {
     const started = performance.now();
+    // Catalogue work never occupies the scheduler's single running slot: a person's V needs only its structural catalogue.
+    // Between slices, let waiting requests in and wait until the person's lane is clear before continuing.
+    const turn = timeSlicer(undefined, undefined, async () => { await yieldToEventLoop(); await this.options.jobs?.idle("person"); });
     const open = this.options.open ?? (await import("../../game/host/installation-registry")).acquireInstallation;
     const installation = await open({ ...route, cacheDir: this.options.resolverCache, log: this.options.log });
     const load = await (this.options.load ?? ((inst: Installation, r: CreatorRoute, g: BodyGender) => loadCreatorCatalogue({ installation: inst,
-      gameRoot: r.gameRoot, cacheDir: this.options.resolverCache, log: this.options.log }, g)))(installation, route, gender);
+      gameRoot: r.gameRoot, cacheDir: this.options.resolverCache, log: this.options.log, turn }, g)))(installation, route, gender);
     const index = new CatalogueIndex(load.catalogue);
     // A rebuild that read labels the last one couldn't is another identity, so the panel takes it up (NATIVE-46).
     const identity = createHash("sha256").update(`${fingerprint}\n${gender}\n${load.catalogue.language}\n${load.catalogue.counts.choices}\n` +

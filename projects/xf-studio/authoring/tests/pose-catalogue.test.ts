@@ -5,7 +5,7 @@ import { describe, expect, test } from "bun:test";
 import { readArchiveXlConfig } from "../src/game/archivexl-config";
 import { depotHash } from "../src/game/depot-path";
 import { TextTable } from "../src/game/game-text";
-import { buildPoseCatalogue, findClip, type PoseSet } from "../src/animation/pose-catalogue";
+import { buildPoseCatalogue, buildPoseCatalogueSliced, findClip, type PoseSet } from "../src/animation/pose-catalogue";
 import { entitySets } from "../src/animation/host/pose-catalogue-host";
 import { TweakDbBlob, tweakDbId, type TweakValue } from "../src/game/tweakdb-flats";
 import { readTweakOverlay } from "../src/game/tweakxl-overlay";
@@ -86,6 +86,13 @@ describe("the pose catalogue", () => {
   const text = new TextTable("en-us").add([{ primaryKey: "27995", secondaryKey: "", female: "Tabula Rasa", male: "" },
     { primaryKey: "0", secondaryKey: "UI-PhotoMode-OptionCategoryIdle", female: "Idle", male: "" }], { id: "game", kind: "game", declaredBy: null });
   const catalogue = buildPoseCatalogue({ bodyGender: "female", flats, overlay, providers: new Map([["r6/tweaks/pack/poses.yaml", "A pose pack"]]), sets, text });
+
+  test("cooperative lookup phases preserve lists, inherited records and clip selection", async () => {
+    const answer = await buildPoseCatalogueSliced({ bodyGender: "female", flats: async names => {
+      await new Promise<void>(resolve => setImmediate(resolve)); return flats(names);
+    }, overlay, providers: new Map([["r6/tweaks/pack/poses.yaml", "A pose pack"]]), sets, text });
+    expect(answer).toEqual(catalogue);
+  });
 
   test("lists come from the compiled TweakDB with the TweakXL edits applied, in menu order, each record once", () => {
     expect(catalogue.entries.map(e => e.id)).toEqual(["PhotoModePoses.idle_stand_01", "PhotoModePoses.pack_01", "PhotoModePoses.pack_02"]);

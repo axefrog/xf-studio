@@ -183,7 +183,7 @@ export class TweakDbBlob {
     }
   }
   /** Value offsets of one type, computed once. */
-  private starts(flat: FlatType): Uint32Array {
+  private *starts(flat: FlatType): Generator<void, Uint32Array> {
     if (flat.valueStarts) return flat.valueStarts;
     let pos = flat.offset;
     const count = this.u32(pos); pos += 4;
@@ -192,7 +192,10 @@ export class TweakDbBlob {
       || flat.type === "Bool" ? 1 : flat.type === "Int32" || flat.type === "Float" ? 4 : flat.type === "Vector3" ? 12 : 8;
     if (count * least > this.bytes.byteLength - pos) throw Error("TweakDB blob is truncated.");
     const starts = new Uint32Array(count);
-    for (let i = 0; i < count; i++) { starts[i] = pos; pos += this.skip(flat.type, pos); }
+    for (let i = 0; i < count; i++) {
+      starts[i] = pos; pos += this.skip(flat.type, pos);
+      if ((i & 1023) === 1023) yield;
+    }
     flat.valueStarts = starts;
     flat.keyTable = pos;
     return starts;
@@ -209,14 +212,24 @@ export class TweakDbBlob {
 
   /** The flats among `ids` this blob defines (IDs it lacks are simply absent from the result). */
   lookup(ids: Iterable<TweakId>): Map<TweakId, TweakValue> {
+    const steps = this.lookupSteps(ids);
+    for (;;) { const step = steps.next(); if (step.done) return step.value; }
+  }
+  /** Same lookup, with bounded scan units so a host can yield to waiting requests. */
+  async lookupSliced(ids: Iterable<TweakId>, turn: () => Promise<void>): Promise<Map<TweakId, TweakValue>> {
+    const steps = this.lookupSteps(ids);
+    for (;;) { const step = steps.next(); if (step.done) return step.value; await turn(); }
+  }
+  private *lookupSteps(ids: Iterable<TweakId>): Generator<void, Map<TweakId, TweakValue>> {
     const wanted = new Set(ids), found = new Map<TweakId, TweakValue>();
     if (!wanted.size) return found;
     for (const flat of this.types) {
-      const starts = this.starts(flat);
+      const starts = yield* this.starts(flat);
       let pos = flat.keyTable;
       const keys = this.u32(pos); pos += 4;
       this.within(pos, keys * 12);
       for (let i = 0; i < keys; i++, pos += 12) {
+        if ((i & 1023) === 1023) yield;
         const id = this.id(pos);
         if (!wanted.has(id)) continue;
         const index = this.view.getInt32(pos + 8, true);

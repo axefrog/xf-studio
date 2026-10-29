@@ -240,6 +240,15 @@ export const userFacing = (option: Pick<CcOption, "hidden" | "editTags" | "link"
   !option.hidden && !followsLink(option) && option.editTags.includes(editTag);
 
 export function buildCatalogue(inputs: CatalogueInputs): CcCatalogue {
+  const steps = catalogueSteps(inputs);
+  for (;;) { const step = steps.next(); if (step.done) return step.value; }
+}
+/** The host's build uses the same rules, taking a turn between bounded groups of choices. */
+export async function buildCatalogueSliced(inputs: CatalogueInputs, turn: () => Promise<void>): Promise<CcCatalogue> {
+  const steps = catalogueSteps(inputs);
+  for (;;) { const step = steps.next(); if (step.done) return step.value; await turn(); }
+}
+function* catalogueSteps(inputs: CatalogueInputs): Generator<void, CcCatalogue> {
   const { cco, bodyGender, text } = inputs;
   const editTag = inputs.editTag ?? "NewGame";
   const gaps: CcGap[] = [...(inputs.presentation?.gaps ?? [])];
@@ -280,10 +289,14 @@ export function buildCatalogue(inputs: CatalogueInputs): CcCatalogue {
     return target.morphNames.every(choice => !choice.morphName);
   });
 
-  const options: CcOption[] = drafts.map(({ option, part }) => {
+  const options: CcOption[] = [];
+  for (const { option, part } of drafts) {
+    yield;
     const id = `${part}/${option.name}`;
     const presentation = (option as Presented).presentation;
-    const choices: CcChoice[] = choicesOf(option).map((choice, position) => {
+    const choices: CcChoice[] = [];
+    for (const [position, choice] of choicesOf(option).entries()) {
+      if ((position & 255) === 255) yield;
       const key = keyOf(option, choice);
       const shown = (choice as PresentedChoice).presentation;
       const icon = shown?.icon ?? null;
@@ -291,14 +304,14 @@ export function buildCatalogue(inputs: CatalogueInputs): CcCatalogue {
       const off = option.type === "switcher" ? emitsNothing(part, activates) : option.type === "appearance" ? !key || !option.resource : !key;
       // Without a text, a definition reads by its last `__` part (`he_000_pwa__basehead__12_gradient_brown` → `Gradient brown`).
       const text = label(choice.localizedName, key.split("__").pop() || choice.localizedName || "none");
-      return { key, position, label: text, off, labelledOff: isOffLabel(text),
+      choices.push({ key, position, label: text, off, labelledOff: isOffLabel(text),
         provenance: provenance(choice.providedBy),
         swatch: option.type === "appearance" && (shown?.color || icon)
           ? { color: shown?.color ?? null, iconRecord: icon, icon: icon ? inputs.presentation?.icons.get(icon) ?? null : null } : null,
-        activates, tags: option.type === "morph" ? [] : [...((choice as { tags?: string[] }).tags ?? [])] };
-    });
+        activates, tags: option.type === "morph" ? [] : [...((choice as { tags?: string[] }).tags ?? [])] });
+    }
     const defaultChoice = choices[option.defaultIndex]?.key ?? choices[0]?.key ?? null;
-    return { id, part, name: option.name, type: option.type, label: label(option.localizedName, option.name), order: option.index,
+    options.push({ id, part, name: option.name, type: option.type, label: label(option.localizedName, option.name), order: option.index,
       category: presentation?.randomizeCategory ?? "Body", categoryExplicit: presentation?.categoryExplicit ?? false,
       uiSlot: option.uiSlot, uiSlots: option.type === "switcher" ? [...option.uiSlots] : [],
       link: option.link ? { key: option.link, controller: option.linkController } : null, hidden: option.hidden, enabled: option.enabled,
@@ -307,8 +320,8 @@ export function buildCatalogue(inputs: CatalogueInputs): CcCatalogue {
       groups: groups.get(id) ?? [], app: option.type === "appearance" && option.resource ? { ...option.resource } : null,
       useThumbnails: presentation?.useThumbnails ?? false, defaultChoice, choices, provenance: provenance(option.definedBy),
       targets: option.type === "switcher" ? [...new Set(option.options.flatMap(choice => choice.names))] : [],
-      emitsNothing: option.type === "switcher" ? option.options.every(choice => emitsNothing(part, choice.names)) : emitsNothing(part, [option.name]) };
-  });
+      emitsNothing: option.type === "switcher" ? option.options.every(choice => emitsNothing(part, choice.names)) : emitsNothing(part, [option.name]) });
+  }
   const position = new Map(drafts.map((draft, i) => [`${draft.part}/${draft.option.name}`, i]));
   options.sort((a, b) => a.order - b.order || PART_RANK[a.part] - PART_RANK[b.part] || position.get(a.id)! - position.get(b.id)!);
 

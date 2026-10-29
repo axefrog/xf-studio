@@ -180,8 +180,22 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
       try { await ports.prepareCore(wanted, signal); }
       catch (error) { if (signal.aborted) throw signal.reason; body = "female"; unavailable = (error as Error)?.message || ""; }
     }
-    // A build that fails releases what it made itself (createSceneRuntime does), so there is nothing to dispose until it returns.
-    const scene = await ports.viewport.buildHead(body, signal);
+    // Ask for this V while the core head (including its idle and blink) is being built. One detail service owns both this request
+    // and its eventual placement; its device can read the record now and waits for the scene only to load/prepare the parts.
+    const context = ports.character.context;
+    const destination = typeof ports.view === "function" ? ports.view() : ports.view;
+    const fields = ports.graph ? previewFields(ports.graph, destination ?? ports.graph.viewIds()[0]!) : undefined;
+    context.setBodyShown((fields?.display ?? ports.workspace.preview).body !== false);
+    context.setUncensored((fields?.scene ?? ports.workspace.preview).uncensored === true);
+    // A build that fails releases what it made itself (createSceneRuntime does).
+    const sceneReady = ports.viewport.buildHead(body, signal);
+    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(sceneReady, undefined, ports.warmStart));
+    const stopDetails = () => characterDetails.dispose();
+    signal.addEventListener("abort", stopDetails, { once: true });
+    releases.push(() => { signal.removeEventListener("abort", stopDetails); stopDetails(); });
+    const request = context.detailRequest();
+    let initialDetails = request.bodyGender === body ? { key: JSON.stringify(request), promise: characterDetails.setCharacter(request) } : undefined;
+    const scene = await sceneReady;
     releases.push(() => ports.viewport.disposeHead(scene));
     signal.throwIfAborted();
     releases.push(bindStageTheme(scene, ports.preferences, ports.colourScheme));
@@ -201,7 +215,6 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
       return preview;
     });
     // Skin, face details, eyes, brows, lashes, hair, piercings and body follow the V's context while this head is shown (`show`).
-    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene, undefined, ports.warmStart));
     releases.push(() => { characterDetails.dispose(); scene.setCharacterDetails(null); });
     // The head takes the V's save (its facial shapes and body) before anything else follows it.
     // The view's Surface controls tool, which the on-head editor mounted on this head follows (scene-editors.ts).
@@ -218,7 +231,6 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     if (unavailable !== null) ports.notice?.(`The masculine V's head couldn't be prepared from your Cyberpunk 2077 files, so the feminine head is shown. ${unavailable}`.trim());
     signal.throwIfAborted();
 
-    const context = ports.character.context;
     /** Preparation follows the runtime owner's current destination, without showing it or restoring a camera or motion. */
     const bindPreparationView = (signal: AbortSignal) => {
       signal.throwIfAborted();
@@ -273,7 +285,9 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
           if (request.bodyGender === scene.body) {
             scene.setHiddenOptions(context.hiddenOptions());
             progress({ stage: "details", fraction: 0, waiting: "host" });
-            await detailsSettled(characterDetails, request, prepareSignal, (fraction, waiting) => progress({ stage: "details", fraction, waiting }));
+            const started = initialDetails?.key === JSON.stringify(request) ? initialDetails.promise : undefined;
+            initialDetails = undefined;
+            await detailsSettled(characterDetails, request, prepareSignal, (fraction, waiting) => progress({ stage: "details", fraction, waiting }), started);
             bindPreparationView(prepareSignal);
             // Another destination can hide the body or change its cover while the details load. Settle that request before warming it.
             if (JSON.stringify(request) !== JSON.stringify(context.detailRequest())) continue;
@@ -404,7 +418,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
  * `signal.reason` once aborted.
  */
 function detailsSettled(details: CharacterDetailActions, request: Parameters<CharacterDetailActions["setCharacter"]>[0], signal: AbortSignal,
-  progress: (fraction: number, waiting: "host" | "files" | null) => void): Promise<void> {
+  progress: (fraction: number, waiting: "host" | "files" | null) => void, started?: Promise<void>): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let done = false;
     const end = (error?: unknown) => {
@@ -425,7 +439,7 @@ function detailsSettled(details: CharacterDetailActions, request: Parameters<Cha
     const stop = details.subscribe(() => check());
     if (signal.aborted) { aborted(); return; }
     signal.addEventListener("abort", aborted, { once: true });
-    void details.setCharacter(request).then(() => check(true), () => check(true));
+    void (started ?? details.setCharacter(request)).then(() => check(true), () => check(true));
     check();
   });
 }

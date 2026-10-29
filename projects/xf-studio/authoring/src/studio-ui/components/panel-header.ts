@@ -69,17 +69,22 @@ export class PanelHeader {
  */
 export class HeaderFitter {
   private headers = new Map<Element, PanelHeader>();
+  private revisions = new WeakMap<PanelHeader, number>();
   private readonly observer = typeof ResizeObserver === "function"
     ? new ResizeObserver(entries => { for (const entry of entries) { const header = this.headers.get(entry.target); if (header) this.fit(header); } }) : undefined;
   /** `fitted` hears each header after it fits (the dock sizes a stack of vertical strips by their natural lengths). */
   constructor(private readonly fitted?: (header: PanelHeader) => void) {}
   track(headers: readonly PanelHeader[]) {
-    this.observer?.disconnect();
-    this.headers = new Map(headers.map(header => [header.element, header]));
-    for (const header of headers) { this.fit(header); this.observer?.observe(header.element); }
+    const next = new Map(headers.map(header => [header.element, header]));
+    for (const element of this.headers.keys()) if (!next.has(element)) this.observer?.unobserve(element);
+    for (const header of headers) {
+      if (!this.headers.has(header.element)) { this.fit(header); this.observer?.observe(header.element); }
+      else if (this.revisions.get(header) !== header.strip.revision) this.fit(header);
+    }
+    this.headers = next;
   }
   /** Fit every tracked header now (a window resize the observer may report late). */
   fitAll() { for (const header of this.headers.values()) this.fit(header); }
-  private fit(header: PanelHeader) { header.fit(); this.fitted?.(header); }
+  private fit(header: PanelHeader) { header.fit(); this.revisions.set(header, header.strip.revision); this.fitted?.(header); }
   disconnect() { this.observer?.disconnect(); this.headers.clear(); }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readArchiveXlConfig } from "../src/game/archivexl-config";
-import { CATEGORY_LIST_RECORD, iconKey, readCreatorPresentation } from "../src/character/cc-presentation";
+import { CATEGORY_LIST_RECORD, iconKey, readCreatorPresentation, readCreatorPresentationSliced } from "../src/character/cc-presentation";
 import { fnv1a64 } from "../src/game/depot-path";
 import { displayLabel, isTextKey, readableName, readOnscreenEntries, TextTable } from "../src/game/game-text";
 import { childId, crc32, TWEAKDB_MAGIC, TweakDbBlob, tweakDbId } from "../src/game/tweakdb-flats";
@@ -8,6 +8,19 @@ import { readTweakOverlay } from "../src/game/tweakxl-overlay";
 import { depotHash } from "../src/game/depot-path";
 
 const bytes = (text: string) => new TextEncoder().encode(text);
+
+test("creator TweakDB scans yield to waiting requests and preserve the synchronous answer", async () => {
+  const data = blob({ cname: Array.from({ length: 4096 }, (_, i) => [`Icon${i}.atlasPartName`, `part${i}`] as [string, string]) });
+  const keys = ["Icon0", "Icon2048", "Icon4095"], expected = readCreatorPresentation(new TweakDbBlob(data), keys, "fixture");
+  let turns = 0, finished = false;
+  const pending = readCreatorPresentationSliced(new TweakDbBlob(data), keys, "fixture", null, async () => {
+    turns++; await new Promise<void>(resolve => setImmediate(resolve));
+  }).then(answer => { finished = true; return answer; });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  expect(finished).toBe(false);
+  expect(await pending).toEqual(expected);
+  expect(turns).toBeGreaterThan(4);
+});
 
 /** A synthetic TweakDB blob with CName, TweakDBID and array:TweakDBID flats (WolvenKit TweakDBReader layout). */
 function blob(flats: { cname?: [string, string][]; ids?: [string, number][]; lists?: [string, number[]][]; raRef?: [string, bigint][] }): Uint8Array {

@@ -104,11 +104,11 @@ function arrange(s: Awaited<ReturnType<typeof profileContextStudio>>, ids: strin
   const tree = { root: ids.length ? { kind: "group" as const, id: "controllers", panels: ids, active: ids[0]! } : null, floating: [], closed: [] };
   s.session.arrangeInstances(s.session.tabId(), serializeDockState({ wide: tree, compact: tree }));
 }
-function owner(s: Awaited<ReturnType<typeof profileContextStudio>>, available = () => true, generation?: (type: string) => unknown) {
+function owner(s: Awaited<ReturnType<typeof profileContextStudio>>, available = () => true, generation?: (type: string) => unknown, requestPaint?: () => void) {
   let changes = 0;
   const root = new StudioRuntime(s.port, feedback, STUDIO_CATALOGUE, undefined, undefined, s.applicationSignal);
   const catalogue = { ...STUDIO_CATALOGUE, get ids() { return available() ? STUDIO_CATALOGUE.ids : []; } };
-  const panels = new InstancePanels(root, { catalogue: () => catalogue, generation, changed() { changes++; }, make: (instance, rt) => instance.type === "character" ? characterPanel(rt)
+  const panels = new InstancePanels(root, { catalogue: () => catalogue, generation, paint: requestPaint, changed() { changes++; }, make: (instance, rt) => instance.type === "character" ? characterPanel(rt)
     : instance.type === "library" ? libraryPanel(featureViewContext(rt, "eye-makeup"))
     : instance.type === "finish" ? finishPanel(featureViewContext(rt, "eye-makeup"))
     : instance.type === "save-explorer.explorer" ? explorerPanel(moduleViewContext(rt, "save-explorer") as never)
@@ -379,6 +379,30 @@ test("an instance observes asynchronous file-owner transitions and releases its 
     expect(ui.changes).toBeGreaterThan(before);
     ui.panels.dispose(); const released = ui.changes; answer(undefined); await pending;
     expect(ui.changes).toBe(released); expect(s.targets.held()).toBe(0);
+  } finally { answer?.(undefined); ui.panels.dispose(); await s.dispose(); s.library.close(); }
+});
+
+test("bound content progress paints without requesting dock reconciliation or cloning the unchanged tab snapshot", async () => {
+  let answer!: (file: StudioPickedFile | undefined) => void, paints = 0;
+  const s = await profileContextStudio({ pick: () => new Promise(done => { answer = done; }) });
+  arrange(s, ["presets--scene0"]);
+  const ui = owner(s, () => true, undefined, () => { paints++; });
+  try {
+    ui.paint();
+    const snapshot = s.port.tabs!.snapshot(), changes = ui.changes;
+    expect(s.port.tabs!.snapshot()).toBe(snapshot);
+    expect(Object.isFrozen(snapshot.tabs[0]!.panels)).toBe(true);
+    const pending = ui.panels.runtime("presets--scene0")!.files.execute({ kind: "recipe.import" });
+    expect(paints).toBeGreaterThan(0);
+    expect(ui.changes).toBe(changes);
+    expect(s.port.tabs!.snapshot()).toBe(snapshot);
+    answer(undefined); await pending;
+    expect(ui.panels.sync()).toBe(false);
+    expect(s.port.authoring.dispatch({ kind: "tabs.rename", tab: snapshot.shown, name: "Renamed" }).ok).toBe(true);
+    const renamed = s.port.tabs!.snapshot();
+    expect(renamed).not.toBe(snapshot);
+    expect(renamed.tabs.find(tab => tab.id === snapshot.shown)!.name).toBe("Renamed");
+    expect(snapshot.tabs.find(tab => tab.id === snapshot.shown)!.name).not.toBe("Renamed");
   } finally { answer?.(undefined); ui.panels.dispose(); await s.dispose(); s.library.close(); }
 });
 

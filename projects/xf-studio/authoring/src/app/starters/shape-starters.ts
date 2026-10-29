@@ -100,6 +100,7 @@ export class ShapeStarters {
   private readonly ids = new Set<string>();
   private readonly listeners = new Set<() => void>();
   private views: readonly StarterView[] | null = null;
+  private viewChoice: string | undefined;
   private resolving = false;
 
   constructor(private readonly deps: ShapeStartersDeps) {
@@ -138,18 +139,22 @@ export class ShapeStarters {
   // ----- Reads -----
   /** The feature's starters in menu order, then the person's in the order they were made. Detached. */
   list(): readonly StarterView[] {
-    this.views ??= this.build();
-    return structuredClone(this.views);
+    return structuredClone(this.view());
   }
-  get(id: string): StarterView | undefined { return this.list().find(item => item.id === id); }
+  private view(): readonly StarterView[] {
+    const chosen = this.deps.choice.get();
+    if (!this.views || chosen !== this.viewChoice) { this.views = this.build(); this.viewChoice = chosen; }
+    return this.views;
+  }
+  get(id: string): StarterView | undefined { const found = this.view().find(item => item.id === id); return found && structuredClone(found); }
   /** The starter new layers and new looks start from: the chosen one while it exists and can be applied, else the fallback. */
   defaultId(): string {
-    const chosen = this.deps.choice.get(), view = chosen === undefined ? undefined : this.build().find(item => item.id === chosen);
+    const chosen = this.deps.choice.get(), view = chosen === undefined ? undefined : this.view().find(item => item.id === chosen);
     return view?.shape ? view.id : this.deps.fallback;
   }
   /** The shape of starter `id`, or the default's when none is named (undefined: that starter doesn't exist or can't be read here). */
   shapeOf(id?: string): StarterShape | undefined {
-    const wanted = id ?? this.defaultId(), view = this.build().find(item => item.id === wanted);
+    const wanted = id ?? this.defaultId(), view = this.view().find(item => item.id === wanted);
     return view?.shape && structuredClone(view.shape);
   }
   isContributed(id: string): boolean { return this.deps.contributed.some(item => item.id === id); }

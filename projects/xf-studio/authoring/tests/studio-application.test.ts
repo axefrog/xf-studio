@@ -9,6 +9,7 @@ import { RECIPE_ACTION_KINDS } from "../src/engines/layered-makeup/recipe-action
 import { ACTION_DESCRIPTORS, type ActionDescriptor } from "../src/app/studio-action-descriptors";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
+import { createViewServices } from "../src/app/view-actions";
 
 import { namedCore } from "./fixtures/named-targets";
 import { vHistory } from "./fixtures/character-steps";
@@ -17,6 +18,24 @@ function fixture() {
   const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   return { workspace, document: core.document, app: core.app, core };
 }
+
+test("module descriptors are detached and frozen once, and refreshed when their registration changes", () => {
+  const { app, workspace } = fixture();
+  const registration = STUDIO_COMPOSITION.modules;
+  app.attach(createViewServices(workspace.preview, undefined, registration));
+  const modules = app.modules();
+  expect(modules.length).toBeGreaterThan(0);
+  expect(app.modules()).toBe(modules);
+  expect(modules).not.toBe(registration.modules);
+  expect(Object.isFrozen(modules)).toBe(true);
+  expect(Object.isFrozen(modules[0])).toBe(true);
+  expect(Reflect.set(modules[0]!, "name", "changed externally")).toBe(false);
+  const next = { ...registration, modules: [...registration.modules].reverse() };
+  app.attach(createViewServices(workspace.preview, undefined, next));
+  expect(app.modules()).not.toBe(modules);
+  expect(app.modules().map(module => module.id)).toEqual(next.modules.map(module => module.id));
+  app.dispose();
+});
 
 test("facade discovers target-specific commands, validates at invocation and detaches snapshots", () => {
   const { app, document } = fixture();

@@ -50,7 +50,7 @@ const answerState = (value: unknown) => hostState(value);
  * `warm`: the page's warm start (character-warm-start.ts): each request asked is remembered for the next start, and a load takes the
  * files it read ahead.
  */
-export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: CharacterDetailFetch = (url, init) => fetch(url, init),
+export function createBrowserCharacterDetailDevice(source: Scene | Promise<Scene>, fetcher: CharacterDetailFetch = (url, init) => fetch(url, init),
   warm?: Pick<CharacterWarmStart, "remember" | "files">): CharacterDetailPort {
   /** This page's name, sent with each request. */
   const page = pageName();
@@ -70,11 +70,15 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
   const slotLimits = (loaded: LoadedCharacterDetails, placed: readonly { slot: DetailSlot; limit: DetailLimit }[]) =>
     shownSlots.filter(slot => slot.state === "shown").map(slot => ({ slot: slot.slot,
       limits: [...new Set([...slot.hostLimits, ...[...loaded.limits, ...placed].filter(item => item.slot === slot.slot).map(item => item.limit)])] }));
-  scene.onBakeLimits?.(placed => {
+  let scene: Scene | undefined = "then" in source ? undefined : source;
+  const ready = Promise.resolve(source);
+  const watchLimits = (scene: Scene) => scene.onBakeLimits?.(placed => {
     if (!shown) return;
     const update = slotLimits(shown, placed);
     for (const listener of limitListeners) listener(update);
   });
+  if (scene) watchLimits(scene);
+  else void ready.then(value => { scene = value; watchLimits(value); }).catch(() => { /* The head build reports its failure. */ });
   const answer = async (response: Response, sent?: unknown) => {
     if (!response.ok) {
       const body = await response.json().catch(() => null) as { code?: unknown } | null;
@@ -104,6 +108,8 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
         throw error;
       }
       markCharacter("record", { components: record.components.length });
+      const scene = await ready;
+      signal.throwIfAborted();
       ahead?.abort();
       // Through the host's detail loader: each chunk through the adapter for its template, with the host's anisotropy and skin placement.
       await loading;
@@ -141,6 +147,7 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
       }) };
     },
     async preload(request, outer) {
+      const scene = await ready;
       if (!scene.prepareDetails || outer.aborted) return;
       ahead?.abort();
       const controller = new AbortController(), signal = controller.signal;
@@ -177,7 +184,7 @@ export function createBrowserCharacterDetailDevice(scene: Scene, fetcher: Charac
       } finally { if (ahead === controller) ahead = null; }
     },
     // Another V: the previous one leaves the scene and GPU memory whole, kept parts included.
-    clear() { scene.setCharacterDetails(null); scene.releaseKeptParts?.(); shown = null; shownSlots = []; },
+    clear() { scene?.setCharacterDetails(null); scene?.releaseKeptParts?.(); shown = null; shownSlots = []; },
     onLimits(listener) { limitListeners.add(listener); return () => { limitListeners.delete(listener); }; },
     wait: (ms, signal) => new Promise(resolve => {
       const timer = setTimeout(resolve, ms);

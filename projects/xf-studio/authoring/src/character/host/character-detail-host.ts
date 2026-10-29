@@ -261,7 +261,7 @@ export class CharacterDetailHost {
         recordExists: record => this.filePath(record) !== null }));
     this.previews = new ChoicePreviewStore(options.previewRoot ?? join(options.cacheRoot, "choice-previews"));
     this.creator = options.creator ?? new CreatorCatalogueHost({ route: () => this.route(), fingerprint: () => installationFingerprint(this.options.settings()),
-      resolverCache: options.resolverCache ?? join(options.cacheRoot, "resolver"), log: options.log });
+      resolverCache: options.resolverCache ?? join(options.cacheRoot, "resolver"), log: options.log, jobs: this.jobs });
     this.prefetch = new ChoicePrefetcher({
       jobs: this.jobs,
       requestFor: (base, option, position) => this.requestFor(base, option, position),
