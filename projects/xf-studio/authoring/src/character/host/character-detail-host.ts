@@ -518,6 +518,9 @@ export class CharacterDetailHost {
    */
   async known(request: CharacterRequest, page = ""): Promise<CharacterDetailState> {
     const keyNow = () => characterRequestKey(request, installationFingerprint(this.options.settings()));
+    // Join a kept verification already in flight, even if it just published its ready state. It checked this installation itself;
+    // falling through to refresh here would wait for an unrelated archive open before returning the same verified answer.
+    if (this.keptChecks.has(keyNow())) return await this.kept(request, page) ?? this.state(keyNow());
     // A V this process answered before (a page reloaded): the installation is checked first, as a person's request is, so a mod changed
     // since doesn't warm the old record (PREV-199); the check vouches for the page's own request that follows (`KEPT_VOUCH_MS`).
     if (this.states.get(keyNow())?.phase === "ready") {
@@ -532,25 +535,42 @@ export class CharacterDetailHost {
   /** When a kept answer (or a ready V's installation) was checked, by key: it vouches for that V's next request within `KEPT_VOUCH_MS` (`answer`). */
   private readonly keptAt = new Map<string, number>();
   private vouch(key: string): void { this.keptAt.set(key, Date.now()); }
+  /** Warm read-ahead and the authoritative request share verification/publication, not a scheduler job or an installation open. */
+  private readonly keptChecks = new Map<string, Promise<CharacterDetailState | null>>();
   /** A kept answer for `request` as this host's ready state, or null (none, not current, or this process already knows the key). */
   private async kept(request: CharacterRequest, page: string): Promise<CharacterDetailState | null> {
     const route = this.route();
     if (!this.answers || !route?.wolvenKitCli) return null;
-    const keyNow = () => characterRequestKey(request, installationFingerprint(this.options.settings()));
-    if (this.states.has(keyNow())) return null;
+    const key = characterRequestKey(request, installationFingerprint(this.options.settings()));
+    let checking = this.keptChecks.get(key);
+    if (!checking) {
+      if (this.states.has(key)) return null;
+      checking = this.checkKept(request, route, key);
+      this.keptChecks.set(key, checking);
+      const done = () => { if (this.keptChecks.get(key) === checking) this.keptChecks.delete(key); };
+      void checking.then(done, done);
+    }
+    const state = await checking;
+    if (!state || characterRequestKey(request, installationFingerprint(this.options.settings())) !== key) return null;
+    // Each consumer supersedes only its own earlier want; the shared check has no requester identity.
+    this.noteAsk();
+    this.prefetch.pause();
+    this.leave(page, null);
+    return state;
+  }
+  /** Publish a checked kept record once. A changed installation or a record removed while checking cannot publish an old answer. */
+  private async checkKept(request: CharacterRequest, route: CharacterRoute, key: string): Promise<CharacterDetailState | null> {
     const started = performance.now();
     // A person's request is being answered: work below the person lane waits for it.
     const release = this.jobs.hold();
     let found;
-    try { found = await this.answers.find(installationRouteKey(route), request); }
+    try { found = await this.answers!.find(installationRouteKey(route), request); }
     catch { found = null; }
     finally { release(); }
     // Asked, prepared or answered meanwhile (another page, the same page again), or the route changed: the usual path decides.
-    const key = keyNow(), now = this.route();
-    if (!found || this.states.has(key) || !now || installationRouteKey(now) !== installationRouteKey(route)) return null;
-    this.noteAsk();
-    this.prefetch.pause();
-    this.leave(page, null);
+    const now = this.route();
+    if (!found || this.states.has(key) || !now || installationRouteKey(now) !== installationRouteKey(route)
+      || characterRequestKey(request, installationFingerprint(this.options.settings())) !== key || !this.filePath(found.record)) return null;
     const state = this.set({ key, phase: "ready", message: found.message, progress: null, record: found.record });
     this.prefetch.prepared(request, true);
     this.options.log?.(`Your V was shown as prepared before (nothing it was prepared from changed; checked in ${Math.round(performance.now() - started)} ms).`);
