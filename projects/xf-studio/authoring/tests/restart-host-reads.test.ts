@@ -65,7 +65,7 @@ function unreliableCoreMetadata(root: string, kind: typeof unreliableKinds[numbe
     return fixed;
   };
   const stats = spyOn(metadata, "statSync").mockImplementation(((path: PathLike, options?: StatOptions) => {
-    if (options?.bigint) return projected(String(path), actualStat(path, { ...options, bigint: true })!);
+    if (options?.bigint) return projected(String(path), actualStat(path, { ...options, bigint: true }) as BigIntStats);
     return actualStat(path, options);
   }) as typeof metadata.statSync);
   const reads = spyOn(files, "open").mockImplementation(async (path, flags, mode) => {
@@ -77,7 +77,7 @@ function unreliableCoreMetadata(root: string, kind: typeof unreliableKinds[numbe
   return { reads, restore: () => { stats.mockRestore(); reads.mockRestore(); } };
 }
 
-test.each(unreliableKinds)("unreliable core metadata (%s) rehashes across restart and refuses stale memo/304 after a restored-mtime edit", async kind => {
+test.each([...unreliableKinds])("unreliable core metadata (%s) rehashes across restart and refuses stale memo/304 after a restored-mtime edit", async (kind: typeof unreliableKinds[number]) => {
   const f = cachedCore(), fake = unreliableCoreMetadata(f.root, kind);
   try {
     expect((await f.host.readSnapshot()).phase).toBe("ready");
