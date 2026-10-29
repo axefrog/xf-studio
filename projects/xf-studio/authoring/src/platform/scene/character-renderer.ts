@@ -269,6 +269,7 @@ export function createCharacterRenderer(input: {
       await uploadAll(fresh.flatMap(item => item.textures ?? []));
       markPhase("details:uploads");
       if (fresh.some(item => item.layered?.some(entry => entry.handle.state === "pending"))) await drained();
+      markPhase("details:maps-drained");
       // Layered stacks bake with their (now uploaded) layer maps, as the placement would, one stack per frame.
       for (const item of fresh) if (componentShown(item)) for (const { handle } of item.layered ?? []) {
         if (signal.aborted || handle.state !== "pending") continue;
@@ -277,6 +278,7 @@ export function createCharacterRenderer(input: {
       }
       if (signal.aborted) return;
       // Each part's programs, about one per step, a frame let through whenever a step used up its share (a whole part in one call was 306 ms).
+      markPhase("details:baked");
       const compiled: ReturnType<ReturnType<DetailPreparation["compile"]>["result"]>[] = [];
       // Only a few programs linking at once (link-pacing.ts): all of a V's at once took every core, and the page's thread with them.
       const links = linkPacer({ parallel: renderer.extensions?.has("KHR_parallel_shader_compile") ?? false, frame });
@@ -305,6 +307,7 @@ export function createCharacterRenderer(input: {
         completion = gpuGate(renderer); completions.add(completion); completion.mark();
         completedRevision = uploadGate().revision();
       }
+      markPhase("details:programs");
       // The driver's links, left (not waited for) when the preparation stops: they finish on the driver's threads either way (PREV-192).
       const linked = Promise.all(compiled.map(entry => entry.ready));
       linked.catch(() => { /* Reported below unless the preparation stopped. */ });
@@ -312,6 +315,7 @@ export function createCharacterRenderer(input: {
         if (signal.aborted) resolve(); else signal.addEventListener("abort", () => resolve(), { once: true });
       })]);
       if (signal.aborted) return;
+      markPhase("details:linked");
       // Each linked program's first use (its uniforms and attributes read back), one at a time between frames, once the GPU is idle (when what was
       // sent could keep it busy: `queued`).
       if (completion) {

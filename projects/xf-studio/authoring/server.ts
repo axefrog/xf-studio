@@ -34,7 +34,7 @@ import { LocalSettingsStore } from "./src/setup/host/local-settings-store";
 import type { LocalSettings } from "./src/setup/local-settings";
 import { buildBrowser } from "./browser-build";
 import { PreviewCoreHost } from "./src/preview/host/preview-core-host";
-import { createPreviewCoreHandler } from "./src/preview/host/preview-core-server";
+import { createPreviewCoreHandler, servePreviewCoreAsset } from "./src/preview/host/preview-core-server";
 import { PREVIEW_CORE_ASSET_NAMES } from "./src/preview/preview-core-recipe";
 import { CharacterDetailHost, characterRoute, installationFingerprint } from "./src/character/host/character-detail-host";
 import { CHARACTER_ASSET_PREFIX, CHARACTER_DETAIL_ENDPOINT, createCharacterDetailHandler, serveCharacterAsset } from "./src/character/host/character-detail-server";
@@ -328,9 +328,7 @@ const server = Bun.serve({
     if (!preparedMotion && assetName !== null && PREPARED_MOTION_ASSETS.test(assetName)) return new Response("Not found", { status: 404 });
     if (!research && assetName !== null && coreFiles.has(assetName.replaceAll(sep, "/"))) {
       // The core preview has one source: the derivation from the player's own game files.
-      const derived = previewCore.assetPath(assetName.replaceAll(sep, "/"));
-      if (!derived) return new Response("Not found", { status: 404 });
-      file = Bun.file(derived);
+      return servePreviewCoreAsset(previewCore, assetName.replaceAll(sep, "/"), request);
     }
     // Optional private overlay for /assets (e.g. a worktree whose public/assets is a
     // read-only link to another checkout). Files present in the overlay win.

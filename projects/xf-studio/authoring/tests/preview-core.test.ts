@@ -7,7 +7,7 @@ import { decodePng, encodePng } from "../src/formats/png";
 import { adaptMap, checkMap } from "../src/preview/preview-core-maps";
 import { appearanceMaterials, decodedTexturePath, parseMaterialExport, resolveTextureParameter } from "../src/preview/preview-core-materials";
 import { assemblePreviewGlb, bindPoseDeviation, plateSelection, verifyPreviewGlb } from "../src/preview/preview-core-assemble";
-import { ensurePreviewCore, PreviewCoreCache, PreviewCoreError, previewCoreReadiness } from "../src/preview/host/preview-core-service";
+import { ensurePreviewCore, PreviewCoreCache, PreviewCoreError, previewCoreReadiness, previewCoreReadinessAsync } from "../src/preview/host/preview-core-service";
 import { uncookArguments, uncookByHashArguments } from "../src/game/host/game-asset-export-wolvenkit";
 import { createGameAssetExporter, GameAssetExportError, gameContentSource } from "../src/game/host/game-asset-export";
 import { PREVIEW_CORE_FILES } from "../src/preview/preview-core-recipe";
@@ -202,14 +202,17 @@ test("the service derives, verifies, caches and reuses the preview core", async 
   const normal = decodePng(readFileSync(join(result.directory, "head-normal.png")));
   expect(normal.data[2]).toBeGreaterThan(200);
   expect(previewCoreReadiness(cacheRoot, game, recipe, plate)).toMatchObject({ state: "ready", directory: result.directory });
+  expect(await previewCoreReadinessAsync(cacheRoot, game, recipe, plate)).toEqual(previewCoreReadiness(cacheRoot, game, recipe, plate));
   // One WolvenKit call with materials exported everything, including the decoded textures.
   expect(fake.calls.map(call => call.withMaterials)).toEqual([true]);
   const again = await ensurePreviewCore({ gameRoot: game, cacheRoot, exporter, recipe, plateRecipe: plate });
   expect(again.reused).toBe(true);
   expect(again.manifest.cacheKey).toBe(result.manifest.cacheKey);
   // A changed cached file is never served.
-  writeFileSync(join(result.directory, "eye-color.png"), "tampered");
+  const corrupt = readFileSync(join(result.directory, "eye-color.png")); corrupt[corrupt.length - 1]! ^= 1;
+  writeFileSync(join(result.directory, "eye-color.png"), corrupt); // Same size: asynchronous validation must still check every hash.
   expect(previewCoreReadiness(cacheRoot, game, recipe, plate)).toEqual({ state: "none" });
+  expect(await previewCoreReadinessAsync(cacheRoot, game, recipe, plate)).toEqual({ state: "none" });
   expect(previewCoreReadiness(cacheRoot, gameFolder(), recipe, plate)).toEqual({ state: "none" });
   // Re-deriving reads every resource from the export cache without running WolvenKit again.
   expect((await ensurePreviewCore({ gameRoot: game, cacheRoot, exporter, recipe, plateRecipe: plate })).reused).toBe(false);

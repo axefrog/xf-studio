@@ -6,6 +6,7 @@
  */
 import { expect, spyOn, test } from "bun:test";
 import { CharacterDetailActions } from "../src/character/character-detail-actions";
+import { CHARACTER_DETAIL_SCHEMA } from "../src/character/render-detail";
 import { createBrowserSceneHeads, type SceneHeadsPorts } from "../src/preview/browser/browser-scene-heads";
 import type { CharacterScenePorts } from "../src/character/character-service";
 import { CharacterContextActions } from "../src/character/character-context-actions";
@@ -74,6 +75,53 @@ function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = 
     loseContext() { for (const listener of contextListeners) listener("lost"); } };
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 5));
+
+test("startup requests the active V before core setup, then the head adopts the same service and asks only once", async () => {
+  const requests: unknown[] = [];
+  const send = spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    requests.push(JSON.parse(init!.body as string));
+    return Response.json({ key: "a".repeat(32), phase: "failed", message: "fixture", recordSchema: CHARACTER_DETAIL_SCHEMA, record: null });
+  });
+  const o = owner({ v1: "female" });
+  try {
+    o.heads.prime(); o.heads.prime();
+    expect(requests).toHaveLength(1);
+    expect(o.h.builds).toBe(0); expect(o.h.drawn).toHaveLength(0);
+    await o.heads.load();
+    expect(requests).toHaveLength(1); expect(o.heads.shown()).toBeDefined();
+  } finally { o.heads.dispose(); send.mockRestore(); }
+});
+
+test("releasing a startup request before setup aborts its transport and constructs no head", async () => {
+  let requestSignal: AbortSignal | undefined;
+  const send = spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    requestSignal = init?.signal as AbortSignal;
+    return new Promise<Response>((_resolve, reject) => requestSignal!.addEventListener("abort", () => reject(requestSignal!.reason), { once: true }));
+  });
+  const o = owner({ v1: "female" });
+  try {
+    o.heads.prime(); expect(requestSignal?.aborted).toBe(false);
+    o.heads.dispose(); await settle();
+    expect(requestSignal?.aborted).toBe(true); expect(o.h.builds).toBe(0);
+  } finally { o.heads.dispose(); send.mockRestore(); }
+});
+
+test("a changed authoritative V replaces the early request before a head can adopt it", async () => {
+  const bodies: string[] = [];
+  const send = spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    bodies.push(JSON.parse(init!.body as string).bodyGender);
+    return Response.json({ key: "a".repeat(32), phase: "failed", message: "fixture", recordSchema: CHARACTER_DETAIL_SCHEMA, record: null });
+  });
+  const o = owner({ v1: "female" });
+  try {
+    o.heads.prime();
+    o.heads.context("v1").dispatch({ kind: "character.useDefault", bodyGender: "male" });
+    await settle();
+    expect(bodies).toEqual(["female", "male"]); expect(o.h.builds).toBe(0);
+    await o.heads.load();
+    expect(o.heads.shown()?.body).toBe("male"); expect(bodies).toEqual(["female", "male"]);
+  } finally { o.heads.dispose(); send.mockRestore(); }
+});
 
 test("P3-ii: acquiring and editing an unseen V's data requests no head or preview device", async () => {
   let devices = 0;

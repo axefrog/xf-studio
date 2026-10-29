@@ -44,7 +44,8 @@ import { createBrowserChoicePreviewDevice } from "../../character/browser/browse
 import { pageFailure } from "../../diagnostics/page-sink";
 import { SceneResidency, type PreparationStage, type PreparationState, type ResidencySnapshot, type ResidencyWant } from "../scene-residency";
 import { suspendablePreviews, type SuspendablePreviews } from "../../character/choice-preview-suspension";
-import { buildBrowserHead, type AttachedHead, type HeadAttachmentPorts } from "./browser-head-attachment";
+import { buildBrowserHead, startHeadDetails, type AttachedHead, type HeadAttachmentPorts } from "./browser-head-attachment";
+import { previewFields } from "../preview-view-graph";
 import type { ViewRoute, ViewRuntimes } from "../view-routes";
 
 /** What the drawn scene wants shown: its V and the V's body (and the view it was wanted for, which a head is made for). */
@@ -52,7 +53,7 @@ export type SceneHeadWant = ResidencyWant & { readonly view: string; readonly ch
 
 export type SceneHeadsPorts = {
   /** What every head is built with (its scene ports, the graph, the layered surfaces, the application's attachments). */
-  head: Omit<HeadAttachmentPorts, "character" | "prepareCore" | "notice" | "view">;
+  head: Omit<HeadAttachmentPorts, "character" | "prepareCore" | "notice" | "view" | "initialDetails">;
   /**
    * The views and their scenes (one view is drawn at a time until phase 4b): the view drawn first (undefined: none), until `show(view)` names
    * another; the scene a view shows; whether a scene still exists (a view shows it); the V a scene shows, and making one for a scene that has
@@ -108,6 +109,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   /** Each V's context as last handed over by its owner, with what this module connected to it and its choice-preview device. */
   const contexts = new Map<string, { context: CharacterContextActions; release: () => void; previews: SuspendablePreviews | undefined }>();
   let started = false, disposed = false, scheduled = false;
+  let initial: { character: string; details: ReturnType<typeof startHeadDetails> } | undefined;
   /** The view drawn now (undefined: none): the one the scenes port names first, then the one `show(view)` drew last. */
   let drawnView: string | undefined = ports.scenes.view();
   const drawn = () => drawnView;
@@ -131,7 +133,10 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     build: async (want, signal, progress) => {
       progress({ stage: want.body === "male" ? "core" : "build" });
       // Same-scene requests share construction and preparation. Resolve their destination after every wait.
+      const primed = initial; initial = undefined;
+      if (primed && primed.character !== want.character) primed.details.dispose();
       const head = await buildBrowserHead({ ...ports.head, view: () => destination(want),
+        initialDetails: primed?.character === want.character ? primed.details : undefined,
         character: { body: want.body, ...saveOf(want.character), context: contextOf(want.character) },
         prepareCore: (body, buildSignal) => ports.prepareCore(body, (message, fraction) => {
           progress({ stage: "core", fraction: fraction ?? 0, waiting: "host", ...(message ? { detail: message } : {}) });
@@ -272,7 +277,8 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   }
   /** Want what the drawn scene shows now, once the change that asked for it has finished. */
   function schedule() {
-    if (!started || disposed || scheduled) return;
+    if (disposed || scheduled) return;
+    if (!started) { if (initial) prime(); return; }
     scheduled = true;
     queueMicrotask(() => {
       scheduled = false;
@@ -296,7 +302,24 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     });
   }
 
+  /** Only the authoritative active context is requested, never the remembered read-ahead V or an unseen character. */
+  function prime(): void {
+    if (started || disposed) return;
+    const want = current();
+    if (!want) { initial?.details.dispose(); initial = undefined; return; }
+    const context = contextOf(want.character), view = drawn()!;
+    const fields = ports.head.graph ? previewFields(ports.head.graph, view) : undefined;
+    context.setBodyShown((fields?.display ?? ports.head.workspace.preview).body !== false);
+    context.setUncensored((fields?.scene ?? ports.head.workspace.preview).uncensored === true);
+    const request = context.detailRequest();
+    if (initial?.character === want.character && initial.details.initial?.key === JSON.stringify(request)) return;
+    initial?.details.dispose();
+    initial = { character: want.character, details: startHeadDetails(request, ports.head.warmStart) };
+  }
+
   return {
+    /** Request the active V while setup checks the core, without constructing or drawing a scene. */
+    prime,
     /**
      * Show the drawn scene's head. A scene without a V stays empty for U6. Resolves once a head of the drawn scene is shown: a want
      * superseded meanwhile (the V changed body during the first load) waits for the one that replaced it. Rejects when the head can't be
@@ -334,7 +357,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
       if (switching) shown?.holdSurfaces();
       drawnView = view;
       if (switching) ports.document!.follow(view!);
-      if (!started) return Promise.resolve();
+      if (!started) { if (initial) prime(); return Promise.resolve(); }
       if (view === undefined) { residency.hideShown(); return Promise.resolve(); }
       const want = current();
       if (!want) { residency.hideShown(); return Promise.reject(Error("That view's V isn't known yet.")); }
@@ -370,6 +393,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     dispose() {
       if (disposed) return;
       disposed = true;
+      initial?.details.dispose(); initial = undefined;
       offContext?.(); offScenes(); offPreparation();
       residency.dispose();
       ports.head.attach({ characterContext: undefined });

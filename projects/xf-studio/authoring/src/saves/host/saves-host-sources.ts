@@ -72,11 +72,18 @@ export async function savesLocation(host: DetectionHost, settings: Pick<LocalSet
 }
 
 /** The settings view's saves folder detection (`createLocalSettingsHandler`): the detected folder, described. */
-export function savesFolderProbe(options: { env?: NodeJS.ProcessEnv; allowOverride: boolean }): SavesFolderProbe {
+export function savesFolderProbe(options: { env?: NodeJS.ProcessEnv; allowOverride: boolean; host?: DetectionHost; now?: () => number }): SavesFolderProbe {
   const env = options.env ?? process.env;
-  const host = createWindowsDetectionHost(env);
+  const host = options.host ?? createWindowsDetectionHost(env), now = options.now ?? Date.now;
+  let cached: { path: string | null; at: number } | undefined, pending: Promise<string | null> | undefined;
+  const read = () => {
+    if (cached && now() - cached.at < 5_000) return Promise.resolve(cached.path);
+    return pending ??= cyberpunkSavesFolder(host).then(path => { cached = { path, at: now() }; return path; }).finally(() => { pending = undefined; });
+  };
+  // One fixed registry query starts with the host, not in the page's first settings request. No timer or permanent OS handle.
+  void read();
   return {
-    detected: async () => { const path = await cyberpunkSavesFolder(host); return path ? { path, display: SAVES_FOLDER_DISPLAY } : null; },
+    detected: async () => { const path = await read(); return path ? { path, display: SAVES_FOLDER_DISPLAY } : null; },
     developerOverride: () => options.allowOverride && !!env.XFS_SAVES_DIR,
   };
 }

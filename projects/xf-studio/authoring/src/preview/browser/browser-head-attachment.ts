@@ -24,6 +24,7 @@ import { createBrowserCharacterDetailDevice } from "../../character/browser/brow
 import { CharacterDetailActions } from "../../character/character-detail-actions";
 import type { CharacterWarmStart } from "../../character/browser/character-warm-start";
 import type { CharacterContextActions } from "../../character/character-context-actions";
+import type { CharacterRequest } from "../../character/character-detail-request";
 import type { CoreBody } from "../../character/render-detail";
 import type { SavedV } from "../../saves/save-reader";
 import { followCharacter } from "../../character/character-follow";
@@ -45,6 +46,24 @@ type ViewportDevice = ReturnType<typeof createBrowserViewportDevice>;
 /** Preparation handoff belongs to the viewport port; the attachment does not depend on the scene implementation. */
 type SceneDetailPreparation = Parameters<NonNullable<Parameters<ViewportDevice["buildHead"]>[2]>>[0];
 type Scene = Awaited<ReturnType<ViewportDevice["buildHead"]>>;
+
+/** The real detail service can request/read its V before setup permits construction of the head. It gains no display capability early. */
+export function startHeadDetails(request: CharacterRequest | undefined, warmStart?: Pick<CharacterWarmStart, "remember" | "files">) {
+  const scene = Promise.withResolvers<Scene>(), preparation = Promise.withResolvers<SceneDetailPreparation>();
+  void scene.promise.catch(() => {}); void preparation.promise.catch(() => {});
+  const actions = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene.promise, undefined, warmStart, preparation.promise));
+  const initial = request ? { key: JSON.stringify(request), promise: actions.setCharacter(request) } : undefined;
+  let disposed = false;
+  return {
+    actions, initial, ready: preparation.resolve,
+    connect(built: Promise<Scene>) { void built.then(scene.resolve, scene.reject); void built.then(preparation.resolve, preparation.reject); },
+    dispose() {
+      if (disposed) return;
+      disposed = true; actions.dispose();
+      const reason = new DOMException("The head request ended.", "AbortError"); scene.reject(reason); preparation.reject(reason);
+    },
+  };
+}
 
 /** The head-bound services the application holds; `undefined` disconnects one. */
 export type HeadServices = { savedV?: SavedAppearanceActions; preview?: PreviewActions; motion?: MotionActions; characterDetails?: CharacterDetailActions;
@@ -100,6 +119,8 @@ export type HeadAttachmentPorts = {
   notice?(text: string): void;
   /** The page's warm start (character-warm-start.ts): the V's files read while the head loaded, and the request remembered for next time. */
   warmStart?: Pick<CharacterWarmStart, "remember" | "files">;
+  /** Startup's already-requested V, adopted only when the authoritative context still matches. */
+  initialDetails?: ReturnType<typeof startHeadDetails>;
 };
 
 export type AttachedHead = {
@@ -172,6 +193,7 @@ const releaseAll = (releases: (() => void)[]) => {
 export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: AbortSignal = new AbortController().signal): Promise<AttachedHead> {
   const releases: (() => void)[] = [];
   try {
+    if (ports.initialDetails) releases.push(() => ports.initialDetails!.dispose());
     signal.throwIfAborted();
     if (ports.layered.filter(wiring => wiring.edited).length > 1) throw Error("Only one layered surface can carry the on-head editor.");
     // The head is the V's body's own core (the masculine V's head is prepared on first use). If the masculine head can't be prepared, the
@@ -190,16 +212,19 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     context.setBodyShown((fields?.display ?? ports.workspace.preview).body !== false);
     context.setUncensored((fields?.scene ?? ports.workspace.preview).uncensored === true);
     // A build that fails releases what it made itself (createSceneRuntime does).
-    const preparing = Promise.withResolvers<SceneDetailPreparation>();
-    void preparing.promise.catch(() => { /* The complete scene build reports this failure. */ });
-    const sceneReady = ports.viewport.buildHead(body, signal, preparing.resolve);
-    void sceneReady.then(preparing.resolve, preparing.reject); // Hosts without an early handoff retain the complete-scene path.
-    const characterDetails = new CharacterDetailActions(createBrowserCharacterDetailDevice(sceneReady, undefined, ports.warmStart, preparing.promise));
+    const request = context.detailRequest();
+    const initialRequest = request.bodyGender === body ? request : undefined;
+    const matches = !!ports.initialDetails && ports.initialDetails.initial?.key === JSON.stringify(initialRequest);
+    if (!matches) ports.initialDetails?.dispose();
+    const details = matches ? ports.initialDetails! : startHeadDetails(initialRequest, ports.warmStart);
+    releases.push(() => details.dispose());
+    const sceneReady = ports.viewport.buildHead(body, signal, details.ready);
+    details.connect(sceneReady);
+    const characterDetails = details.actions;
     const stopDetails = () => characterDetails.dispose();
     signal.addEventListener("abort", stopDetails, { once: true });
     releases.push(() => { signal.removeEventListener("abort", stopDetails); stopDetails(); });
-    const request = context.detailRequest();
-    let initialDetails = request.bodyGender === body ? { key: JSON.stringify(request), promise: characterDetails.setCharacter(request) } : undefined;
+    let initialDetails = details.initial;
     const scene = await sceneReady;
     releases.push(() => ports.viewport.disposeHead(scene));
     signal.throwIfAborted();

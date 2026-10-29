@@ -151,7 +151,7 @@ export class PreviewSetupActions {
   private detection: "idle" | "looking" | "done" = "idle";
   private attempted: boolean;
   private lastWolvenKit: WolvenKitSetupState["phase"] | null = null;
-  private announcedReady = false;
+  private previousCorePhase: PreviewState["phase"] | undefined;
   private head: { phase: "waiting" | "loading" | "ready" | "failed"; code: HeadLoadFailureCode | null; failures: number } =
     { phase: "waiting", code: null, failures: 0 };
   private setupRequests = 0;
@@ -320,8 +320,7 @@ export class PreviewSetupActions {
 
   // ---- Following the host ----
   private async refresh() {
-    await this.port.wolvenKit.dispatch({ kind: "wolvenkit.refresh" });
-    await this.port.preparation.dispatch({ kind: "preview.refresh" });
+    await Promise.all([this.port.wolvenKit.dispatch({ kind: "wolvenkit.refresh" }), this.port.preparation.dispatch({ kind: "preview.refresh" })]);
     await this.maybeStart();
   }
   private refreshOutcome(): PreviewSetupOutcome {
@@ -344,7 +343,9 @@ export class PreviewSetupActions {
   }
   private preparationChanged() {
     const state = this.port.preparation.snapshot();
-    if (state?.phase === "ready" && !this.announcedReady) { this.announcedReady = true; this.port.localSetup.requestRefresh(); }
+    // An already-ready core changes no settings/readiness. Re-read only when preparation actually reaches ready after a prior state.
+    if (state?.phase === "ready" && this.previousCorePhase !== undefined && this.previousCorePhase !== "ready") this.port.localSetup.requestRefresh();
+    if (state) this.previousCorePhase = state.phase;
     // Nothing is looked for or started before the composition root starts the service (PREV-23).
     if (this.started && this.looking(state) && this.detection === "idle") void this.detectGame();
     // A head that failed to load waits for the next ready preview once the host moves on,

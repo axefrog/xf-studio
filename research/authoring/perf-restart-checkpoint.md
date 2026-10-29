@@ -1,6 +1,6 @@
 # PREV-196: warm restart preparation
 
-Step 1 is merged at **main `19c366b7`** (MERGE review; full suite **4,875/0**, GPU **124/0**, browser/resource proofs green), improving warm restart from **9.9–10.6 s to 5.6–7.7 s**. Step 2 with native lanes, committed as **`879a3ff5`**, now answers blink **0.8–1.0 s after request** and draws the whole V at **3.1–3.5 s warm**. Typecheck is clean and the scheduler High is closed. Coordinator gates found two architecture-boundary failures; the re-review found shared reads retaining background priority after a person joins. The uncommitted correction gives shared reads monotonic priority inheritance and routes both boundary dependencies through their existing ports. **118 targeted tests pass**; candidate re-review/typecheck/full gates remain the coordinator's. **<2 s remains open**.
+Step 1 is merged at **main `19c366b7`**, improving warm restart from **9.9-10.6 s to 5.6-7.7 s**. Step 2 is merged at **main `675e5370`**, MERGE-reviewed, full suite **4,936/0**, scene runtimes **28/0 alone**; the complete warm V appears at **3.1-3.5 s**. Step 3 is uncommitted on `claude/perf-restart-3`: start the authoritative V request before core setup, overlap independent setup reads, yield bulk core verification, and revalidate warm core assets without retransferring their bytes. Strict GPU completion remains. **126 targeted guarded tests pass**; no new runtime number is claimed. **<2 s remains open**.
 
 ## Measurements
 
@@ -26,7 +26,7 @@ frame 2920–2950
 
 Before step 2, loaded was 4.1–6.2 s and blink answered at 3.9–6.1 s while creator presentation, background V resolve and archive indexes competed with facial work. The new measurement confirms the combined priority/overlap improvement; it does not isolate each change's contribution. The 720 ms uploads → drained interval still includes bake/program/link work and completion waits.
 
-Coordinator gates on **`879a3ff5`**: typecheck clean; desktop **135/0**, 038 **11/0**, startup/substitution browser tests green, resources **8/0**, GPU **124/0**, latency green. Suite batches 1–5 reported **1,031 + 955 + 1,040 + 1,024 + 873 passing**, with only two failures: native-boundary and view-graph-audit. Those two pass in the uncommitted candidate's targeted run; no complete gate run is claimed for the candidate.
+Coordinator gates on step 2 are complete: **main `675e5370`**, MERGE review, full suite **4,936/0** and scene runtimes **28/0 alone**. The earlier native-boundary and view-graph-audit failures and shared-read priority finding are fixed. Typecheck was clean; desktop **135/0**, 038 **11/0**, startup/substitution browser tests, resources **8/0**, GPU **124/0** and latency had already passed on the prior native-lane checkpoint. These are step-2 proofs; the step-3 candidate has only the targeted tests below.
 
 ## 1. Host: first-frame demand uses the shared lanes
 
@@ -102,7 +102,7 @@ The captured fence is preparation-owned, cleaned in `finally`, and deleted immed
 
 **Native-lane files** under `projects/xf-studio/authoring/`: `src/game/host/resolver-host.ts`; `src/native/native-fetch-port.ts`, `native-priority.ts`, `native-decode.ts`, `anim-decode.ts`, `texture-decode.ts`, `mesh-decode.ts`; `src/animation/host/facial-native.ts`, `facial-host.ts` (optional diagnostics); `tests/native-decode-lanes.test.ts`. The separate game/host wrapper is removed in the boundary correction below.
 
-## Shared-read inheritance and boundary correction (uncommitted)
+## Shared-read inheritance and boundary correction (merged in 675e5370)
 
 **Cause:** the graph memoises resource/model promises. A person joining one started by ahead work bypassed native submission, leaving its queued read at background priority. Continuous shown demand could starve that person; decode budgets start only after send and do not bound this queue wait.
 
@@ -112,22 +112,50 @@ The captured fence is preparation-owned, cleaned in `finally`, and deleted immed
 
 **Boundary fixes:** lane stamping now lives inside the existing `src/native/native-fetch-port.ts` public surface, with a host-supplied priority callback. `ResolverFetcher` supplies the lane mapping; the separate game/host lane-wrapper module is removed. Native code imports no host scheduler. The browser head attachment derives its preparation handoff type from its existing viewport port instead of importing `platform/scene/scene-host`. No allowlist or ratchet changed, and preparation/publication behavior is unchanged.
 
-**Files for this correction:** `src/game/resource-graph.ts`, `src/game/host/resolver-host.ts`; `src/native/native-decode.ts`, `native-fetch-port.ts`, `native-priority.ts`; `src/preview/browser/browser-head-attachment.ts`; `tests/native-decode-lanes.test.ts`, plus the performance/ledger and knowledge notes. The former game/host lane-wrapper module is deleted.
+**Step-2 correction files:** `src/game/resource-graph.ts`, `src/game/host/resolver-host.ts`; `src/native/native-decode.ts`, `native-fetch-port.ts`, `native-priority.ts`; `src/preview/browser/browser-head-attachment.ts`; `tests/native-decode-lanes.test.ts`, plus the performance/ledger and knowledge notes. The former game/host lane-wrapper module is deleted.
+
+## Step 3: startup dependencies and warm core transfers (uncommitted)
+
+**Coordinator baseline, warm run 3 on `ef969caa` (the merged step-2 lineage):** page milliseconds. The speculative kept-V request is 211-445; local-settings 461-951; preview-core 993-1262; core record 1370-1530; a second local-settings read 1301-1597. Real V ask 1371, answer 1620, record 1641; head.glb 1620-2030 (12 MB), core maps complete by 2091; loaded 2262, uploads 2685, drained 3310, prepared 3361, placed 3369, frame 3410. Runtime program/warm-up marks 4267-4632 occur after that measured frame. No phase boundary or definition of the V's frame was moved.
+
+### 1. Ask for the authoritative V before core setup
+
+**Cause [source]:** the early request belongs to `CharacterWarmStart`: it only probes a remembered kept answer and cannot decide what is displayed. The real detail service was created by `buildBrowserHead`, which setup reached after WolvenKit/core checks. Profiles/library data, not the remembered warm request, determines the current V.
+
+**Fix:** once the active profile/session and its character context exist, the scene-head owner primes the real `CharacterDetailActions` service without constructing a scene. The same service issues the real POST and reads its record, then waits on deferred preparation/scene ports. `buildBrowserHead` adopts it only when the character/request still match. Context changes before setup replace it; release aborts it, and a failed build releases it. Empty scenes request nothing. Preparation still needs the stable rig surface and placement still needs complete motion, with the existing cancellation recheck. No second request/display owner or speculative remembered-V preparation is added. The earliest safe ask is now authoritative-context availability, independent of core/local-settings completion; whether that reaches 0.2-0.3 s needs measurement.
+
+**Files:** `src/preview/browser/browser-head-attachment.ts`, `browser-scene-heads.ts`; `src/compose/studio-startup.ts` (one wiring call). Tests observe actual POSTs, not method-call counts: one request across adoption; replacement after a body change; abort before a head exists. Existing successful placement, motion, supersession and context-loss cases remain.
+
+### 2. Small host reads and the duplicate settings request
+
+**Cause [source]:** neither GET is queued as a preparation job. Settings includes a per-request Windows Saved Games `reg.exe` query and synchronous advisory path/framework checks; the registry wait is a plausible contributor to 0.3-0.5 s, not an isolated timing proof. Core readiness synchronously hashes roughly 20 MB. Setup also awaited WolvenKit before asking for core state. Its first observation of an already-ready core triggered another settings read even though no preparation had occurred; that second read was concurrent with head loading, not its direct prerequisite.
+
+**Fix:** setup checks WolvenKit/core concurrently and refreshes settings only on an actual non-ready-to-ready core transition. The host prewarms/single-flights the fixed Saved Games query and memoises that advisory result for five seconds without an expiry timer; settings writes, chosen paths and actual save-file location resolution remain fresh/unchanged. Core HTTP readiness retains the exact recipe/stamp/manifest/size/hash checks but hashes via asynchronous 256 KiB file reads. Shared check consumers have separate AbortSignals: one cancellation leaves other readers running, the last cancellation aborts verification, and every opened file closes in finally. Obsolete checks cannot publish after invalidation/settings changes; archive stamps are checked again after verification. No scheduler permit is held across these reads and no priority wait edge is added.
+
+**Files:** `src/preview/preview-setup.ts`; `src/preview/host/preview-core-service.ts`, `preview-core-host.ts`, `preview-core-server.ts`; `src/saves/host/saves-host-sources.ts`. Tests cover independent setup admission, initial-ready versus completed-preparation refresh, registry sharing/expiry, async parity and same-size corruption, and shared-read cancellation.
+
+### 3. Keep completion protection; separate the 0.6 s interval
+
+**Decision [source + existing fake-GPU proofs]:** uploads-to-drained also includes pre-bake completion, layered baking, program submission/link readiness and the final first-use barrier. It is not evidence for an unnecessary single 0.6 s fence. Bakes' error/readback checks and first-use uniforms/attributes are synchronous calls that can block behind GPU-process backlog (G2). Retain the strict barriers, existing link overlap, revision refresh and 120-frame bound; elapsed time cannot substitute for completion on an idle page. No new fence or timer is introduced.
+
+**Diagnostic fix:** bounded phase marks now include `details:maps-drained`, `details:baked`, `details:programs`, `details:linked`, before the existing `details:drained`. This lets the coordinator separate bake/link time from the final report delay before choosing another overlap. Files: `src/platform/scene/character-renderer.ts`, `src/character/character-timing.ts`. Existing fake-fence first-use/backlog/cancellation tests pass unchanged. No browser/GPU result is claimed.
+
+### 4. Reuse the warm head's bytes after validation
+
+**Cause [source]:** both hosts serve head.glb through `Bun.file` on every GET with no-cache and no explicit content validator. The 0.4 s includes transfer, host scheduling and browser work; it is not a measured disk-only cost.
+
+**Fix:** a shared core asset handler supplies a strong ETag from the validated manifest hash and `private, no-cache`. Conditional GET/HEAD still validates readiness and file existence/realpath containment; unchanged bytes return 304. Both hosts use it. There is no embedding of private game data in the page and no new retained 12 MB host buffer. Changed/invalid/missing core entries cannot be vouched for by a caller's old ETag. Browser parsing remains necessary. Files: `src/preview/host/preview-core-host.ts`, `preview-core-server.ts`, `server.ts`, `desktop/server.ts` (routing only). The asset-free HTTP regression proves 200/304, changed tags, HEAD and invalid/missing refusal.
 
 ## Validation and handoff
 
-**118 targeted tests pass**, one Bun process at a time under the required **4 GB guard**, peak **0.5 GB**. Current native-decode-lanes is **21/0**, native-boundary **6/0**, view-graph-audit **9/0**; six related files add **75/0** (native-fetch-port, native-catalogue-texts, resource-graph-retention, character-detail-context, browser-viewport-device, architecture-import-boundary); the filtered native-hardening worker/decoder cases add **7/0**. No browser, GPU, typecheck, desktop, full-suite, real-data oracle or latency gate ran in this correction.
+**126/0 targeted tests across ten files**, one Bun process at a time under the required **4 GB guard**, peak **0.6 GB**: browser-scene-heads, browser-head-attachment, character-detail-context, character-renderer, preview-core, preview-preparation, preview-setup, restart-host-reads, local-setup-actions, warm-start-lifetime. Fixtures use fake scenes/GPU/registry and private synthetic files; no real-game probe or external registry command was run for validation. No existing timing gate was relaxed.
 
-The lane regressions retain the 100-ahead backlog tests for all five native kinds and add promotion across all five. Under continuous shown demand, person joins the exact queued background graph promise and runs after one **25 ms** fake operation, with one decode, for direct, copy and link references. Memoised app/mesh/morph joins raise their document and patch sources. Lower joins cannot demote inherited work. Existing output, failure/restart/release, graph provenance/retention, preparation cancellation and architecture assertions remain green. No timing gate was relaxed.
+`git diff --check` passes. Per the maintainer's sandbox handle rule, no whole-tree walker, link/private-path/footprint/audit script, browser/GPU/typecheck/desktop/full/latency gate ran. Those checks and candidate re-review belong to the coordinator. No task scratch/payload is retained. Changes are uncommitted.
 
-Final checks pass: **0 broken links/source paths in 508 Markdown files**, **0 tracked-file private-path findings**, and `git diff --check` clean. The footprint report shows **296.9 GB free on C:** and this worktree at **0.5 GB**. No task scratch or new payload above 5 GB is retained; coordinator traces and other worktrees remain untouched.
-
-The coordinator owns re-review, typecheck, browser/GPU/full gates and any remeasurement. The committed native-lane change is measured at 3.1–3.5 s warm; the shared-read/boundary correction has no new runtime number. Compare a person request that joins creator discovery with continued shown demand; the optional trace should show the joined decode promoted rather than another decode submitted.
-
-**Remaining path to 2 s:** remeasure the 3.1–3.5 s candidate after inheritance is reviewed. Native worker startup, installation validation/opening, actual rig/morph decode service, request start and page preparation still merit separate budgets. Queue ordering removes avoidable waits, not necessary reads or GPU completion protection. CPU grace remains 50 ms. No game or mod-manager operation is needed for this checkpoint.
+**Next measurement:** compare actual ask/answer/record and the core record/head file ranges with step 2; confirm a single POST is adopted and a warm head validates by ETag. Capture the four new details phase marks to isolate the retained 0.6 s. **Remaining path to 2 s:** authoritative profile/context startup, necessary core/V decode and parsing, GPU uploads and strict completion. Earlier requesting and cached transfer may overlap these costs, but 2 s is not established until the coordinator remeasures. No game or mod-manager operation is needed.
 
 ## Step 1 evidence retained
 
 The first candidate `2e57ae9f` regressed to 20.3–20.7 s despite asking for the V at 1 s: per-band fences multiplied quiet-context reports of 200–250 ms. The window commit `da926994` reached 6.4–6.8 s, with uploads 0.4 s after loaded. Subsequent review fixed later-work admission, warm-character fence retention, the pose poll's unowned 700 ms timer and a separate one-second face poll; continuous rendering then exposed fence replacement starvation. The merged design retains pending admission barriers, grants a bounded burst on completion and carries intervening work into the next checkpoint. The shell-repaint explanation for delayed Chrome reporting remains a hypothesis. Those fixes are now MERGE-reviewed and validated by the coordinator's green full/GPU/browser/resource gates on `19c366b7`.
 
-**Knowledge used:** [native archive reader](../../knowledge/archive-format.md#8-reading-untrusted-files-safely), [WebGL linking/uploads](../../knowledge/webgl-program-linking.md), [mod loading §6](../../knowledge/mod-loading.md#6-implementation-and-reproduction), [facial animation](../../knowledge/facial-animation.md), [body animation](../../knowledge/body-animation.md), [knowledge rules](../../knowledge/README.md). Updated native queue behavior with shared-read priority inheritance, measured 879a3ff5 results and boundary corrections. Candidate review/full gates remain pending.
+**Knowledge used:** [native archive reader](../../knowledge/archive-format.md#8-reading-untrusted-files-safely), [WebGL linking/uploads](../../knowledge/webgl-program-linking.md), [mod loading §6](../../knowledge/mod-loading.md#6-implementation-and-reproduction), [facial animation](../../knowledge/facial-animation.md), [body animation](../../knowledge/body-animation.md), [knowledge rules](../../knowledge/README.md). Updated merged step-2 evidence and step-3 startup/HTTP/cache findings. Candidate review, measurement and full gates remain pending; whole-tree checks stay in the coordinator shell.

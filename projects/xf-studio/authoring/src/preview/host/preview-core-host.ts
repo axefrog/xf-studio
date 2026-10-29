@@ -3,7 +3,7 @@ import type { Registry, AnyOwner } from "../../platform/core/registry";
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseCoreAssetName, PREVIEW_CORE_RECIPES, type CoreBody } from "../preview-core-recipe";
-import { ensurePreviewCore, PREVIEW_CORE_STEPS, PreviewCoreCache, PreviewCoreError, previewCoreReadiness } from "./preview-core-service";
+import { ensurePreviewCore, PREVIEW_CORE_STEPS, PreviewCoreCache, PreviewCoreError, previewCoreReadiness, previewCoreReadinessAsync } from "./preview-core-service";
 import type { GameAssetExporter } from "../../game/host/game-asset-export";
 import { createWolvenKitGameAssetExporter } from "../../game/host/game-asset-export-wolvenkit";
 import { hostFailure } from "../../diagnostics/host/host-log";
@@ -67,6 +67,7 @@ export class PreviewCoreHost {
   private lastFailure: Partial<Record<CoreBody, { code: string; message: string; gameRoot: string | null }>> = {};
   private lastDurationSeconds: number | null = null;
   private readinessMemo = new Map<CoreBody, { key: string; value: ReturnType<typeof previewCoreReadiness>; at: number }>();
+  private checks = new Map<CoreBody, { key: string; promise: Promise<void>; life: AbortController; wants: number }>();
   constructor(private readonly options: PreviewCoreHostOptions) {}
 
   private readiness(gameRoot: string | null, body: CoreBody) {
@@ -80,7 +81,42 @@ export class PreviewCoreHost {
     this.readinessMemo.set(body, { key, value, at: now });
     return value;
   }
-  private forget() { this.readinessMemo.clear(); }
+  private forget() {
+    this.readinessMemo.clear();
+    for (const check of this.checks.values()) check.life.abort();
+    this.checks.clear();
+  }
+
+  /** Shared HTTP validation; an obsolete completion cannot publish after a rebuild/settings change. */
+  async readSnapshot(body: CoreBody = "female", signal?: AbortSignal): Promise<PreviewCoreState> {
+    signal?.throwIfAborted();
+    const settings = this.options.settings(), key = `${settings.gameRoot}`, memo = this.readinessMemo.get(body);
+    if (this.running?.body !== body && isGame(settings.gameRoot) && !(memo?.key === key && (this.options.now ?? Date.now)() - memo.at < 5_000)) {
+      let check = this.checks.get(body);
+      if (!check || check.key !== key) {
+        const { recipe } = PREVIEW_CORE_RECIPES[body], plate = registeredPreviewPreparation(this.options.registry, body);
+        const made = { key, promise: Promise.resolve(), life: new AbortController(), wants: 0 };
+        made.promise = previewCoreReadinessAsync(this.options.cacheRoot, settings.gameRoot, recipe, plate, made.life.signal).then(value => {
+          if (this.checks.get(body) === made && `${this.options.settings().gameRoot}` === key)
+            this.readinessMemo.set(body, { key, value, at: (this.options.now ?? Date.now)() });
+        }).finally(() => { if (this.checks.get(body) === made) this.checks.delete(body); });
+        this.checks.set(body, made); check = made;
+      }
+      const owned = check;
+      owned.wants++;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const abort = () => reject(signal!.reason);
+          if (signal?.aborted) abort(); else signal?.addEventListener("abort", abort, { once: true });
+          owned.promise.then(() => { signal?.removeEventListener("abort", abort); signal?.aborted ? reject(signal.reason) : resolve(); },
+            error => { signal?.removeEventListener("abort", abort); reject(error); });
+        });
+      } finally {
+        if (--owned.wants === 0 && this.checks.get(body) === owned) { this.checks.delete(body); owned.life.abort(); }
+      }
+    }
+    return this.snapshot(body);
+  }
 
   snapshot(body: CoreBody = "female"): PreviewCoreState {
     const settings = this.options.settings();
@@ -185,6 +221,14 @@ export class PreviewCoreHost {
     if (!isGame(settings.gameRoot)) return null;
     const readiness = this.readiness(settings.gameRoot, asset.body);
     return readiness.state === "ready" ? join(readiness.directory, asset.file) : null;
+  }
+  /** A validated derived asset and its content identity, for conditional HTTP reads. No asset bytes are retained by the host. */
+  async asset(name: string, signal?: AbortSignal): Promise<{ path: string; etag: string } | null> {
+    const asset = parseCoreAssetName(name);
+    if (!asset || (await this.readSnapshot(asset.body, signal)).phase !== "ready") return null;
+    const path = this.assetPath(name), readiness = this.readinessMemo.get(asset.body)?.value;
+    const file = readiness?.state === "ready" ? readiness.manifest.files.find(file => file.name === asset.file) : undefined;
+    return path && file ? { path, etag: `"${file.sha256}"` } : null;
   }
   ready(body: CoreBody = "female"): boolean { return this.snapshot(body).phase === "ready"; }
 }

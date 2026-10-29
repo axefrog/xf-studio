@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { USER_FACING_JARGON } from "../src/app/alpha-availability";
@@ -83,9 +83,34 @@ function harness(options: { preview?: PreviewState; wolvenKit?: WolvenKitSetupSt
     autostart: { get: () => autostart, set: on => { autostart = on; } },
     ...(options.declined ? { declined: { get: () => options.declined!.value, set: (on: boolean) => { options.declined!.value = on; } } } : {}),
     loadHead: () => host.head() });
-  return { host, setup, preparation, localSetup, saved, links, get autostart() { return autostart; }, get hostSetupOpened() { return hostSetupOpened; },
+  return { host, setup, preparation, wolvenKit, localSetup, saved, links, get autostart() { return autostart; }, get hostSetupOpened() { return hostSetupOpened; },
     ready() { host.preview = previewState({ phase: "ready", canPrepare: false, message: "The 3D view is ready." }); } };
 }
+
+test("an already-ready core loads without waiting for WolvenKit or causing a second settings read", async () => {
+  let loaded = 0;
+  const h = harness({ preview: previewState({ phase: "ready", canPrepare: false }), loadHead: async () => { loaded++; } });
+  const pending = Promise.withResolvers<{ ok: true }>();
+  const slow = spyOn(h.wolvenKit, "dispatch").mockImplementation(() => pending.promise);
+  const refresh = spyOn(h.localSetup, "requestRefresh");
+  try {
+    const starting = h.setup.start();
+    await until(() => loaded === 1);
+    expect(h.host.requests).toContain("refresh");
+    expect(refresh).not.toHaveBeenCalled();
+    pending.resolve({ ok: true }); await starting;
+  } finally { pending.resolve({ ok: true }); slow.mockRestore(); refresh.mockRestore(); h.preparation.dispose(); h.wolvenKit.dispose(); }
+});
+
+test("a core that actually becomes ready still refreshes settings", async () => {
+  const h = harness({ preview: previewState({ phase: "preparing", canCancel: true }) });
+  const refresh = spyOn(h.localSetup, "requestRefresh");
+  try {
+    await h.setup.start(); h.ready();
+    await h.preparation.dispatch({ kind: "preview.refresh" });
+    expect(refresh).toHaveBeenCalledTimes(1);
+  } finally { refresh.mockRestore(); h.preparation.dispose(); h.wolvenKit.dispose(); }
+});
 
 function spoken(snapshot: PreviewSetupSnapshot): string[] {
   const card = snapshot.card, consent = snapshot.consent;

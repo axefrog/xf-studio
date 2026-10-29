@@ -1,5 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { open, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { contentFingerprint, DerivedCache, fileSha256, samePath } from "../../host/derived-cache";
 import { type EyePlateRecipe } from "../../legacy/eye-makeup/plate/eye-plate-recipe";
 import { sha256Hex } from "../../formats/content-hash";
@@ -134,8 +136,8 @@ function classifyFailure(error: unknown, aborted: boolean): PreviewCoreError {
     (error as Error)?.stack ?? String(error));
 }
 
-/** Validate a cached entry against its manifest and the expected identity; `key` null accepts any matching recipe entry. */
-export function loadPreviewCoreEntry(cache: PreviewCoreCache, name: string, key: string | null,
+/** Match a cached manifest to the expected identity; byte verification is shared by the synchronous and HTTP paths below. */
+function previewCoreEntry(cache: PreviewCoreCache, name: string, key: string | null,
   recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate?: EyePlateRecipe): PreviewCoreResult | null {
   const directory = cache.entry(name);
   const manifestFile = join(directory, PREVIEW_CORE_MANIFEST_FILE);
@@ -148,11 +150,48 @@ export function loadPreviewCoreEntry(cache: PreviewCoreCache, name: string, key:
     const assets = join(directory, PREVIEW_CORE_ASSET_DIRECTORY);
     const names = manifest.files.map(file => file.name).sort();
     if (JSON.stringify(names) !== JSON.stringify([...PREVIEW_CORE_FILES].sort())) return null;
-    for (const entry of manifest.files) {
-      const file = join(assets, entry.name);
+    return { directory: assets, manifest, reused: true };
+  } catch { return null; }
+}
+
+/** Synchronous validation for derivation/CLI callers. HTTP reads use the same rules with asynchronous file verification below. */
+export function loadPreviewCoreEntry(cache: PreviewCoreCache, name: string, key: string | null,
+  recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate?: EyePlateRecipe): PreviewCoreResult | null {
+  const found = previewCoreEntry(cache, name, key, recipe, plate);
+  if (!found) return null;
+  try {
+    for (const entry of found.manifest.files) {
+      const file = join(found.directory, entry.name);
       if (!existsSync(file) || statSync(file).size !== entry.bytes || fileSha256(file) !== entry.sha256) return null;
     }
-    return { directory: assets, manifest, reused: true };
+    return found;
+  } catch { return null; }
+}
+
+/** Verify every byte, yielding through file I/O in bounded chunks instead of hashing the whole core in one host turn. */
+async function checkedCoreEntry(cache: PreviewCoreCache, name: string, recipe: PreviewCoreRecipe, plate?: EyePlateRecipe, signal?: AbortSignal): Promise<PreviewCoreResult | null> {
+  const found = previewCoreEntry(cache, name, null, recipe, plate);
+  if (!found) return null;
+  try {
+    const buffer = Buffer.alloc(256 * 1024);
+    for (const entry of found.manifest.files) {
+      signal?.throwIfAborted();
+      const path = join(found.directory, entry.name);
+      if ((await stat(path)).size !== entry.bytes) return null;
+      const file = await open(path, "r"), digest = createHash("sha256");
+      let bytes = 0;
+      try {
+        for (;;) {
+          signal?.throwIfAborted();
+          const read = await file.read(buffer, 0, buffer.length, null);
+          if (!read.bytesRead) break;
+          bytes += read.bytesRead; digest.update(buffer.subarray(0, read.bytesRead));
+          if (bytes > entry.bytes) return null;
+        }
+      } finally { await file.close(); }
+      if (bytes !== entry.bytes || digest.digest("hex") !== entry.sha256) return null;
+    }
+    return found;
   } catch { return null; }
 }
 
@@ -339,6 +378,25 @@ export function previewCoreReadiness(cacheRoot: string | null, gameRoot: string 
       !samePath(status.gameRoot, gameRoot) || status.contentFingerprint !== contentFingerprint(gameRoot, ARCHIVE_DIRECTORY)) return { state: "none" };
   if (status.state === "ready" && status.cacheName) {
     const entry = loadPreviewCoreEntry(cache, status.cacheName, null, recipe, plate);
+    return entry ? { state: "ready", directory: entry.directory, manifest: entry.manifest } : { state: "none" };
+  }
+  if (status.state === "missing" || status.state === "unsupported") return { state: "blocked", code: status.code ?? status.state, message: status.message };
+  return { state: "none" };
+}
+
+/** HTTP counterpart of previewCoreReadiness: identical stamps, manifests, sizes and hashes, with bulk verification off the turn. */
+export async function previewCoreReadinessAsync(cacheRoot: string | null, gameRoot: string | null,
+  recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate?: EyePlateRecipe, signal?: AbortSignal): Promise<PreviewCoreReadiness> {
+  signal?.throwIfAborted();
+  if (!cacheRoot || !gameRoot) return { state: "none" };
+  let cache: PreviewCoreCache, status: PreviewCoreStatus | null;
+  try { cache = new PreviewCoreCache(cacheRoot, recipe, !!plate); status = cache.readStatus(); } catch { return { state: "none" }; }
+  if (!status || status.recipeId !== recipe.id || status.recipeRevision !== recipe.revision || status.deriverVersion !== PREVIEW_CORE_DERIVER_VERSION ||
+      !samePath(status.gameRoot, gameRoot) || status.contentFingerprint !== contentFingerprint(gameRoot, ARCHIVE_DIRECTORY)) return { state: "none" };
+  if (status.state === "ready" && status.cacheName) {
+    const entry = await checkedCoreEntry(cache, status.cacheName, recipe, plate, signal);
+    signal?.throwIfAborted();
+    if (status.contentFingerprint !== contentFingerprint(gameRoot, ARCHIVE_DIRECTORY)) return { state: "none" };
     return entry ? { state: "ready", directory: entry.directory, manifest: entry.manifest } : { state: "none" };
   }
   if (status.state === "missing" || status.state === "unsupported") return { state: "blocked", code: status.code ?? status.state, message: status.message };

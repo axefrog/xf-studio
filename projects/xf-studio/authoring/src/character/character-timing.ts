@@ -35,7 +35,7 @@ export function takeCharacterTimings(): { stage: CharacterStage; at: number; det
  * takeover breakdown (`measure-tabs.ts`): the core head's record, file, parse and maps (`core:*`), a V's maps sent and the wait for the GPU
  * after them (`details:*`), and the runtime's own preparation (`run:*`). Kept like the stages: only the recent ones stay.
  */
-const PHASES = ["core:record", "core:bytes", "core:parsed", "core:textures", "details:uploads", "details:drained", "run:programs", "run:textures-done",
+const PHASES = ["core:record", "core:bytes", "core:parsed", "core:textures", "details:uploads", "details:maps-drained", "details:baked", "details:programs", "details:linked", "details:drained", "run:programs", "run:textures-done",
   "run:work", "run:warm-up"] as const;
 export type CharacterPhase = typeof PHASES[number];
 let phases = 0;

@@ -1,5 +1,24 @@
 import type { PreviewCoreHost } from "./preview-core-host";
 import { CORE_BODIES, type CoreBody } from "../preview-core-recipe";
+import { realpath, stat } from "node:fs/promises";
+import { dirname } from "node:path";
+import { isBelow } from "../../platform/api/path-containment";
+
+/** Both hosts serve the same validated bytes; a warm browser can retain its 12 MB head instead of transferring it again. */
+export async function servePreviewCoreAsset(host: Pick<PreviewCoreHost, "asset">, name: string, request: Request): Promise<Response> {
+  const asset = await host.asset(name, request.signal);
+  if (!asset) return new Response("Not found", { status: 404 });
+  const file = Bun.file(asset.path);
+  if (!await file.exists()) return new Response("Not found", { status: 404 });
+  try {
+    const [root, path] = await Promise.all([realpath(dirname(asset.path)), realpath(asset.path)]);
+    if (!isBelow(path, root) || !(await stat(path)).isFile()) return new Response("Not found", { status: 404 });
+  } catch { return new Response("Not found", { status: 404 }); }
+  const headers = { "ETag": asset.etag, "Cache-Control": "private, no-cache", "X-Content-Type-Options": "nosniff", "Content-Type": file.type };
+  if (request.headers.get("If-None-Match")?.split(",").some(tag => tag.trim().replace(/^W\//, "") === asset.etag || tag.trim() === "*"))
+    return new Response(null, { status: 304, headers });
+  return new Response(request.method === "HEAD" ? null : file, { headers });
+}
 
 /**
  * Host endpoint for the 3D preview preparation. GET returns the read-only state (`?body=male` for the masculine V's core);
@@ -19,7 +38,7 @@ export function createPreviewCoreHandler(host: PreviewCoreHost, options: { trust
     if (request.method === "GET") {
       const body = url.searchParams.get("body") ?? "female";
       if (!isBody(body)) return json({ code: "invalid", error: "Choose the female or male head." }, 400);
-      return json(host.snapshot(body));
+      return json(await host.readSnapshot(body, request.signal));
     }
     if (request.method !== "POST") return json({ code: "method", error: "Method not allowed." }, 405);
     const trusted = options.trustedOrigin?.(request) ?? origin === url.origin;

@@ -33,7 +33,7 @@ import { DesktopWorkActivity } from "./work-activity";
 import { DesktopUpdateApplyGuard } from "./update-apply-guard";
 import { PreviewCoreHost } from "../src/preview/host/preview-core-host";
 import { includeHostCode } from "../src/host/host-code-identity";
-import { createPreviewCoreHandler } from "../src/preview/host/preview-core-server";
+import { createPreviewCoreHandler, servePreviewCoreAsset } from "../src/preview/host/preview-core-server";
 import type { GameAssetExporter } from "../src/game/host/game-asset-export";
 import { PREVIEW_CORE_ASSET_NAMES } from "../src/preview/preview-core-recipe";
 import { CharacterDetailHost, characterRoute, installationFingerprint } from "../src/character/host/character-detail-host";
@@ -485,9 +485,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
         // Only the derived core preview files are served as assets; the installer carries none.
         let name: string;
         try { name = decodeURIComponent(url.pathname.slice("/assets/".length)); } catch { return new Response("Bad path", { status: 400 }); }
-        const derived = coreFiles.has(name) ? previewCore.assetPath(name) : null;
-        if (!derived) return new Response("Not found", { status: 404 });
-        path = derived; servedRoot = resolve(derived, "..");
+        return coreFiles.has(name) ? servePreviewCoreAsset(previewCore, name, request) : new Response("Not found", { status: 404 });
       } else {
         try { path = resolve(staticRoot, "." + decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname)); }
         catch { return new Response("Bad path", { status: 400 }); }

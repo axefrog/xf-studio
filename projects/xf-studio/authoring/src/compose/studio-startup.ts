@@ -492,6 +492,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   drawnView = () => heads.shownView();
   /** The presentation's read of which view is drawn and whose picture the canvas holds (each 3D view's pane follows it, P2-iii-b). */
   function syncDrawn() { if (!signal.aborted) viewportDevice.attachment.setDrawn({ drawn: heads.shownView(), onCanvas: heads.shown()?.preview.view() }); }
+  heads.prime();
   syncDrawn();
   // Camera, preview and motion actions go to the runtime holding the view they name (view-routes.ts).
   core.app.attach({ runtimes: heads.runtimes });
