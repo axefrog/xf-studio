@@ -7,6 +7,7 @@ import type { PoseClip } from "../../animation/render/pose-clip";
 import { BUILT_IN_CATALOGUE, DEFAULT_IDLE, type IdleCatalogue, type IdleEntry } from "../../animation/idle-catalogue";
 import { activeEyeShape, GAME_BLINK_MISSING, IDLE_FACE_MISSING, IDLE_FACE_PREPARING, IDLE_MASCULINE, loadGameBlink, type GameBlink } from "../../animation/render/game-blink";
 import { loadIdleSource, type IdleSource } from "./idle-source";
+import { readMotionAhead } from "./motion-read-ahead";
 import { composePreviewMotion } from "../../animation/render/preview-motion";
 import { FaceDriver, type FacePose, type FaceRigJoint } from "./face-driver";
 import { createEyeMaterial, eyeParameters, prepareEyeballGeometry } from "../../materials/render/eye-material";
@@ -72,7 +73,21 @@ export function withRigMotion<M extends RigMotionAssets, R>(motion: M, rig: R): 
  * host; where the face can't be read it holds still (`faceError`, the host's reason). The idle is the feminine V's, so a masculine head
  * holds still (`IDLE_MASCULINE`); the blink checks its own joints against the head (game-blink.ts).
  */
-export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", signal, stable) => {
+export const loadGameMotion: MotionLoader = (scene, eye, body, signal, stable) => gameMotion(scene, eye, body, signal, stable);
+
+/** Fetch clips alongside the core; binding and late-face ownership still belong to the rig that consumes them. */
+export function startGameMotion(body: CoreBody, parent: AbortSignal): MotionLoader {
+  const life = new AbortController(), signal = AbortSignal.any([parent, life.signal]);
+  const fetcher = readMotionAhead(body, signal);
+  return (scene, eye, body, owner, stable) => {
+    if (owner?.aborted) life.abort(owner.reason);
+    else owner?.addEventListener("abort", () => life.abort(owner!.reason), { once: true, signal });
+    return gameMotion(scene, eye, body, signal, stable, fetcher);
+  };
+}
+
+async function gameMotion(scene: THREE.Scene, eye: CoreEye, body: CoreBody = "female", signal?: AbortSignal, stable?: () => void,
+  fetcher?: (url: string, init?: RequestInit) => Promise<Response>): Promise<RigMotionAssets> {
   let idle: IdleAnimation | undefined, idleError = "", faceError = "";
   let source: IdleSource | undefined;
   // The first idle's clips, as loaded with the rig (so returning to it from a pose loads nothing).
@@ -81,7 +96,7 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", 
   let lateFace: Promise<Awaited<ReturnType<IdleSource["face"]>>> | null = null;
   try {
     if (body !== "female") throw Error(IDLE_MASCULINE);
-    source = await loadIdleSource({ signal });
+    source = await loadIdleSource({ signal, fetcher });
     signal?.throwIfAborted();
     const first = source.first;
     // The body never waits for the face (PREV-174): the face joins the playing idle once the host has read it. A developer preparation
@@ -152,7 +167,7 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", 
     const targets: THREE.Object3D[] = [];
     scene.updateMatrixWorld(true);
     scene.traverse(o => { if (o instanceof THREE.Bone) targets.push(o); });
-    blink = await loadGameBlink(targets, undefined, undefined, signal);
+    blink = await loadGameBlink(targets, fetcher, undefined, signal);
   } catch (error) {
     blink = undefined; blinkError = (error as Error).message || GAME_BLINK_MISSING;
   }
@@ -204,7 +219,7 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", 
     });
   }
   return assets;
-};
+}
 
 export type HeadRig = Awaited<ReturnType<typeof createHeadRig>>;
 

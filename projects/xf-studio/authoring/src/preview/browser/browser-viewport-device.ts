@@ -1,6 +1,8 @@
 import type * as THREE from "three";
 import { createSceneRuntime, type SceneDevice, type SceneRuntime, type SceneDetailPreparation } from "../../platform/scene/scene-host";
 import { createRendererDevice, type RendererDevice, type RendererDeviceOptions } from "../../platform/scene/renderer-device";
+import { releaseCoreDetailFiles, startCoreDetail } from "../../character/render/core-detail-loader";
+import { startGameMotion } from "../../platform/scene/head-rig";
 import type { FeatureRendererFactory } from "../../platform/api/scene";
 import type { CoreBody } from "../../character/render-detail";
 import { modifiersOf, NO_MODIFIERS } from "../../app/input-bindings";
@@ -36,6 +38,9 @@ export function createBrowserViewportDevice(options: {
   /** The head pane's one renderer device (profiles phase 4a-ii): made with the first head, kept for the window. */
   let device: SceneDevice & Pick<RendererDevice, "show" | "dispose"> | undefined;
   let disposed = false;
+  const lifetime = new AbortController();
+  // Stable before WebGL exists, and for the same lifetime as this viewport's single renderer.
+  const coreFiles = {};
   /** The head shown on the device (several may be resident; the scene runtime owner decides which: preview/scene-residency.ts). */
   let viewer: Scene | undefined;
   /** Who else hears the context's loss and restore (the runtime owner drops warm runtimes on a loss). */
@@ -94,14 +99,25 @@ export function createBrowserViewportDevice(options: {
      * Build a head with a body's core (the feminine V's by default), hidden on the pane's renderer device, whatever is shown meanwhile.
      * It rejects with `signal.reason` once the signal aborts (a newer subject or body change superseded it), having released what it made.
      */
-    buildHead(body: CoreBody = "female", signal?: AbortSignal, detailsReady?: (preparation: SceneDetailPreparation) => void) {
+    async buildHead(body: CoreBody = "female", signal?: AbortSignal, detailsReady?: (preparation: SceneDetailPreparation) => void) {
       if (disposed) return Promise.reject(new DOMException("The viewport was closed.", "AbortError"));
-      device ??= (options.deviceFactory ?? createRendererDevice)(options.headHost, { onContext: event => {
-        options.onContext?.(event);
-        for (const listener of [...contextListeners]) listener(event);
-      } });
-      return (options.sceneFactory ?? createSceneRuntime)(device, { body, renderers: options.renderers, optionalRenderers: options.optionalRenderers,
-        referenceTextures: options.referenceTextures, signal, detailsReady });
+      const build = new AbortController();
+      const owned = AbortSignal.any([lifetime.signal, build.signal, ...(options.signal ? [options.signal] : []), ...(signal ? [signal] : [])]);
+      try {
+        owned.throwIfAborted();
+        // Read the record, then issue all asset reads before opening WebGL/prefiltering the room. Motion needs no core bytes.
+        // An injected scene factory owns its own source (the existing probe/test seam).
+        const core = options.sceneFactory ? undefined : startCoreDetail(fetch, body, owned, coreFiles);
+        const motion = options.sceneFactory ? undefined : startGameMotion(body, owned);
+        if (core) await core.ready;
+        owned.throwIfAborted();
+        device ??= (options.deviceFactory ?? createRendererDevice)(options.headHost, { onContext: event => {
+          options.onContext?.(event);
+          for (const listener of [...contextListeners]) listener(event);
+        } });
+        return await (options.sceneFactory ?? createSceneRuntime)(device, { body, renderers: options.renderers, optionalRenderers: options.optionalRenderers,
+          referenceTextures: options.referenceTextures, signal: owned, detailsReady, loadCore: core?.load, loadMotion: motion });
+      } catch (error) { const reason = owned.aborted ? owned.reason : error; build.abort(reason); throw reason; }
     },
     /** Draw `scene` (built by `buildHead`): the head shown before stops being drawn, and its on-head editor goes (a gesture is settled). */
     showHead(scene: Scene) {
@@ -167,6 +183,8 @@ export function createBrowserViewportDevice(options: {
     dispose() {
       if (disposed) return;
       disposed = true;
+      lifetime.abort();
+      releaseCoreDetailFiles(coreFiles);
       releaseEditor();
       for (const item of resources.values()) item.dispose();
       resources.clear(); contextListeners.clear(); viewer = undefined;

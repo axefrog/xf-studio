@@ -30,12 +30,42 @@ function cachedCore() {
   cache.writeStatus({ recipeId: PREVIEW_CORE_RECIPE.id, recipeRevision: PREVIEW_CORE_RECIPE.revision,
     deriverVersion: PREVIEW_CORE_DERIVER_VERSION, state: "ready", code: null, message: "Ready", gameRoot: game,
     contentFingerprint: contentFingerprint(game, "archive/pc/content"), cacheName: "synthetic" });
-  const host = new PreviewCoreHost({ cacheRoot: cache.root, settings: () => ({ gameRoot: game, wolvenKitCli: null }), now: () => 0 });
+  const restart = () => new PreviewCoreHost({ cacheRoot: cache.root, settings: () => ({ gameRoot: game, wolvenKitCli: null }), now: () => 0 });
+  const host = restart();
   const path = join(entry, core.PREVIEW_CORE_ASSET_DIRECTORY, "head.glb");
-  return { root, host, path, asset: (name: string) => join(entry, core.PREVIEW_CORE_ASSET_DIRECTORY, name) };
+  return { root, host, restart, path, receipt: join(entry, "preview-verified.json"), asset: (name: string) => join(entry, core.PREVIEW_CORE_ASSET_DIRECTORY, name) };
 }
 const assetRequest = (tag?: string) => new Request("http://127.0.0.1/assets/head.glb", { headers: tag ? { "If-None-Match": tag } : {} });
 const corrupt = (path: string) => { const data = readFileSync(path); data[0]! ^= 1; writeFileSync(path, data); };
+
+test("a restarted real core host reuses full verification only for unchanged file generations", async () => {
+  const f = cachedCore(), read = spyOn(files, "open");
+  try {
+    expect((await f.host.readSnapshot()).phase).toBe("ready");
+    expect(read.mock.calls.length).toBeGreaterThan(0);
+    read.mockClear();
+    expect((await f.restart().readSnapshot()).phase).toBe("ready");
+    expect(read).not.toHaveBeenCalled();
+    const previous = statSync(f.path);
+    corrupt(f.path); utimesSync(f.path, previous.atime, previous.mtime);
+    expect((await f.restart().readSnapshot()).phase).not.toBe("ready");
+    expect(read.mock.calls.length).toBeGreaterThan(0);
+  } finally { read.mockRestore(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test.each(["missing", "damaged"] as const)("a %s verification receipt falls back to full verification and is repaired", async change => {
+  const f = cachedCore(), read = spyOn(files, "open");
+  try {
+    expect((await f.host.readSnapshot()).phase).toBe("ready");
+    if (change === "missing") rmSync(f.receipt); else writeFileSync(f.receipt, "{damaged");
+    read.mockClear();
+    expect((await f.restart().readSnapshot()).phase).toBe("ready");
+    expect(read.mock.calls.length).toBeGreaterThan(0);
+    read.mockClear();
+    expect((await f.restart().readSnapshot()).phase).toBe("ready");
+    expect(read).not.toHaveBeenCalled();
+  } finally { read.mockRestore(); rmSync(f.root, { recursive: true, force: true }); }
+});
 
 test.each(["overwrite", "replace"] as const)("real core host refuses an old ETag after same-size %s inside the readiness memo", async change => {
   const f = cachedCore();

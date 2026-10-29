@@ -78,7 +78,7 @@ export class PreviewCoreHost {
   private readiness(gameRoot: string | null, body: CoreBody) {
     const now = (this.options.now ?? Date.now)();
     const key = `${gameRoot}`, memo = this.readinessMemo.get(body);
-    // Verifying the cache hashes ~20 MB; a short memo keeps asset requests cheap.
+    // A short memo keeps asset requests cheap; across restarts, matching file generations reuse the last full hash verification.
     if (this.fresh(memo, key)) return memo!.value;
     const { recipe } = PREVIEW_CORE_RECIPES[body];
     const plate = registeredPreviewPreparation(this.options.registry, body);

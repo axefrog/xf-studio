@@ -64,9 +64,9 @@ export function restSkeleton(joints: readonly RestJoint[]): THREE.Object3D {
   return root;
 }
 
-async function json(url: string, signal?: AbortSignal): Promise<unknown> {
+async function json(url: string, signal?: AbortSignal, fetcher: (url: string, init?: RequestInit) => Promise<Response> = fetch): Promise<unknown> {
   signal?.throwIfAborted();
-  const response = await fetch(url, { signal });
+  const response = await fetcher(url, { signal });
   const value = await response.json().catch(() => null) as { error?: string } | null;
   signal?.throwIfAborted();
   if (!response.ok) throw new IdleSourceError(value?.error || "The character creator's idle couldn't be read.");
@@ -77,9 +77,11 @@ async function json(url: string, signal?: AbortSignal): Promise<unknown> {
  * Read the host's idles; rejects with a plain reason when they can't be played. `pollMs` and `pollLimitMs`: how often and how long a face
  * still being read is asked for again (`FACE_POLL_MS`, `FACE_POLL_LIMIT_MS`).
  */
-export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: number; signal?: AbortSignal } = {}): Promise<IdleSource> {
+export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: number; signal?: AbortSignal;
+  fetcher?: (url: string, init?: RequestInit) => Promise<Response> } = {}): Promise<IdleSource> {
   const { signal } = options;
-  const state = await json(IDLES_ENDPOINT, signal) as IdleState;
+  const read = (url: string) => json(url, signal, options.fetcher);
+  const state = await read(IDLES_ENDPOINT) as IdleState;
   if (state?.schema !== IDLE_STATE_SCHEMA) throw new IdleSourceError("The character creator's idle couldn't be read.");
   if (state.phase !== "ready") throw new IdleSourceError(state.message);
   const catalogue = state.catalogue, first = catalogue.idles.find(entry => entry.id === DEFAULT_IDLE) ?? catalogue.idles[0];
@@ -114,7 +116,7 @@ export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: n
           const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, pollMs);
           signal?.addEventListener("abort", abort, { once: true });
         });
-        const next = await json(IDLES_ENDPOINT, signal).catch(() => null) as IdleState | null;
+        const next = await read(IDLES_ENDPOINT).catch(() => null) as IdleState | null;
         signal?.throwIfAborted();
         if (next?.schema !== IDLE_STATE_SCHEMA || next.phase !== "ready" || next.source !== "game") continue;
         latest = next.catalogue; faceReason = next.faceReason; facePending = !!next.facePending;
@@ -131,7 +133,7 @@ export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: n
       if (!entry?.face) return null;
       let pending = records.get(entry.id);
       if (!pending) {
-        pending = json(`${IDLES_ENDPOINT}?face=${encodeURIComponent(entry.id)}`, signal).then(value => {
+        pending = read(`${IDLES_ENDPOINT}?face=${encodeURIComponent(entry.id)}`).then(value => {
           const record = value as FaceClipRecord;
           faceScene ??= faceMotionScene(record.rest);
           return faceMotionClip(record.clip, `${entry.face!.clip}_face`);
@@ -146,7 +148,7 @@ export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: n
     return { get catalogue() { return latest; }, first, skeleton, ancestry: state.ancestry, faceRest: state.face ? restSkeleton(state.face.joints) : null, face: gameFace,
       get faceReason() { return faceReason; }, get facePending() { return facePending; },
       async body(entry) {
-        const sample = await json(`${IDLES_ENDPOINT}?body=${encodeURIComponent(entry.id)}`, signal) as PoseSample;
+        const sample = await read(`${IDLES_ENDPOINT}?body=${encodeURIComponent(entry.id)}`) as PoseSample;
         const clip = poseClip(sample).clip;
         clip.name = entry.clip;
         return clip;
@@ -164,7 +166,7 @@ export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: n
     }
     return pending;
   };
-  const [motion, binding] = await Promise.all([glb(first.body), json("/assets/cc-idle-binding.json", signal) as Promise<{ clip: string; ancestry: Record<string, string | null> }>]);
+  const [motion, binding] = await Promise.all([glb(first.body), read("/assets/cc-idle-binding.json") as Promise<{ clip: string; ancestry: Record<string, string | null> }>]);
   signal?.throwIfAborted();
   return { catalogue, first, skeleton: motion.scene, ancestry: binding.ancestry, faceRest: null, face, facePending: false,
     async body(entry) {

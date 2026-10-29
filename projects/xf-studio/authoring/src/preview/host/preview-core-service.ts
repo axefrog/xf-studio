@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync, type BigI
 import { join } from "node:path";
 import { open, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
-import { contentFingerprint, DerivedCache, fileSha256, samePath } from "../../host/derived-cache";
+import { contentFingerprint, DerivedCache, fileSha256, samePath, writeFileAtomic } from "../../host/derived-cache";
 import { type EyePlateRecipe } from "../../legacy/eye-makeup/plate/eye-plate-recipe";
 import { sha256Hex } from "../../formats/content-hash";
 import { decodePng, encodePng } from "../../formats/png";
@@ -65,6 +65,22 @@ const fileIdentity = (file: BigIntStats) => {
   return [file.dev, file.ino, file.size, file.mtimeNs, file.ctimeNs, file.birthtimeNs].join(":");
 };
 const fileGeneration = (path: string) => ({ path, identity: fileIdentity(statSync(path, { bigint: true })) });
+const VERIFICATION_FILE = "preview-verified.json";
+const VERIFICATION_SCHEMA = "xfs/preview-core-verified-1";
+/** Private receipt of a complete byte check. Compare with the exact expected files, never paths supplied by the receipt. */
+function verifiedGeneration(cache: PreviewCoreCache, name: string, generation: PreviewCoreGeneration): boolean {
+  try {
+    const kept = cache.readJson(join(cache.entry(name), VERIFICATION_FILE)) as { schema?: unknown; generation?: unknown };
+    return kept?.schema === VERIFICATION_SCHEMA && JSON.stringify(kept.generation) === JSON.stringify(generation)
+      && previewCoreGenerationCurrent(generation);
+  } catch { return false; }
+}
+function rememberVerification(cache: PreviewCoreCache, name: string, generation: PreviewCoreGeneration): void {
+  try {
+    if (previewCoreGenerationCurrent(generation))
+      writeFileAtomic(join(cache.entry(name), VERIFICATION_FILE), JSON.stringify({ schema: VERIFICATION_SCHEMA, generation }));
+  } catch { /* Advisory: a missing receipt only costs another full verification. */ }
+}
 /** Bounded metadata checks on this core's known files, including files verified earlier in a multi-file read. */
 export function previewCoreGenerationCurrent(generation: PreviewCoreGeneration): boolean {
   try { return generation.every(file => fileGeneration(file.path).identity === file.identity); } catch { return false; }
@@ -175,21 +191,25 @@ export function loadPreviewCoreEntry(cache: PreviewCoreCache, name: string, key:
     const found = previewCoreEntry(cache, name, key, recipe, plate);
     if (!found) return null;
     const generation = [manifest, ...found.manifest.files.map(entry => fileGeneration(join(found.directory, entry.name)))];
+    if (verifiedGeneration(cache, name, generation)) return { ...found, generation };
     for (const entry of found.manifest.files) {
       const file = join(found.directory, entry.name);
       if (!existsSync(file) || statSync(file).size !== entry.bytes || fileSha256(file) !== entry.sha256) return null;
     }
-    return previewCoreGenerationCurrent(generation) ? { ...found, generation } : null;
+    if (!previewCoreGenerationCurrent(generation)) return null;
+    rememberVerification(cache, name, generation);
+    return { ...found, generation };
   } catch { return null; }
 }
 
-/** Verify every byte, yielding through file I/O in bounded chunks instead of hashing the whole core in one host turn. */
+/** Reuse an unchanged verified generation; otherwise hash every byte through bounded asynchronous reads. */
 async function checkedCoreEntry(cache: PreviewCoreCache, name: string, recipe: PreviewCoreRecipe, plate?: EyePlateRecipe, signal?: AbortSignal): Promise<VerifiedCore | null> {
   try {
     const manifest = fileGeneration(join(cache.entry(name), PREVIEW_CORE_MANIFEST_FILE));
     const found = previewCoreEntry(cache, name, null, recipe, plate);
     if (!found) return null;
     const generation = [manifest, ...found.manifest.files.map(entry => fileGeneration(join(found.directory, entry.name)))];
+    if (verifiedGeneration(cache, name, generation)) return { ...found, generation };
     const buffer = Buffer.alloc(256 * 1024);
     for (const entry of found.manifest.files) {
       signal?.throwIfAborted();
@@ -212,7 +232,9 @@ async function checkedCoreEntry(cache: PreviewCoreCache, name: string, recipe: P
       } finally { await file.close(); }
       if (bytes !== entry.bytes || digest.digest("hex") !== entry.sha256) return null;
     }
-    return previewCoreGenerationCurrent(generation) ? { ...found, generation } : null;
+    if (!previewCoreGenerationCurrent(generation)) return null;
+    rememberVerification(cache, name, generation);
+    return { ...found, generation };
   } catch { return null; }
 }
 
@@ -407,7 +429,7 @@ export function previewCoreReadiness(cacheRoot: string | null, gameRoot: string 
   return { state: "none" };
 }
 
-/** HTTP counterpart of previewCoreReadiness: identical stamps, manifests, sizes and hashes, with bulk verification off the turn. */
+/** HTTP counterpart: identical metadata/generation rules, with full verification off the turn when generations change. */
 export async function previewCoreReadinessAsync(cacheRoot: string | null, gameRoot: string | null,
   recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate?: EyePlateRecipe, signal?: AbortSignal): Promise<PreviewCoreReadiness> {
   signal?.throwIfAborted();
