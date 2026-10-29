@@ -204,6 +204,24 @@ describe("a choice never moves the view", () => {
     memory.dispose();
   });
 
+  test("disposing while a pointer is held removes the document listeners that would end the hold (CORE-03 13c3)", async () => {
+    const { ScrollMemory } = await anchors();
+    const { MemoryViewState } = await viewState();
+    const s = scroller();
+    const doc = (s.container as unknown as { ownerDocument?: EventTarget }).ownerDocument ?? (globalThis.document as unknown as EventTarget);
+    const live = new Map<string, number>();
+    const add = doc.addEventListener, remove = doc.removeEventListener;
+    doc.addEventListener = function (this: EventTarget, type: string, ...rest: unknown[]) { live.set(type, (live.get(type) ?? 0) + 1); return (add as Function).call(this, type, ...rest); } as never;
+    doc.removeEventListener = function (this: EventTarget, type: string, ...rest: unknown[]) { live.set(type, (live.get(type) ?? 0) - 1); return (remove as Function).call(this, type, ...rest); } as never;
+    try {
+      const memory = new ScrollMemory(s.container, "panel:test", { store: () => new MemoryViewState(), observe: false });
+      s.container.dispatchEvent(lightEvent("pointerdown"));
+      expect({ up: live.get("pointerup"), cancel: live.get("pointercancel") }).toEqual({ up: 1, cancel: 1 });
+      memory.dispose();
+      expect({ up: live.get("pointerup"), cancel: live.get("pointercancel") }).toEqual({ up: 0, cancel: 0 });
+    } finally { doc.addEventListener = add; doc.removeEventListener = remove; }
+  });
+
   test("clicking a picture in Character › Hairstyle leaves the panel's scroll position where it was", async () => {
     const { ScrollMemory } = await anchors();
     const { MemoryViewState } = await viewState();

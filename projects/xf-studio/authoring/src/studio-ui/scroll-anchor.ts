@@ -145,6 +145,8 @@ export class ScrollMemory {
   /** The person is scrolling: until this time (wheel, touch, keys), or while a pointer is held in the container. */
   private userUntil = 0;
   private held = false;
+  /** Removes the document listeners that end a held pointer (installed while a press lasts). */
+  private releaseHold?: () => void;
   private readonly resizer?: ResizeObserver;
   constructor(readonly container: HTMLElement, readonly key: string, private readonly options: ScrollMemoryOptions = {}) {
     this.source = options.source ?? domAnchorSource(container);
@@ -220,6 +222,8 @@ export class ScrollMemory {
     this.settle();
     this.container.removeEventListener("scroll", this.scrolled);
     for (const type of USER_INPUT) this.container.removeEventListener(type, this.userInput);
+    this.releaseHold?.();
+    this.held = false;
     this.resizer?.disconnect();
     memories.delete(this);
   }
@@ -251,7 +255,9 @@ export class ScrollMemory {
     if (event.type === "pointerdown" && !this.held) {
       this.held = true;
       const doc = this.container.ownerDocument ?? document;
-      const release = () => { this.held = false; this.userUntil = Date.now() + 500; doc.removeEventListener("pointerup", release); doc.removeEventListener("pointercancel", release); };
+      const detach = () => { doc.removeEventListener("pointerup", release); doc.removeEventListener("pointercancel", release); this.releaseHold = undefined; };
+      const release = () => { this.held = false; this.userUntil = Date.now() + 500; detach(); };
+      this.releaseHold = detach;
       doc.addEventListener("pointerup", release); doc.addEventListener("pointercancel", release);
     }
   };

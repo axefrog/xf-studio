@@ -56,7 +56,7 @@ for (const composition of ["normal", "empty"] as const) for (const partial of [f
       ` });
       if (partial) {
         await page.waitFor(`window.xfsReleaseProbe?.held.some(row => row.url.startsWith('/api/verification/documents'))`, 90_000);
-        expect(await page.evaluate(`!!document.querySelector('#studio.studio-ready')`)).toBe(false);
+        expect(await page.evaluate(`!!document.querySelector('#studio.studio-ready')`) as boolean).toBe(false);
       } else {
         await page.waitFor(`document.querySelector('#studio.studio-ready') && window.xfStudioLifetime`, 90_000);
         await page.waitFor(`window.xfStudioPresentation.viewport.snapshot().head.phase === 'ready'`, 120_000);
@@ -67,12 +67,16 @@ for (const composition of ["normal", "empty"] as const) for (const partial of [f
         await page.waitFor(`document.querySelector('#studio .direction-dial .dial-grip')`);
         const resizing = await page.evaluate(`(() => {
           const grip = window.releaseResizeGrip = document.querySelector('#studio .direction-dial .dial-grip');
-          const before = window.xfsReleaseProbe.counts().listeners;
+          const before = window.xfsReleaseProbe.detail();
           grip.dispatchEvent(new PointerEvent('pointerdown', { button: 0, pointerId: 7303, clientY: 100, bubbles: true }));
           grip.dispatchEvent(new PointerEvent('pointermove', { pointerId: 7303, clientY: 80, bubbles: true }));
-          return { dragging: grip.classList.contains('dragging'), listeners: window.xfsReleaseProbe.counts().listeners - before };
-        })()`);
-        expect(resizing).toEqual({ dragging: true, listeners: 1 });
+          const added = [...window.xfsReleaseProbe.detail()];
+          for (const row of before) { const at = added.indexOf(row); if (at >= 0) added.splice(at, 1); }
+          return { dragging: grip.classList.contains('dragging'), added };
+        })()`) as { dragging: boolean; added: string[] };
+        // The drag owns at least the document Escape handler (SizeBar); the abort below must release it with the rest.
+        expect(resizing.dragging).toBe(true);
+        expect(resizing.added).toContain("document:keydown");
         await page.evaluate(`(() => {
           const rt = window.xfStudioShell.runtime;
           rt.feedback.toast('info', 'Release proof', 'Pending feedback');

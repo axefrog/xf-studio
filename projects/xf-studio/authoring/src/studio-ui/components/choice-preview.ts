@@ -402,7 +402,7 @@ export function installPreviewFilter(): void {
   refresh();
   const observer = new MutationObserver(refresh);
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "class", "style"] });
-  releaseFilter = () => { observer.disconnect(); svg.remove(); installed = undefined; releaseFilter = undefined; };
+  releaseFilter = () => { observer.disconnect(); svg.remove(); installed = null; releaseFilter = undefined; };
 }
 
 let releaseFilter: (() => void) | undefined;
