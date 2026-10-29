@@ -57,10 +57,12 @@ export type PreviewCoreStatus = {
   gameRoot: string; contentFingerprint: string; cacheName: string | null; updatedAt: string;
 };
 export type PreviewCoreResult = { directory: string; manifest: PreviewCoreManifest; reused: boolean };
-/** A readiness generation, not an integrity boundary: browser resource hashes protect rendering. No file handles are retained. */
+/** Readiness generations plus the manifest-bound record digest; the record supplies browser resource hashes. No file handles are retained. */
 export type PreviewCoreGeneration = readonly { path: string; identity: string;
   /** Unreliable stat metadata never vouches for bytes: every subsequent validation hashes this file again. */
-  sha256?: string }[];
+  sha256?: string;
+  /** The small render record is always hashed against the host-produced manifest, including receipt/memo/HTTP validation. */
+  contentSha256?: string }[];
 type VerifiedCore = PreviewCoreResult & { generation: PreviewCoreGeneration; receipt?: true };
 type VerificationOptions = { full?: boolean; turn?: () => Promise<void> };
 const fileIdentity = (file: BigIntStats) => {
@@ -77,9 +79,12 @@ function reliableMetadata(file: BigIntStats): boolean {
     && positive(file.birthtimeNs) && positive(file.mtimeNs) && positive(file.ctimeNs)
     && file.mtimeNs % 1_000_000n !== 0n && file.ctimeNs % 1_000_000n !== 0n;
 }
-const fileGeneration = (path: string): PreviewCoreGeneration[number] => {
+const fileGeneration = (path: string, contentSha256?: string): PreviewCoreGeneration[number] => {
   const file = statSync(path, { bigint: true }), identity = fileIdentity(file);
-  return reliableMetadata(file) ? { path, identity } : { path, identity, sha256: fileSha256(path) };
+  const generation: PreviewCoreGeneration[number] = reliableMetadata(file) ? { path, identity } : { path, identity, sha256: fileSha256(path) };
+  if (contentSha256 === undefined) return generation;
+  if ((generation.sha256 ?? fileSha256(path)) !== contentSha256) throw Error("The preview core record changed.");
+  return { ...generation, contentSha256 };
 };
 const VERIFICATION_FILE = "preview-verified.json";
 const VERIFICATION_SCHEMA = "xfs/preview-core-verified-1";
@@ -98,11 +103,11 @@ function rememberVerification(cache: PreviewCoreCache, name: string, generation:
       writeFileAtomic(join(cache.entry(name), VERIFICATION_FILE), JSON.stringify({ schema: VERIFICATION_SCHEMA, generation }));
   } catch { /* Advisory: a missing receipt only costs another full verification. */ }
 }
-/** Check known files, including earlier reads. Reliable generations use metadata; unsupported metadata always costs a full hash. */
+/** Recheck the record digest even with reliable metadata; larger resources use metadata or the unsupported-provider hash fallback. */
 export function previewCoreGenerationCurrent(generation: PreviewCoreGeneration): boolean {
   try {
     return generation.every(file => {
-      const current = fileGeneration(file.path);
+      const current = fileGeneration(file.path, file.contentSha256);
       return current.identity === file.identity && current.sha256 === file.sha256;
     });
   } catch { return false; }
@@ -212,7 +217,8 @@ export function loadPreviewCoreEntry(cache: PreviewCoreCache, name: string, key:
     const manifest = fileGeneration(join(cache.entry(name), PREVIEW_CORE_MANIFEST_FILE));
     const found = previewCoreEntry(cache, name, key, recipe, plate);
     if (!found) return null;
-    const generation = [manifest, ...found.manifest.files.map(entry => fileGeneration(join(found.directory, entry.name)))];
+    const generation = [manifest, ...found.manifest.files.map(entry => fileGeneration(join(found.directory, entry.name),
+      entry.name === PREVIEW_CORE_RECORD_FILE ? entry.sha256 : undefined))];
     if (!options.full && verifiedGeneration(cache, name, generation)) return { ...found, generation, receipt: true };
     for (const entry of found.manifest.files) {
       const file = join(found.directory, entry.name);
@@ -231,7 +237,8 @@ async function checkedCoreEntry(cache: PreviewCoreCache, name: string, recipe: P
     const manifest = fileGeneration(join(cache.entry(name), PREVIEW_CORE_MANIFEST_FILE));
     const found = previewCoreEntry(cache, name, null, recipe, plate);
     if (!found) return null;
-    const generation = [manifest, ...found.manifest.files.map(entry => fileGeneration(join(found.directory, entry.name)))];
+    const generation = [manifest, ...found.manifest.files.map(entry => fileGeneration(join(found.directory, entry.name),
+      entry.name === PREVIEW_CORE_RECORD_FILE ? entry.sha256 : undefined))];
     if (!options.full && verifiedGeneration(cache, name, generation)) return { ...found, generation, receipt: true };
     const buffer = Buffer.alloc(256 * 1024);
     for (const entry of found.manifest.files) {

@@ -12,7 +12,8 @@ import { PreviewCoreHost, type PreviewCoreHostOptions } from "../src/preview/hos
 import { hostJobs } from "../src/host/host-jobs";
 import * as core from "../src/preview/host/preview-core-service";
 import { contentFingerprint } from "../src/host/derived-cache";
-import { PREVIEW_CORE_DERIVER_VERSION, PREVIEW_CORE_FILES, PREVIEW_CORE_RECIPE, previewCoreRecipeSha256 } from "../src/preview/preview-core-recipe";
+import { parseCoreDetail, RENDER_DETAIL_SCHEMA, type CoreDetail, type RenderResource } from "../src/character/render-detail";
+import { PREVIEW_CORE_DERIVER_VERSION, PREVIEW_CORE_FILES, PREVIEW_CORE_RECORD_FILE, PREVIEW_CORE_RECIPE, previewCoreRecipeSha256 } from "../src/preview/preview-core-recipe";
 
 /** Synthetic cached bytes with the production recipe/manifest identity; validation and HTTP use the real host. */
 function cachedCore(options: Pick<PreviewCoreHostOptions, "jobs" | "signal"> & { tool?: boolean } = {}) {
@@ -22,11 +23,18 @@ function cachedCore(options: Pick<PreviewCoreHostOptions, "jobs" | "signal"> & {
   mkdirSync(join(game, "archive", "pc", "content"), { recursive: true });
   const cache = new core.PreviewCoreCache(join(root, "cache"), PREVIEW_CORE_RECIPE, false), work = cache.createWork();
   mkdirSync(join(work, core.PREVIEW_CORE_ASSET_DIRECTORY));
+  const bytes = (name: string) => Buffer.from(`synthetic core ${name}`);
+  const resource = (file: string): RenderResource => ({ file, sha256: createHash("sha256").update(bytes(file)).digest("hex"), sources: [] });
+  const record: CoreDetail = { schema: RENDER_DETAIL_SCHEMA, detail: "core-head", identity: "synthetic", origin: "game-files",
+    provenance: { label: "Synthetic core", notes: [] },
+    geometry: { ...resource("head.glb"), nodes: { head: "head", eyes: "eyes" }, morphs: [] },
+    textures: { "head.albedo": resource("head-color.png"), "head.normal": resource("head-normal.png"),
+      "head.roughness": resource("head-roughness.png"), "eyes.albedo": resource("eye-color.png") } };
   const manifest = { schema: core.PREVIEW_CORE_MANIFEST_SCHEMA, recipeId: PREVIEW_CORE_RECIPE.id,
     recipeRevision: PREVIEW_CORE_RECIPE.revision, deriverVersion: PREVIEW_CORE_DERIVER_VERSION,
     recipeSha256: previewCoreRecipeSha256(PREVIEW_CORE_RECIPE), cacheKey: "synthetic",
     files: PREVIEW_CORE_FILES.map(name => {
-      const data = Buffer.from(`synthetic core ${name}`);
+      const data = name === PREVIEW_CORE_RECORD_FILE ? Buffer.from(JSON.stringify(record)) : bytes(name);
       writeFileSync(join(work, core.PREVIEW_CORE_ASSET_DIRECTORY, name), data);
       return { name, bytes: data.length, sha256: createHash("sha256").update(data).digest("hex") };
     }) };
@@ -132,6 +140,38 @@ test("a receipt backed by mirrored ctime starts fast; one ahead audit after the 
   } finally { life.abort(); await restarted?.settled(); fake.restore(); admission.mockRestore(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
+test("changed core bindings are refused before the frame even when all resource bytes and generation tuples still match", async () => {
+  const f = cachedCore(), fake = unreliableCoreMetadata(f.root, "mirrored-change");
+  let restarted: PreviewCoreHost | undefined;
+  try {
+    await f.host.readSnapshot(); restarted = f.restart(); fake.reads.mockClear();
+    expect((await restarted.readSnapshot()).phase).toBe("ready");
+    expect(fake.reads).not.toHaveBeenCalled(); // Large assets still use the receipt.
+    const asset = (await restarted.asset(PREVIEW_CORE_RECORD_FILE))!;
+    const request = new Request("http://127.0.0.1/assets/preview-core.json", { headers: { "If-None-Match": asset.etag } });
+    expect((await servePreviewCoreAsset(restarted, PREVIEW_CORE_RECORD_FILE, request)).status).toBe(304);
+    const path = f.asset(PREVIEW_CORE_RECORD_FILE), original = readFileSync(path), previous = statSync(path);
+    const changed = parseCoreDetail(JSON.parse(original.toString()));
+    [changed.textures["head.albedo"], changed.textures["head.normal"]] = [changed.textures["head.normal"], changed.textures["head.albedo"]];
+    const replacement = JSON.stringify(changed);
+    expect(Buffer.byteLength(replacement)).toBe(original.length);
+    expect(parseCoreDetail(JSON.parse(replacement)).textures["head.albedo"].file).toBe("head-normal.png");
+    for (const resource of [changed.geometry, ...Object.values(changed.textures)])
+      expect(createHash("sha256").update(readFileSync(f.asset(resource.file))).digest("hex")).toBe(resource.sha256);
+    writeFileSync(path, replacement); utimesSync(path, previous.atime, previous.mtime);
+    expect(asset.current()).toBe(false); // Includes the HTTP check after its asynchronous path checks.
+    expect(restarted.snapshot().phase).not.toBe("ready"); // Memo validation also hashes the record.
+    expect((await servePreviewCoreAsset(restarted, PREVIEW_CORE_RECORD_FILE, request)).status).toBe(404);
+    expect(core.previewCoreReadiness(join(f.root, "cache"), join(f.root, "game")).state).toBe("none");
+    const fresh = f.restart();
+    try {
+      expect((await fresh.readSnapshot()).phase).not.toBe("ready");
+      expect((await servePreviewCoreAsset(fresh, PREVIEW_CORE_RECORD_FILE,
+        new Request("http://127.0.0.1/assets/preview-core.json"))).status).toBe(404);
+    } finally { fresh.dispose(); }
+  } finally { restarted?.dispose(); f.host.dispose(); fake.restore(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
 test("a successful post-frame receipt audit changes no state or receipt and does not repeat", async () => {
   const f = cachedCore(), fake = unreliableCoreMetadata(f.root, "mirrored-change");
   let restarted: PreviewCoreHost | undefined;
@@ -188,6 +228,31 @@ test("another body's preparation does not suppress a shown receipt's verificatio
   } finally {
     restarted.dispose(); f.host.dispose(); finish.reject(new core.PreviewCoreError("preview_cancelled", "The verification test ended."));
     await restarted.settled(); prepare.mockRestore(); fake.restore(); rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test("another body's completion before the frame notification cannot erase a receipt's audit obligation", async () => {
+  const jobs = hostJobs(), admission = spyOn(jobs, "cooperate");
+  const f = cachedCore({ tool: true, jobs }), fake = unreliableCoreMetadata(f.root, "mirrored-change");
+  await f.host.readSnapshot(); const restarted = f.restart(); await restarted.readSnapshot();
+  const verified = core.previewCoreReadiness(join(f.root, "cache"), join(f.root, "game"));
+  if (verified.state !== "ready") throw Error("The synthetic core must be ready before the other body completes.");
+  const finish = Promise.withResolvers<core.PreviewCoreResult>();
+  const prepare = spyOn(core, "ensurePreviewCore").mockImplementation(() => finish.promise);
+  try {
+    expect(restarted.prepare("male").phase).toBe("preparing");
+    // Only the other body's derivation is stubbed. Its ordinary completion evicts all readiness memos.
+    finish.resolve({ directory: verified.directory, manifest: { ...verified.manifest, source: { ...verified.manifest.source, label: "Other body" } }, reused: false });
+    await restarted.settled(); fake.reads.mockClear();
+    expect((await restarted.afterFirstFrame("female")).phase).toBe("ready");
+    expect(fake.reads.mock.calls.length).toBeGreaterThan(0);
+    expect(admission.mock.calls.map(call => call[0])).toEqual(["ahead"]);
+    const reads = fake.reads.mock.calls.length;
+    await restarted.afterFirstFrame("female");
+    expect(fake.reads.mock.calls.length).toBe(reads); expect(admission).toHaveBeenCalledTimes(1);
+  } finally {
+    restarted.dispose(); f.host.dispose(); finish.resolve({ directory: verified.directory, manifest: verified.manifest, reused: true });
+    await restarted.settled(); prepare.mockRestore(); fake.restore(); admission.mockRestore(); rmSync(f.root, { recursive: true, force: true });
   }
 });
 

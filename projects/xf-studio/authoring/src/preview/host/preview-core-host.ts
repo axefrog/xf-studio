@@ -75,6 +75,8 @@ export class PreviewCoreHost {
   private checks = new Map<CoreBody, { key: string; promise: Promise<void>; life: AbortController; wants: number }>();
   private readonly life = new AbortController();
   private readonly verifications = new Map<CoreBody, { key: string; promise: Promise<void>; life: AbortController; mismatch: boolean }>();
+  /** An audit obligation belongs to accepted receipt readiness, not to its evictable five-second memo. */
+  private readonly receiptAudits = new Map<CoreBody, { key: string; value: Extract<ReturnType<typeof previewCoreReadiness>, { state: "ready" }> }>();
   private readonly stop = () => this.dispose();
   constructor(private readonly options: PreviewCoreHostOptions) {
     if (options.signal?.aborted) this.dispose(); else options.signal?.addEventListener("abort", this.stop, { once: true });
@@ -89,15 +91,20 @@ export class PreviewCoreHost {
       (memo.value.state !== "ready" || previewCoreGenerationCurrent(memo.value.generation));
   }
 
+  private rememberReadiness(body: CoreBody, key: string, value: ReturnType<typeof previewCoreReadiness>) {
+    this.readinessMemo.set(body, { key, value, at: (this.options.now ?? Date.now)() });
+    if (value.state === "ready" && value.receipt && !this.verifications.has(body)) this.receiptAudits.set(body, { key, value });
+    else this.receiptAudits.delete(body);
+  }
+
   private readiness(gameRoot: string | null, body: CoreBody) {
-    const now = (this.options.now ?? Date.now)();
     const key = `${gameRoot}`, memo = this.readinessMemo.get(body);
     // A short memo keeps asset requests cheap; across restarts, matching file generations reuse the last full hash verification.
     if (this.fresh(memo, key)) return memo!.value;
     const { recipe } = PREVIEW_CORE_RECIPES[body];
     const plate = registeredPreviewPreparation(this.options.registry, body);
     const value = previewCoreReadiness(this.options.cacheRoot, gameRoot, recipe, plate, { full: this.mustHash(body, key) });
-    this.readinessMemo.set(body, { key, value, at: now });
+    this.rememberReadiness(body, key, value);
     return value;
   }
   private forget(body?: CoreBody) {
@@ -105,6 +112,7 @@ export class PreviewCoreHost {
     for (const check of this.checks.values()) check.life.abort();
     this.checks.clear();
     for (const [core, check] of this.verifications) if (!body || core === body) check.life.abort();
+    if (body) this.receiptAudits.delete(body); else this.receiptAudits.clear();
   }
 
   /** Shared HTTP validation; an obsolete completion cannot publish after a rebuild/settings change. */
@@ -120,8 +128,8 @@ export class PreviewCoreHost {
         made.promise = previewCoreReadinessAsync(this.options.cacheRoot, settings.gameRoot, recipe, plate, made.life.signal,
           { full: this.mustHash(body, key) }).then(value => {
           if (this.checks.get(body) === made && `${this.options.settings().gameRoot}` === key)
-            this.readinessMemo.set(body, { key, value: value.state === "ready" && !previewCoreGenerationCurrent(value.generation)
-              ? { state: "none" } : value, at: (this.options.now ?? Date.now)() });
+            this.rememberReadiness(body, key, value.state === "ready" && !previewCoreGenerationCurrent(value.generation)
+              ? { state: "none" } : value);
         }).finally(() => { if (this.checks.get(body) === made) this.checks.delete(body); });
         this.checks.set(body, made); check = made;
       }
@@ -149,11 +157,12 @@ export class PreviewCoreHost {
     this.life.signal.throwIfAborted(); signal?.throwIfAborted();
     let check = this.verifications.get(body);
     const settings = this.options.settings(), key = `${settings.gameRoot}`;
-    const target = this.readinessMemo.get(body);
-    if (!check && this.running?.body !== body && target?.key === key && target.value.state === "ready" && target.value.receipt) {
+    const target = this.receiptAudits.get(body);
+    if (!check && this.running?.body !== body && target?.key === key) {
       const expected = target.value, { recipe } = PREVIEW_CORE_RECIPES[body];
       const plate = registeredPreviewPreparation(this.options.registry, body);
       const made = { key, promise: Promise.resolve(), life: new AbortController(), mismatch: false };
+      this.receiptAudits.delete(body);
       this.verifications.set(body, made); check = made;
       made.promise = hostWork(this.options.jobs, "ahead", turn => previewCoreReadinessAsync(this.options.cacheRoot,
         settings.gameRoot, recipe, plate, made.life.signal, { full: true, turn }), made.life.signal).then(value => {
@@ -164,7 +173,7 @@ export class PreviewCoreHost {
         catch { invalidated = true; this.options.log?.("The prepared 3D view files changed; their verification receipt could not be removed."); }
         if (!invalidated) {
           // A newer status belongs to its own preparation; withdraw only this scan's older memo.
-          if (this.readinessMemo.get(body) === target) this.readinessMemo.delete(body);
+          if (this.readinessMemo.get(body)?.value === expected) this.readinessMemo.delete(body);
           return;
         }
         made.mismatch = true;
