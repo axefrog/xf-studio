@@ -15,6 +15,7 @@ import type { FaceDecalHandle } from "../../materials/render/face-decal-material
 import type { LayeredHandle } from "../../materials/render/layered-material";
 import { transferDeltas, VertexGrid } from "../../materials/render/decal-underlay";
 import { contextGeneration, inGeneration } from "../../platform/scene/context-generation";
+import { withMapUpload } from "../../platform/scene/gpu-work";
 
 /**
  * Renderer device port for the resolved character details (head skin, face details, brows, lashes, hair, eyes, piercings): it reads the host's
@@ -468,6 +469,9 @@ export function uploadStepTexels(texture: THREE.Texture, renderer: THREE.WebGLRe
  * goes whole (Three makes it smaller first), never in bands of the bitmap's size. Returns true once the map is uploaded, never before.
  */
 export function uploadStep(texture: THREE.Texture, renderer: THREE.WebGLRenderer): boolean {
+  return withMapUpload(renderer, texture, () => uploadMapStep(texture, renderer));
+}
+function uploadMapStep(texture: THREE.Texture, renderer: THREE.WebGLRenderer): boolean {
   let pending = banded.get(texture);
   if (pending && !bandsHold(texture, pending, renderer)) {
     banded.delete(texture);

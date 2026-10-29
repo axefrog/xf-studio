@@ -205,6 +205,7 @@ describe("pose preferences survive an early change and a host restart (CORE-112,
     const service = new PoseLibraryActions(device, stage);
     expect(await service.dispatch({ kind: "pose.openGroup", group: "idleCategory", open: true })).toEqual({ ok: true });
     expect(saved).toEqual([]);
+    service.dispose(); // Release cancels catalogue polling, but the person's queued preference write must still finish.
     release();
     await settle();
     expect(saved).toEqual([{ revision: 7, favourites: ["PhotoModePoses.kept"], open: [FAVOURITES_GROUP, RECENT_GROUP, "idleCategory"] }]);

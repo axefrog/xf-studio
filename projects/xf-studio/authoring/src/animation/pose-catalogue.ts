@@ -151,7 +151,7 @@ class Records {
     return out;
   }
   /** Fetch the compiled flats of these records' fields, every group in one lookup. */
-  *prefetch(...groups: readonly (readonly [readonly string[], readonly string[]])[]): Generator<readonly string[], void, Map<string, TweakValue>> {
+  *prefetch(...groups: readonly (readonly [readonly string[], readonly string[]])[]): Generator<readonly string[], void, ReadonlyMap<string, TweakValue>> {
     const wanted: string[] = [];
     for (const [records, fields] of groups) for (const record of records) for (const name of this.chain(record)) for (const field of fields) {
       const flat = `${name}.${field}`;
@@ -171,7 +171,7 @@ class Records {
     return null;
   }
   /** A list flat: the compiled value with the TweakXL edits applied. */
-  *list(flat: string): Generator<readonly string[], string[], Map<string, TweakValue>> {
+  *list(flat: string): Generator<readonly string[], string[], ReadonlyMap<string, TweakValue>> {
     const compiled = (yield [flat]).get(flat);
     const base = compiled && Array.isArray(compiled.value) ? (compiled.value as unknown[]).map(item => String(item)) : null;
     if (!this.input.overlay) return base ?? [];
@@ -224,7 +224,7 @@ export async function buildPoseCatalogueSliced(input: Omit<PoseCatalogueInput, "
   while (!step.done) step = steps.next(await input.flats(step.value));
   return step.value;
 }
-function* poseCatalogueSteps(input: Omit<PoseCatalogueInput, "flats">): Generator<readonly string[], PoseCatalogue, Map<string, TweakValue>> {
+function* poseCatalogueSteps(input: Omit<PoseCatalogueInput, "flats">): Generator<readonly string[], PoseCatalogue, ReadonlyMap<string, TweakValue>> {
   const records = new Records(input);
   const diagnostics = new Map<string, { count: number; detail: string; examples: string[] }>();
   const note = (code: string, detail: string, example: string) => {

@@ -29,7 +29,7 @@ export type PoseListingState =
 /** A sampled pose as the host answers it (`xfs/pose-sample-1`): opaque here. */
 export type PoseSampleData = { readonly schema: "xfs/pose-sample-1"; readonly id: string };
 /** The host's pose endpoint (`/api/poses`, the same transport `PoseActions` uses). */
-export type PoseCatalogueTransport = (request: { method: "GET"; query: Record<string, string> } | { method: "POST"; body: { kind: "retry"; bodyGender: PoseBodyGender } }) =>
+export type PoseCatalogueTransport = (request: { method: "GET"; query: Record<string, string> } | { method: "POST"; body: { kind: "retry"; bodyGender: PoseBodyGender } }, options?: { signal?: AbortSignal }) =>
   Promise<{ ok: boolean; status: number; data: unknown }>;
 /** The pose V holds, as the motion service shows it. */
 export type HeldPose = { readonly id: string; readonly label: string; readonly moves: boolean };

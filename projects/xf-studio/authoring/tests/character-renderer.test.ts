@@ -354,7 +354,7 @@ test("a preparation waiting for a link slot stops when it is superseded and when
   expect(steps).toBe(20);
 });
 
-test("the upload gate's last fence is deleted when the renderer goes (4a-v-b review 7)", async () => {
+test("preparation releases upload fences on completion or cancellation, before its renderer goes (PREV-196 cancel gate)", async () => {
   const rig = headRig(), scene = new THREE.Scene();
   const fences: { deleted: boolean }[] = [];
   const entries = new WeakMap<object, Record<string, unknown>>();
@@ -370,10 +370,28 @@ test("the upload gate's last fence is deleted when the renderer goes (4a-v-b rev
   const hair = component("hair", "hairstyle", [skinned(quad(), "strands")], { textures: [map(), map()] });
   await character.prepareDetails(v("a", [hair]), { frame: async () => {}, compile: () => ({ steps: [],
     result: () => ({ ready: Promise.resolve(), textures: [], programs: () => [] }) }) });
-  // A fence after each upload; all but the last are deleted as the gate passes them (the drains' own go with each drain).
-  expect(fences.filter(fence => !fence.deleted)).toHaveLength(1);
+  expect(fences.filter(fence => !fence.deleted)).toHaveLength(0);
+  // A later preparation uploads a map, then is superseded during compilation. The still-live character must retain no fence.
+  const controller = new AbortController();
+  await character.prepareDetails(v("b", [component("hair", "another", [skinned(quad(), "strands")], { textures: [map()] })]), {
+    signal: controller.signal, frame: async () => {}, compile: () => {
+      expect(fences.filter(fence => !fence.deleted)).toHaveLength(1);
+      controller.abort();
+      return { steps: [], result: () => ({ ready: new Promise<void>(() => {}), textures: [], programs: () => [] }) };
+    },
+  });
+  expect(fences.filter(fence => !fence.deleted)).toHaveLength(0);
+  // Releasing the renderer also retires a preparation waiting for a non-cancellable link reply.
+  const compiling = Promise.withResolvers<void>();
+  const preparing = character.prepareDetails(v("c", [component("hair", "last", [skinned(quad(), "strands")], { textures: [map()] })]), {
+    frame: async () => {}, compile: () => { compiling.resolve();
+      return { steps: [], result: () => ({ ready: new Promise<void>(() => {}), textures: [], programs: () => [] }) };
+    },
+  });
+  await compiling.promise;
   character.dispose();
   expect(fences.every(fence => fence.deleted)).toBe(true);
+  await preparing;
 });
 
 test("detail preparation fills a bounded window instead of waiting fifteen frames after every upload band (PREV-196)", async () => {

@@ -9,6 +9,7 @@ import { CHARACTER_DETAIL_SCHEMA, DETAIL_SLOTS, type CharacterDetail } from "../
 import { beginContextGeneration, contextGeneration, endContextGeneration } from "../src/platform/scene/context-generation";
 import { createSceneRuntime, type SceneDevice } from "../src/platform/scene/scene-host";
 import { recordingRenderer } from "./fixtures/recording-gl";
+import { createHeadRig } from "../src/platform/scene/head-rig";
 
 // Exercise the actual scene-host loader, browser device and actions without Chrome or GPU work. Only the context's events and a
 // delayed geometry parse are driven by the test: a generation abort must not become a permanent CharacterDetailActions failure.
@@ -39,6 +40,17 @@ function core(): LoadedCoreDetail {
 }
 
 const hash = "a".repeat(64), file = `${hash}.json`;
+test("a completed head's release aborts its motion-source lifetime even while the build's parent stays live (PREV-196 timer)", async () => {
+  const releases: (() => void)[] = [], parent = new AbortController();
+  let signal: AbortSignal | undefined;
+  try {
+    await createHeadRig(new THREE.Scene(), core(), { releases, signal: parent.signal, deforming: () => [],
+      loadMotion: async (_scene, _eye, _body, own) => { signal = own; return { idleError: "fixture", blinkError: "fixture" }; } });
+    expect(signal?.aborted).toBe(false);
+  } finally { for (const release of releases.reverse()) release(); }
+  expect(signal?.aborted).toBe(true);
+  expect(parent.signal.aborted).toBe(false);
+});
 const record: CharacterDetail = {
   schema: CHARACTER_DETAIL_SCHEMA, detail: "character", identity: hash, origin: "game-files",
   character: { source: "default", bodyGender: "female" }, provenance: { label: "fixture", notes: [] },

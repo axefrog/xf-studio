@@ -2,9 +2,10 @@ import { PoseActions, type PoseTransport } from "../pose-actions";
 import { POSE_PREFERENCES_ENDPOINT, POSES_ENDPOINT, VERIFICATION_POSE_PREFERENCES_ENDPOINT } from "../pose-endpoint";
 
 /** The pose catalogue's transport over the host endpoint (same origin; the host's own session checks apply). */
-export const browserPoseTransport: PoseTransport = async request => {
-  const response = request.method === "GET" ? await fetch(`${POSES_ENDPOINT}?${new URLSearchParams(request.query)}`)
-    : await fetch(POSES_ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request.body) });
+export const browserPoseTransport: PoseTransport = async (request, options) => {
+  const signal = options?.signal;
+  const response = request.method === "GET" ? await fetch(`${POSES_ENDPOINT}?${new URLSearchParams(request.query)}`, { signal })
+    : await fetch(POSES_ENDPOINT, { method: "POST", signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify(request.body) });
   return { ok: response.ok, status: response.status, data: await response.json().catch(() => null) };
 };
 

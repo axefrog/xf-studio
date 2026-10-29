@@ -203,116 +203,121 @@ export function createCharacterRenderer(input: {
    * again after the restore, compiles what is placed by then).
    */
   async function prepareDetails(next: LoadedCharacterDetails, preparation: DetailPreparation) {
-    const generation = contextGeneration(renderer);
-    const signal = preparation.signal ? AbortSignal.any([preparation.signal, generation]) : generation;
-    const ready = prepared();
-    const fresh = next.components.filter(item => !ready.has(item));
-    if (!fresh.length) return;
-    // A skin the core head will wear (core-head placement, remembered per loaded skin) is prepared as the head drawn with its material:
-    // its own chunk is never drawn, and the head's program is the one its first frame needs (PREV-191).
-    const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
-    const onHead = skinItem && fresh.includes(skinItem) && skinPlacement.place(skinItem.meshes).mode === "core-head" ? skinItem : null;
-    const own = (item: LoadedCharacterComponent) => item !== onHead;
-    let started = performance.now();
-    const frame = async () => { gate?.checkpoint(); await preparation.frame(); started = performance.now(); };
-    const pace = async () => {
-      if (performance.now() - started < PREPARE_FRAME_MS) return;
-      await frame();
-    };
-    /**
-     * Texels this preparation sent the GPU (a bake counts as `DRAIN_TEXELS`): what a first use could wait behind. A preparation that sent
-     * little (a third runtime of one V finds its maps already uploaded) has nothing to wait for. Waiting anyway cost 0.23–0.29 s, the
-     * longest step of that takeover: a fence asked of a quiet GPU process signals late (knowledge/webgl-program-linking.md §4).
-     */
-    let queued = 0;
-    const uploadAll = async (textures: Iterable<THREE.Texture>) => {
-      for (const texture of textures) {
-        const size = texture.image as { width?: number; height?: number } | null;
-        if (needsWork(texture)) queued += (size?.width ?? 0) * (size?.height ?? 0);
-        // A large map a band at a time, a frame let through whenever a step used up its share.
-        while (needsWork(texture)) {
-          if (signal.aborted) return;
-          await pace();
-          for (let waited = 0; needsWork(texture) && !signal.aborted && !uploadGate().canSend(uploadStepTexels(texture, renderer)); waited++) {
-            if (waited >= UPLOAD_WAIT_FRAMES) throw Error("The GPU did not complete the preceding texture uploads.");
-            await frame();
-          }
-          if (signal.aborted) return;
-          // Another uploader can finish this shared map during the frame we waited for.
-          if (upload(texture)) break;
-        }
-      }
-      gate?.checkpoint();
-    };
-    /**
-     * Wait (a frame at a time) until the GPU has done what was sent so far: a synchronous call behind a queue of 4096² uploads waits for
-     * all of them (a bake's first error check took 92 ms), a fence's status never waits.
-     */
-    const drained = async () => {
-      await gpuDrained(renderer, { frame, frames: 120, signal });
-      started = performance.now();
-    };
-    for (const item of fresh.filter(own)) for (const mesh of item.meshes) prepareMesh(item, mesh);
-    // A skinned mesh's bounds (the draw order's depth sort reads them): Three skins every vertex on the CPU for them in the first frame
-    // that draws it (85 ms for a hairstyle); the rest pose's bounds from its geometry, a mesh per turn, stand in (only the sort reads them).
-    for (const item of fresh.filter(own)) for (const mesh of item.meshes) {
+    let gate: ReturnType<typeof acquireUploadBudget> | undefined;
+    const uploadGate = () => gate ??= ownUploads();
+    try {
+      const generation = contextGeneration(renderer);
+      const signal = AbortSignal.any([generation, lifetime.signal, ...(preparation.signal ? [preparation.signal] : [])]);
       if (signal.aborted) return;
-      if (!mesh.isSkinnedMesh || mesh.boundingSphere) continue;
-      await pace();
-      if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
-      mesh.boundingSphere = mesh.geometry.boundingSphere!.clone();
-    }
-    await uploadAll(fresh.flatMap(item => item.textures ?? []));
-    markPhase("details:uploads");
-    if (fresh.some(item => item.layered?.some(entry => entry.handle.state === "pending"))) await drained();
-    // Layered stacks bake with their (now uploaded) layer maps, as the placement would, one stack per frame.
-    for (const item of fresh) if (componentShown(item)) for (const { handle } of item.layered ?? []) {
-      if (signal.aborted || handle.state !== "pending") continue;
-      await pace();
-      if (!signal.aborted) { handle.bake(renderer); started = 0; queued += DRAIN_TEXELS; }
-    }
-    if (signal.aborted) return;
-    // Each part's programs, about one per step, a frame let through whenever a step used up its share (a whole part in one call was 306 ms).
-    const compiled: ReturnType<ReturnType<DetailPreparation["compile"]>["result"]>[] = [];
-    // Only a few programs linking at once (link-pacing.ts): all of a V's at once took every core, and the page's thread with them.
-    const links = linkPacer({ parallel: renderer.extensions?.has("KHR_parallel_shader_compile") ?? false, frame });
-    for (const item of fresh) {
-      const material = item === onHead ? item.meshes[0]!.material as THREE.MeshStandardMaterial : null;
-      if (material) wearOnHead(material);
-      const made = preparation.compile(material ? head : item.root);
-      for (const step of made.steps) {
-        await pace();
-        await links.admit(signal);
-        if (signal.aborted) return;
-        if (!material) step();
-        else {
-          // The head drawn with the skin's material, for each step only (it is synchronous: no frame draws the swap).
-          const shown = head.material;
-          head.material = material;
-          try { step(); } finally { head.material = shown; }
+      const ready = prepared();
+      const fresh = next.components.filter(item => !ready.has(item));
+      if (!fresh.length) return;
+      // A skin the core head will wear (core-head placement, remembered per loaded skin) is prepared as the head drawn with its material:
+      // its own chunk is never drawn, and the head's program is the one its first frame needs (PREV-191).
+      const skinItem = next.components.find(item => item.component.slot === "skin" && item.skin);
+      const onHead = skinItem && fresh.includes(skinItem) && skinPlacement.place(skinItem.meshes).mode === "core-head" ? skinItem : null;
+      const own = (item: LoadedCharacterComponent) => item !== onHead;
+      let started = performance.now();
+      const frame = async () => { gate?.checkpoint(); await preparation.frame(); started = performance.now(); };
+      const pace = async () => {
+        if (performance.now() - started < PREPARE_FRAME_MS) return;
+        await frame();
+      };
+      /**
+       * Texels this preparation sent the GPU (a bake counts as `DRAIN_TEXELS`): what a first use could wait behind. A preparation that sent
+       * little (a third runtime of one V finds its maps already uploaded) has nothing to wait for. Waiting anyway cost 0.23–0.29 s, the
+       * longest step of that takeover: a fence asked of a quiet GPU process signals late (knowledge/webgl-program-linking.md §4).
+       */
+      let queued = 0;
+      const uploadAll = async (textures: Iterable<THREE.Texture>) => {
+        for (const texture of textures) {
+          const size = texture.image as { width?: number; height?: number } | null;
+          if (needsWork(texture)) queued += (size?.width ?? 0) * (size?.height ?? 0);
+          // A large map a band at a time, a frame let through whenever a step used up its share.
+          while (needsWork(texture)) {
+            if (signal.aborted) return;
+            await pace();
+            for (let waited = 0; needsWork(texture) && !signal.aborted && !uploadGate().canSend(uploadStepTexels(texture, renderer)); waited++) {
+              if (waited >= UPLOAD_WAIT_FRAMES) throw Error("The GPU did not complete the preceding texture uploads.");
+              await frame();
+            }
+            if (signal.aborted) return;
+            // Another uploader can finish this shared map during the frame we waited for.
+            if (upload(texture, uploadGate())) break;
+          }
         }
-        links.add(made.programs?.() ?? []);
+        gate?.checkpoint();
+      };
+      /**
+       * Wait (a frame at a time) until the GPU has done what was sent so far: a synchronous call behind a queue of 4096² uploads waits for
+       * all of them (a bake's first error check took 92 ms), a fence's status never waits.
+       */
+      const drained = async () => {
+        await gpuDrained(renderer, { frame, frames: 120, signal });
+        started = performance.now();
+      };
+      for (const item of fresh.filter(own)) for (const mesh of item.meshes) prepareMesh(item, mesh);
+      // A skinned mesh's bounds (the draw order's depth sort reads them): Three skins every vertex on the CPU for them in the first frame
+      // that draws it (85 ms for a hairstyle); the rest pose's bounds from its geometry, a mesh per turn, stand in (only the sort reads them).
+      for (const item of fresh.filter(own)) for (const mesh of item.meshes) {
+        if (signal.aborted) return;
+        if (!mesh.isSkinnedMesh || mesh.boundingSphere) continue;
+        await pace();
+        if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+        mesh.boundingSphere = mesh.geometry.boundingSphere!.clone();
       }
-      compiled.push(made.result());
-    }
-    await uploadAll(compiled.flatMap(entry => entry.textures));
-    // The driver's links, left (not waited for) when the preparation stops: they finish on the driver's threads either way (PREV-192).
-    const linked = Promise.all(compiled.map(entry => entry.ready));
-    linked.catch(() => { /* Reported below unless the preparation stopped. */ });
-    await Promise.race([linked, new Promise<void>(resolve => {
-      if (signal.aborted) resolve(); else signal.addEventListener("abort", () => resolve(), { once: true });
-    })]);
-    if (signal.aborted) return;
-    // Each linked program's first use (its uniforms and attributes read back), one at a time between frames, once the GPU is idle (when what was
-    // sent could keep it busy: `queued`).
-    if (queued >= DRAIN_TEXELS) await drained();
-    markPhase("details:drained");
-    for (const program of new Set(compiled.flatMap(entry => entry.programs()))) {
-      if (signal.aborted) break;
-      await pace();
-      program.getUniforms(); program.getAttributes();
-    }
-    if (!signal.aborted) for (const item of fresh) ready.add(item);
+      await uploadAll(fresh.flatMap(item => item.textures ?? []));
+      markPhase("details:uploads");
+      if (fresh.some(item => item.layered?.some(entry => entry.handle.state === "pending"))) await drained();
+      // Layered stacks bake with their (now uploaded) layer maps, as the placement would, one stack per frame.
+      for (const item of fresh) if (componentShown(item)) for (const { handle } of item.layered ?? []) {
+        if (signal.aborted || handle.state !== "pending") continue;
+        await pace();
+        if (!signal.aborted) { handle.bake(renderer); started = 0; queued += DRAIN_TEXELS; }
+      }
+      if (signal.aborted) return;
+      // Each part's programs, about one per step, a frame let through whenever a step used up its share (a whole part in one call was 306 ms).
+      const compiled: ReturnType<ReturnType<DetailPreparation["compile"]>["result"]>[] = [];
+      // Only a few programs linking at once (link-pacing.ts): all of a V's at once took every core, and the page's thread with them.
+      const links = linkPacer({ parallel: renderer.extensions?.has("KHR_parallel_shader_compile") ?? false, frame });
+      for (const item of fresh) {
+        const material = item === onHead ? item.meshes[0]!.material as THREE.MeshStandardMaterial : null;
+        if (material) wearOnHead(material);
+        const made = preparation.compile(material ? head : item.root);
+        for (const step of made.steps) {
+          await pace();
+          await links.admit(signal);
+          if (signal.aborted) return;
+          if (!material) step();
+          else {
+            // The head drawn with the skin's material, for each step only (it is synchronous: no frame draws the swap).
+            const shown = head.material;
+            head.material = material;
+            try { step(); } finally { head.material = shown; }
+          }
+          links.add(made.programs?.() ?? []);
+        }
+        compiled.push(made.result());
+      }
+      await uploadAll(compiled.flatMap(entry => entry.textures));
+      // The driver's links, left (not waited for) when the preparation stops: they finish on the driver's threads either way (PREV-192).
+      const linked = Promise.all(compiled.map(entry => entry.ready));
+      linked.catch(() => { /* Reported below unless the preparation stopped. */ });
+      await Promise.race([linked, new Promise<void>(resolve => {
+        if (signal.aborted) resolve(); else signal.addEventListener("abort", () => resolve(), { once: true });
+      })]);
+      if (signal.aborted) return;
+      // Each linked program's first use (its uniforms and attributes read back), one at a time between frames, once the GPU is idle (when what was
+      // sent could keep it busy: `queued`).
+      if (queued >= DRAIN_TEXELS) await drained();
+      markPhase("details:drained");
+      for (const program of new Set(compiled.flatMap(entry => entry.programs()))) {
+        if (signal.aborted) break;
+        await pace();
+        program.getUniforms(); program.getAttributes();
+      }
+      if (!signal.aborted) for (const item of fresh) ready.add(item);
+    } finally { releaseUploads(gate); }
   }
   head.castShadow = true;
   head.customDepthMaterial = fullSkinDepthMaterial(head);
@@ -367,14 +372,18 @@ export function createCharacterRenderer(input: {
    * One bounded upload window shared by every runtime on this renderer. Waiting for each band's fence serialises quiet-context latency;
    * instead wait only when outstanding texels fill the window, and checkpoint a turn's uploads together.
    */
+  const lifetime = new AbortController();
+  const uploadOwners = new Set<ReturnType<typeof acquireUploadBudget>>();
+  const ownUploads = () => { const owner = acquireUploadBudget(renderer); uploadOwners.add(owner); return owner; };
+  const releaseUploads = (owner?: ReturnType<typeof acquireUploadBudget>) => { if (owner) { owner.dispose(); uploadOwners.delete(owner); } };
   let gate: ReturnType<typeof acquireUploadBudget> | undefined, disposed = false;
-  const uploadGate = () => gate ??= acquireUploadBudget(renderer);
+  const uploadGate = () => gate ??= ownUploads();
   /** One step of a map's upload (all of it, or one band of a large one); true once it needs no more. */
-  const upload = (texture: THREE.Texture) => {
+  const upload = (texture: THREE.Texture, owner: ReturnType<typeof acquireUploadBudget>) => {
     if (!needsWork(texture)) return true;
     const texels = uploadStepTexels(texture, renderer);
     const done = uploadStep(texture, renderer);
-    uploadGate().sent(texels);
+    owner.sent(texels);
     return done;
   };
   const watchRelease = (texture: THREE.Texture) => {
@@ -382,7 +391,7 @@ export function createCharacterRenderer(input: {
     texture.addEventListener("dispose", forget);
   };
   function streamUploads() {
-    if (uploading || !uploads.length || typeof requestAnimationFrame !== "function") return;
+    if (disposed || uploading || !uploads.length || typeof requestAnimationFrame !== "function") return;
     uploading = true;
     let waiting = 0;
     // Each turn just after a frame, in a task of its own (never inside the frame's own draw).
@@ -395,13 +404,14 @@ export function createCharacterRenderer(input: {
         if (!needsWork(texture)) { uploads.shift(); continue; }
         if (!uploadGate().canSend(uploadStepTexels(texture, renderer))) break;
         progressed = true;
-        if (upload(texture)) uploads.shift();
+        if (upload(texture, uploadGate())) uploads.shift();
       }
       gate?.checkpoint();
       waiting = progressed ? 0 : waiting + 1;
       // Streaming is optional read-ahead. A stuck fence stops its polling; explicit preparation owns the eventual error/retry.
       if (waiting >= UPLOAD_WAIT_FRAMES) uploads.length = 0;
-      if (uploads.length) requestAnimationFrame(() => afterTask(turn)); else uploading = false;
+      if (uploads.length) requestAnimationFrame(() => afterTask(turn));
+      else { uploading = false; releaseUploads(gate); gate = undefined; }
     };
     requestAnimationFrame(() => afterTask(turn));
   }
@@ -650,7 +660,11 @@ export function createCharacterRenderer(input: {
     prepareDetails,
     /** Release the V and every kept part (the scene is going away). */
     // The core head's depth material is this renderer's (made above); the head itself goes with its core.
-    dispose() { setCharacterDetails(null); pool.dispose(); releaseFullSkinDepth(head); disposed = true; uploads.length = 0; gate?.dispose(); },
+    dispose() {
+      lifetime.abort();
+      for (const owner of uploadOwners) owner.dispose(); uploadOwners.clear(); gate = undefined;
+      setCharacterDetails(null); pool.dispose(); releaseFullSkinDepth(head); disposed = true; uploads.length = 0;
+    },
     /** How many parts are kept for later (developer evidence). */
     keptParts: () => pool.size,
     /** Release the parts kept for later (another V is being shown). */

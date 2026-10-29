@@ -17,7 +17,7 @@ export type PoseActionState = {
   error?: string;
 };
 export type PoseOutcome = { ok: true } | { ok: false; code: string; message: string };
-export type PoseTransport = (request: { method: "GET"; query: Record<string, string> } | { method: "POST"; body: { kind: "retry"; bodyGender: PoseBodyGender } }) =>
+export type PoseTransport = (request: { method: "GET"; query: Record<string, string> } | { method: "POST"; body: { kind: "retry"; bodyGender: PoseBodyGender } }, options?: { signal?: AbortSignal }) =>
   Promise<{ ok: boolean; status: number; data: unknown }>;
 
 const STATE_SCHEMA = "xfs/pose-catalogue-state-1", SAMPLE_SCHEMA = "xfs/pose-sample-1";

@@ -1,5 +1,6 @@
 import { contextGeneration, inGeneration } from "./context-generation";
 import { gpuGate } from "./gpu-gate";
+import { observeGpuWork } from "./gpu-work";
 
 /** At most 64 MiB of RGBA8 texels outstanding, across all uploaders on one renderer. */
 export const UPLOAD_TEXELS = 16 * 1024 * 1024;
@@ -11,24 +12,23 @@ type Checkpoint = { gate: ReturnType<typeof gpuGate>; texels: number };
 /**
  * A fence is a completion checkpoint, not one band's permission slip. Quiet contexts can report it 200–290 ms late. Allow several
  * bands in flight, sealing their combined cost at a frame boundary or when the window fills. Only completion returns that credit;
- * time passing never does. An opening fence keeps the first upload behind preceding GPU-process work (G2), too.
+ * time passing never does. A separate barrier covers preceding non-map work (G2), initially and whenever the renderer submits more.
  */
 function makeBudget(renderer: Renderer) {
   let generation = contextGeneration(renderer), used = 0, pending = 0;
   const checkpoints: Checkpoint[] = [];
-  const opening = () => {
-    const gate = gpuGate(renderer);
-    gate.mark();
-    checkpoints.push({ gate, texels: 0 });
-  };
-  opening();
+  const barrier = gpuGate(renderer);
+  barrier.mark();
+  let dirty = false;
+  const stopObserving = observeGpuWork(renderer, () => { dirty = true; });
   const current = () => {
     if (inGeneration(renderer, generation)) return true;
     for (const entry of checkpoints) entry.gate.dispose();
+    barrier.dispose();
     checkpoints.length = 0; used = pending = 0;
     generation = contextGeneration(renderer);
     if (generation.aborted) return false;
-    opening();
+    barrier.mark(); dirty = false;
     return true;
   };
   const collect = () => {
@@ -45,9 +45,11 @@ function makeBudget(renderer: Renderer) {
   return {
     canSend(texels: number): boolean {
       if (!current()) return false;
-      // The zero-cost opening checkpoint must pass even when the window has room.
-      if (checkpoints[0]?.texels === 0 || used + texels > UPLOAD_TEXELS) collect();
-      if (checkpoints[0]?.texels === 0) return false;
+      // Non-map submissions invalidate admission regardless of spare texel credit. Many passes/rounds before this attempt need only one
+      // barrier. Map-only turns never dirty it, so their progress is still bounded by the window rather than one fence per band/frame.
+      if (dirty) { barrier.mark(); dirty = false; }
+      if (!barrier.idle()) return false;
+      if (used + texels > UPLOAD_TEXELS) collect();
       if (used + texels <= UPLOAD_TEXELS) return true;
       checkpoint();
       // An indivisible fallback upload larger than the window goes alone, never alongside other outstanding uploads.
@@ -60,10 +62,14 @@ function makeBudget(renderer: Renderer) {
     checkpoint,
     idle(): boolean {
       if (!current()) return false;
+      // This drains maps, not subsequent non-map work. Morph rounds/warm-up have their own completion policy; they must not wait on
+      // an additional map-admission barrier after every round.
       checkpoint(); collect();
       return checkpoints.length === 0;
     },
     dispose(): void {
+      stopObserving();
+      barrier.dispose();
       for (const entry of checkpoints) entry.gate.dispose();
       checkpoints.length = 0; used = pending = 0;
     },

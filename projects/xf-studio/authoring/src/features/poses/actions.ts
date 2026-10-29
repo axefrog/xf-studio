@@ -26,8 +26,8 @@ export type PoseLibraryDevice = {
     load(): Promise<unknown>;
     save(revision: number, preferences: PosePreferences): Promise<{ ok: boolean; status: number; data: unknown }>;
   } | null;
-  /** Wait (a test seam; default: a timer). */
-  readonly wait?: (ms: number) => Promise<void>;
+  /** Wait until the next poll or cancellation (a test seam; default: an owned timer). */
+  readonly wait?: (ms: number, signal: AbortSignal) => Promise<void>;
 };
 /** The motion service as the Poses module drives it (motion-actions.ts). */
 export type PoseMotionPort = {
@@ -105,6 +105,16 @@ const WAITING = "Poses appear once your V is shown in the 3D view.";
 const UNAVAILABLE = "Poses are unavailable on this host.";
 const UNREACHABLE = "XF Studio couldn't reach its host to read the poses. Restart XF Studio and try again.";
 
+function pollWait(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise(done => {
+    const timer = setTimeout(finish, ms);
+    function finish() { signal.removeEventListener("abort", stop); done(); }
+    function stop() { clearTimeout(timer); finish(); }
+    signal.addEventListener("abort", stop, { once: true });
+  });
+}
+
 export class PoseLibraryActions {
   private listeners = new Set<() => void>();
   private catalogue: PoseCatalogue | null = null;
@@ -120,20 +130,23 @@ export class PoseLibraryActions {
   private saving = false;
   private showFiltered = false;
   private loadingFor: PoseBodyGender | null = null;
-  private generation = 0;
+  private readonly life = new AbortController();
+  private loadLife: AbortController | null = null;
   private readonly samples = new Map<string, Promise<PoseSample>>();
   private readonly byId = new Map<string, PoseEntry>();
   private treeCache: { key: string; tree: PoseTree } | null = null;
   private restoring = false;
   private readonly unsubscribe: () => void;
 
-  constructor(private readonly device: PoseLibraryDevice, private readonly stage: PoseStage) {
+  constructor(private readonly device: PoseLibraryDevice, private readonly stage: PoseStage, signal?: AbortSignal) {
     this.view = { phase: device.catalogue ? "waiting" : "unavailable", message: device.catalogue ? WAITING : UNAVAILABLE, bodyGender: null, revision: 0, listed: 0, categories: 0 };
     this.unsubscribe = stage.subscribe(() => this.follow());
+    if (signal?.aborted) { this.dispose(); return; }
+    signal?.addEventListener("abort", () => this.dispose(), { once: true, signal: this.life.signal });
     void this.loadPreferences();
     this.follow();
   }
-  dispose() { this.unsubscribe(); this.generation++; this.listeners.clear(); }
+  dispose() { this.life.abort(); this.unsubscribe(); this.listeners.clear(); }
   descriptors() { return structuredClone(POSE_LIBRARY_DESCRIPTORS); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private notify() { for (const listener of this.listeners) listener(); }
@@ -161,6 +174,7 @@ export class PoseLibraryActions {
   }
 
   capability(action: PoseLibraryAction): Capability {
+    if (this.life.signal.aborted) return refusal("not_ready", "The pose library was closed.");
     if (!action || !(action.kind in POSE_LIBRARY_DESCRIPTORS)) return refusal("invalid_value", "Unknown pose action.");
     // What poses or frames V names the view that shows her; another view (or none) is refused, never posed in its place.
     if ((action.kind === "pose.select" || action.kind === "pose.clear" || action.kind === "pose.frame") && action.view !== this.stage.view())
@@ -245,7 +259,7 @@ export class PoseLibraryActions {
     if (known) return known;
     const pending = (async () => {
       let response: Awaited<ReturnType<PoseTransport>>;
-      try { response = await this.device.catalogue!({ method: "GET", query: { gender, pose: entry.id } }); }
+      try { response = await this.device.catalogue!({ method: "GET", query: { gender, pose: entry.id } }, { signal: this.life.signal }); }
       catch { throw Error(UNREACHABLE); }
       const data = response.data as { schema?: string; error?: string } | null;
       if (!response.ok || data?.schema !== SAMPLE_SCHEMA) throw Error(data?.error ?? "That pose's animation couldn't be read from your game.");
@@ -259,6 +273,7 @@ export class PoseLibraryActions {
 
   /** Follow the stage: load the catalogue for V's body gender, restore a stored pose, and republish. */
   private follow(force = false) {
+    if (this.life.signal.aborted) return;
     const gender = this.stage.bodyGender();
     if (gender && this.device.catalogue && (force || gender !== this.loadingFor)) void this.load(gender);
     this.restore();
@@ -266,16 +281,18 @@ export class PoseLibraryActions {
   }
   private async load(gender: PoseBodyGender) {
     this.loadingFor = gender;
-    const generation = ++this.generation;
+    this.loadLife?.abort();
+    this.loadLife = new AbortController();
+    const signal = AbortSignal.any([this.life.signal, this.loadLife.signal]);
     if (this.view.bodyGender !== gender) { this.catalogue = null; this.byId.clear(); }
-    for (let attempt = 0; generation === this.generation; attempt++) {
+    while (!signal.aborted) {
       let state: PoseCatalogueState | null = null;
       try {
-        const response = await this.device.catalogue!({ method: "GET", query: { gender } });
+        const response = await this.device.catalogue!({ method: "GET", query: { gender } }, { signal });
         const data = response.data as { schema?: string } | null;
         state = data?.schema === STATE_SCHEMA ? data as unknown as PoseCatalogueState : null;
       } catch { state = null; }
-      if (generation !== this.generation) return;
+      if (signal.aborted) return;
       if (!state) { this.publishView({ phase: "failed", message: UNREACHABLE, bodyGender: gender }); return; }
       if (state.phase === "ready") {
         this.catalogue = state.catalogue;
@@ -287,7 +304,8 @@ export class PoseLibraryActions {
       }
       this.publishView({ phase: state.phase, message: state.message, bodyGender: gender });
       if (state.phase !== "preparing") { this.restore(); return; }
-      await (this.device.wait ?? (ms => new Promise(done => setTimeout(done, ms))))(POLL_MS);
+      if (signal.aborted) return; // A publication can release or supersede this owner synchronously.
+      await (this.device.wait ?? pollWait)(POLL_MS, signal);
     }
   }
   private publishView(next: Partial<PoseCatalogueView> & Pick<PoseCatalogueView, "phase" | "message" | "bodyGender">) {

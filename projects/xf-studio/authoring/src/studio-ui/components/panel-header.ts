@@ -75,7 +75,7 @@ export class HeaderFitter {
   /** `fitted` hears each header after it fits (the dock sizes a stack of vertical strips by their natural lengths). */
   constructor(private readonly fitted?: (header: PanelHeader) => void) {}
   track(headers: readonly PanelHeader[]) {
-    const next = new Map(headers.map(header => [header.element, header]));
+    const next = new Map<Element, PanelHeader>(headers.map(header => [header.element, header]));
     for (const element of this.headers.keys()) if (!next.has(element)) this.observer?.unobserve(element);
     for (const header of headers) {
       if (!this.headers.has(header.element)) { this.fit(header); this.observer?.observe(header.element); }

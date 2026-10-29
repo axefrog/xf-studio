@@ -264,6 +264,27 @@ test("a spent upload window with a fence that never signals fails closed at its 
   expect(slow.fences.every(fence => fence.deleted)).toBe(true);
 });
 
+test("later draw work stops runtime map uploads with spare credit until its fresh barrier completes (PREV-196 High)", async () => {
+  const { offerUploadSource } = await import("../src/character/render/character-detail-loader");
+  const { UPLOAD_TEXELS } = await import("../src/platform/scene/gpu-upload-budget");
+  const slow = slowUploadRenderer({ uploadMs: 3 }), textures = uploadMaps();
+  for (const texture of textures) offerUploadSource(texture, { width: 4096, height: 4096, close() {} } as ImageBitmap);
+  try {
+    const frame = async () => {
+      await slow.frame();
+      if (slow.frames() === 16) slow.renderer.render(new THREE.Scene(), new THREE.PerspectiveCamera());
+    };
+    await prepareRuntime({ renderer: slow.renderer, scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(), lighting: noLighting,
+      textures: () => textures, frame, now: slow.now, warmUp: () => false });
+    expect(slow.sends.filter(sent => sent.frame === 15)).toHaveLength(3); // Opening passed; well below the eight-band window.
+    expect(slow.sends.filter(sent => sent.frame >= 16 && sent.frame < 31)).toEqual([]);
+    expect(slow.sends.filter(sent => sent.frame === 31).length).toBeGreaterThan(1);
+    expect(slow.sends).toHaveLength(24);
+    expect(slow.peak()).toBeLessThanOrEqual(UPLOAD_TEXELS);
+  } finally { for (const texture of textures) texture.dispose(); }
+  expect(slow.fences.every(fence => fence.deleted)).toBe(true);
+});
+
 test("every morph texture is made in the same rounds, not one geometry's fences after another's: the frames follow the rounds, not the sum of the steps", async () => {
   const { recording, fences, morphTextures } = await fencedRenderer();
   const scene = new THREE.Scene(), meshes = Array.from({ length: 6 }, () => morphMesh(100, 40));

@@ -64,9 +64,11 @@ export function restSkeleton(joints: readonly RestJoint[]): THREE.Object3D {
   return root;
 }
 
-async function json(url: string): Promise<unknown> {
-  const response = await fetch(url);
+async function json(url: string, signal?: AbortSignal): Promise<unknown> {
+  signal?.throwIfAborted();
+  const response = await fetch(url, { signal });
   const value = await response.json().catch(() => null) as { error?: string } | null;
+  signal?.throwIfAborted();
   if (!response.ok) throw new IdleSourceError(value?.error || "The character creator's idle couldn't be read.");
   return value;
 }
@@ -75,14 +77,16 @@ async function json(url: string): Promise<unknown> {
  * Read the host's idles; rejects with a plain reason when they can't be played. `pollMs` and `pollLimitMs`: how often and how long a face
  * still being read is asked for again (`FACE_POLL_MS`, `FACE_POLL_LIMIT_MS`).
  */
-export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: number } = {}): Promise<IdleSource> {
-  const state = await json(IDLES_ENDPOINT) as IdleState;
+export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: number; signal?: AbortSignal } = {}): Promise<IdleSource> {
+  const { signal } = options;
+  const state = await json(IDLES_ENDPOINT, signal) as IdleState;
   if (state?.schema !== IDLE_STATE_SCHEMA) throw new IdleSourceError("The character creator's idle couldn't be read.");
   if (state.phase !== "ready") throw new IdleSourceError(state.message);
   const catalogue = state.catalogue, first = catalogue.idles.find(entry => entry.id === DEFAULT_IDLE) ?? catalogue.idles[0];
   if (!first) throw new IdleSourceError("The character creator's idle couldn't be read.");
   const faces = new Map<string, Promise<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] }>>();
   const face = async (entry: IdleEntry) => {
+    signal?.throwIfAborted();
     if (!entry.face) return null;
     let pending = faces.get(entry.face.file);
     if (!pending) {
@@ -90,7 +94,9 @@ export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: n
       pending.catch(() => faces.delete(entry.face!.file));
       faces.set(entry.face.file, pending);
     }
-    const loaded = await pending, clip = loaded.clips.find(item => item.name === `${entry.face!.clip}_face`);
+    const loaded = await pending;
+    signal?.throwIfAborted();
+    const clip = loaded.clips.find(item => item.name === `${entry.face!.clip}_face`);
     if (!clip) throw new IdleSourceError("The prepared face idle is missing its clip.");
     return { scene: loaded.scene, clip, ...(entry.face.loopFrom !== undefined ? { loopFrom: entry.face.loopFrom } : {}) };
   };
@@ -102,8 +108,14 @@ export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: n
     const facesKnown = () => faces ??= (async () => {
       const pollMs = options.pollMs ?? FACE_POLL_MS, until = Date.now() + (options.pollLimitMs ?? FACE_POLL_LIMIT_MS);
       while (facePending && Date.now() < until) {
-        await new Promise(done => setTimeout(done, pollMs));
-        const next = await json(IDLES_ENDPOINT).catch(() => null) as IdleState | null;
+        await new Promise<void>((resolve, reject) => {
+          signal?.throwIfAborted();
+          const abort = () => { clearTimeout(timer); reject(signal!.reason); };
+          const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, pollMs);
+          signal?.addEventListener("abort", abort, { once: true });
+        });
+        const next = await json(IDLES_ENDPOINT, signal).catch(() => null) as IdleState | null;
+        signal?.throwIfAborted();
         if (next?.schema !== IDLE_STATE_SCHEMA || next.phase !== "ready" || next.source !== "game") continue;
         latest = next.catalogue; faceReason = next.faceReason; facePending = !!next.facePending;
       }
@@ -112,12 +124,14 @@ export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: n
     let faceScene: THREE.Object3D | null = null;
     const records = new Map<string, Promise<THREE.AnimationClip>>();
     const gameFace = async (asked: IdleEntry) => {
+      signal?.throwIfAborted();
       await facesKnown();
+      signal?.throwIfAborted();
       const entry = latest.idles.find(item => item.id === asked.id);
       if (!entry?.face) return null;
       let pending = records.get(entry.id);
       if (!pending) {
-        pending = json(`${IDLES_ENDPOINT}?face=${encodeURIComponent(entry.id)}`).then(value => {
+        pending = json(`${IDLES_ENDPOINT}?face=${encodeURIComponent(entry.id)}`, signal).then(value => {
           const record = value as FaceClipRecord;
           faceScene ??= faceMotionScene(record.rest);
           return faceMotionClip(record.clip, `${entry.face!.clip}_face`);
@@ -126,12 +140,13 @@ export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: n
         records.set(entry.id, pending);
       }
       const clip = await pending;
+      signal?.throwIfAborted();
       return { scene: faceScene!, clip, ...(entry.face.loopFrom !== undefined ? { loopFrom: entry.face.loopFrom } : {}) };
     };
     return { get catalogue() { return latest; }, first, skeleton, ancestry: state.ancestry, faceRest: state.face ? restSkeleton(state.face.joints) : null, face: gameFace,
       get faceReason() { return faceReason; }, get facePending() { return facePending; },
       async body(entry) {
-        const sample = await json(`${IDLES_ENDPOINT}?body=${encodeURIComponent(entry.id)}`) as PoseSample;
+        const sample = await json(`${IDLES_ENDPOINT}?body=${encodeURIComponent(entry.id)}`, signal) as PoseSample;
         const clip = poseClip(sample).clip;
         clip.name = entry.clip;
         return clip;
@@ -140,6 +155,7 @@ export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: n
   // The developer preparation: GLBs and the binding file under /assets/.
   const glbs = new Map<string, Promise<{ scene: THREE.Object3D; clips: THREE.AnimationClip[] }>>();
   const glb = (file: string) => {
+    signal?.throwIfAborted();
     let pending = glbs.get(file);
     if (!pending) {
       pending = new GLTFLoader().loadAsync(`/assets/${file}`).then(gltf => ({ scene: gltf.scene, clips: gltf.animations }));
@@ -148,10 +164,12 @@ export async function loadIdleSource(options: { pollMs?: number; pollLimitMs?: n
     }
     return pending;
   };
-  const [motion, binding] = await Promise.all([glb(first.body), json("/assets/cc-idle-binding.json") as Promise<{ clip: string; ancestry: Record<string, string | null> }>]);
+  const [motion, binding] = await Promise.all([glb(first.body), json("/assets/cc-idle-binding.json", signal) as Promise<{ clip: string; ancestry: Record<string, string | null> }>]);
+  signal?.throwIfAborted();
   return { catalogue, first, skeleton: motion.scene, ancestry: binding.ancestry, faceRest: null, face, facePending: false,
     async body(entry) {
       const clip = (await glb(entry.body)).clips.find(item => item.name === entry.clip);
+      signal?.throwIfAborted();
       if (!clip) throw new IdleSourceError("That idle's motion couldn't be read from its prepared file.");
       return clip;
     } };

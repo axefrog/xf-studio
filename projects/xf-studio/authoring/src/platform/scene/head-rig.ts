@@ -77,7 +77,7 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", 
   let lateFace: Promise<Awaited<ReturnType<IdleSource["face"]>>> | null = null;
   try {
     if (body !== "female") throw Error(IDLE_MASCULINE);
-    source = await loadIdleSource();
+    source = await loadIdleSource({ signal });
     signal?.throwIfAborted();
     const first = source.first;
     // The body never waits for the face (PREV-174): the face joins the playing idle once the host has read it. A developer preparation
@@ -190,7 +190,9 @@ export const loadGameMotion: MotionLoader = async (scene, eye, body = "female", 
   if (lateFace && idle && source) {
     const playing = idle, from = source;
     void lateFace.then(async first => {
+      if (signal?.aborted) return;
       const chosen = idleId === from.first.id ? first : await faceFor(catalogue().idles.find(item => item.id === idleId) ?? from.first).catch(() => null);
+      if (signal?.aborted) return;
       if (chosen && !playing.facial) playing.setFace({ source: chosen.scene, clip: chosen.clip, ...(chosen.loopFrom !== undefined ? { loopFrom: chosen.loopFrom } : {}) });
       assets.faceError = playing.facial ? "" : from.faceReason ?? IDLE_FACE_MISSING;
       for (const listener of faceListeners) listener();
@@ -249,10 +251,13 @@ export async function createHeadRig(scene: THREE.Scene, core: LoadedCoreDetail, 
   options.releases.push(() => { eyeMat.dispose(); for (const texture of coreEye.owned) texture.dispose(); });
   eyes.material = eyeMat;
   if (eyes instanceof THREE.SkinnedMesh) extendSkin(eyes, eyeMat);
+  const motionLife = new AbortController();
+  options.releases.push(() => motionLife.abort());
+  const motionSignal = options.signal ? AbortSignal.any([options.signal, motionLife.signal]) : motionLife.signal;
   const motion = await (options.loadMotion ?? loadGameMotion)(scene, { get mesh() { return eyes; }, material: eyeMat,
     // The rig's skinned copy of the eye (gaze joints) has its own geometry and skeleton, freed with the rig; the core's own go with the core.
     replace(next) { meshes[meshes.indexOf(eyes)] = next; eyes.removeFromParent(); eyes = next; options.releases.push(() => { next.geometry.dispose(); next.skeleton.dispose(); }); } },
-    core.body, options.signal);
+    core.body, motionSignal);
   const { idle, blink } = motion;
   const finalEyes = eyes;
   // The held expression's face driver (face-driver.ts): bound to the head's bones now, at their neutral pose, like the blink; its rig

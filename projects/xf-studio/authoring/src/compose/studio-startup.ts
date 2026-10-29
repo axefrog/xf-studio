@@ -271,7 +271,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   });
   const moduleServices = createModuleServices({ saves: createBrowserSaveExplorerDevice(document,
     { verification, locationChanged: savesLocationSignal(localSetup) }),
-    poses: { device: createBrowserPoseLibraryDevice({ verification }), stage: poseStage } }, composition.modules?.modules.map(module => module.id) ?? []);
+    poses: { device: createBrowserPoseLibraryDevice({ verification }), stage: poseStage } }, composition.modules?.modules.map(module => module.id) ?? [], signal);
   // "Add to my mod manager" installs the mods of the latest Build (read from the files service once it exists) and of each expression
   // set's latest Build (the part preset service, made below).
   let setBuilds: () => readonly BuiltMod[] = () => [];
