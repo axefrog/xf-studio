@@ -420,7 +420,9 @@ test("a11y: Esc skips, arrows and Enter navigate, Enter on a button presses it, 
   expect(overlay).toContain(`"aria-labelledby": titleId, "aria-describedby": bodyId`);
   expect(overlay).toMatch(/h\("h2", \{ class: "guidance-title", id: titleId, tabindex: "-1" \}\)/);
   // Focus moves into the card only on a person's own navigation, is restored afterwards, and each step is announced.
-  expect(controller).toContain("if (focus) requestAnimationFrame(() => overlay.callout.focusTitle())");
+  // (13c3: the frame is tracked, cancelled on the shell's abort, and skipped once retired.)
+  expect(controller).toMatch(/if \(focus\) \{ const id = requestAnimationFrame\(\(\) => \{ frames\.delete\(id\); if \(!signal\?\.aborted\) overlay\.callout\.focusTitle\(\); \}\); frames\.add\(id\); \}/);
+  expect(controller).toContain("for (const id of frames) cancelAnimationFrame(id);");
   expect(controller).toContain("rt.feedback.announce(`${active.tour.title}, step ${active.index + 1} of ${active.count}");
   expect(controller).toMatch(/back\?\.focus\(\{ preventScroll: true \}\)/);
   // Esc elsewhere never steals a gesture's, menu's, dialog's or text field's Escape.
