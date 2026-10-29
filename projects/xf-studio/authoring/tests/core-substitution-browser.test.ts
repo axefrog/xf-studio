@@ -78,10 +78,10 @@ for (const composition of ["empty", "synthetic"] as const) browserTest(`real ${c
       })()`);
       await click("Export closure layers");
       await page.waitFor(`window.closureDownloads.length > 0`);
-      expect(await page.evaluate(`(async () => ({ name: window.closureFilename, value: JSON.parse(await window.closureDownloads[0]) }))()`)).toEqual({
+      expect(await page.evaluate(`(async () => ({ name: window.closureFilename, value: JSON.parse(await window.closureDownloads[0]) }))()`) as unknown).toEqual({
         name: "closure.layers.json", value: { schema: "test/closure-layers-1", body: { layers: [{ id: "first", value: 1 }, { id: "second", value: 2 }] } } });
     }
-    expect(await page.evaluate(`window.xfStudioLifetime.abort(); window.xfStudioLifetime.signal.aborted`)).toBe(true);
+    expect(await page.evaluate(`window.xfStudioLifetime.abort(); window.xfStudioLifetime.signal.aborted`) as boolean).toBe(true);
     await page.waitFor(`JSON.stringify(window.xfsReleaseProbe.counts()) === JSON.stringify(window.xfsReleaseProbe.baseline)`, 20_000);
     const released = await page.evaluate(`({ counts: window.xfsReleaseProbe.counts(), baseline: window.xfsReleaseProbe.baseline })`) as
       { counts: StartupResourceCounts; baseline: StartupResourceCounts };

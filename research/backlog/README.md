@@ -13,7 +13,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **New requests** go into a lane the day they arrive: bugs and polish on existing features into polish or blockers; new features into *after 1.0*.
 
 ### In flight
-- **Open High findings:** 1, CORE-03; feature merges run. The core review follows profiles phase 2. *22 Oct*
+- **Open High findings:** 0. CORE-03 closed on 29 Oct; the retained legacy placement is tracked as CORE-249 (Medium). *29 Oct*
 - **Look-and-feel redesign proposals (preliminary).** Three distinct coats of paint for the Studio and the in-game bridge surfaces, each with five logo variants: keep the UX, change typography and aesthetic so XF stops converging with other AI-made Cyberpunk UIs. One designer produces all three, each reviewed for alignment and placement before delivery. The maintainer chooses a direction; adopting it becomes UI-track work through the style guide. *29 Oct*
 - **Profiles phase 3: the binding selector, several instances per panel type, the panel picker and every empty state** (the single primary focus). Its plan is being written as experiment 047. Phase 2 (tabs and contributed defaults) is built and on `main`, and its G4 tab-switch gate passes on real data, warm and fresh ([experiment 044](../../experiments/044-profile-tabs/README.md)). Earlier: phase 1 (`35e3c5b6`, 22 Oct) and phase 4a, scene runtimes (`5b315f9b`, 24 Oct). *26 Oct*
 
@@ -50,10 +50,10 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 - **The rest of [Small bugs and friction](#small-bugs-and-friction):** WebView2 security. *21 Oct*
 
 ### Next tracks (ranked)
-- **CORE-03: a feature-neutral editor** (the one open High). [Proposed Closed, pending the coordinator's browser gates](../authoring/core-03-s13d-report.md) and independent review. Slices 1–13c3 are on main `6cfdbb86`; the coordinator accepted the real normal/empty mounted and partial-start resource gate (8/0). Slice 13d contributes UV readiness without changing normal text/structure, adds synthetic panel/editor/Undo/file substitution through the real root, and mechanically bounds integration to three test-only files (23 edges, no production importers). The 77 retained consumers and six projection groups remain explicitly owned under **CORE-249 (Medium)** with criteria R/D/B/P/S/G/V. New empty/synthetic CDP rows, heavy gates and WebGL acceptance remain coordinator-owned. Panel binding/history APIs and catalogue IDs are unchanged. *29 Oct*
+- **CORE-03: a feature-neutral editor: closed (29 Oct).** The Studio core starts, edits, saves, exports and releases without eye makeup, and a synthetic layered feature integrates through its own folder and the composition only, proven through the real startup in a browser ([CORE-03 plan](../authoring/core-03-plan.md), [13d report](../authoring/core-03-s13d-report.md)). Remaining legacy placement: CORE-249 in the [code-health ledger](../authoring/code-health.md). *29 Oct*
 1. **The rest of the job scheduler (F-2):** the facial, idle, pose, grading LUT, swatch, icon and preview-core hosts move onto the scheduler ([performance](performance.md)). *21 Oct*
 2. **Character detail completeness:** colours first, then every creator detail ([ranked tracks](#ranked-tracks), track 2). *25 Sep*
-3. **The eye-makeup editor and finish adapters** (track 6), and CORE-03's remaining steps (the [code-health ledger](../authoring/code-health.md)). *25 Sep*
+3. **The eye-makeup editor and finish adapters** (track 6). *25 Sep*
 
 ### R&D (runs only while the polish lane is moving)
 - **Game update 2.5 adds official mod support.** When its details are published, send the meta-coordinator a research request covering what it changes for the export pipeline: archive and resource versions, ArchiveXL and TweakXL compatibility, any official install route, and the beta's framework guidance. *23 Oct*
