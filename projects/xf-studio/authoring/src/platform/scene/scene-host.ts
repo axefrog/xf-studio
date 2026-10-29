@@ -21,7 +21,7 @@ import { createFeatureRenderers, type FeatureRenderers } from "./feature-rendere
 import { characterGeometry } from "./character-geometry";
 import type { ExperimentPort } from "../api/experiments";
 import { followOptionalRenderers } from "./optional-renderers";
-import { createHeadRig, startGameMotion, type HeadRig, type MotionLoader, type RigSurfaces } from "./head-rig";
+import { createHeadRig, type HeadRig, type MotionLoader, type RigSurfaces } from "./head-rig";
 import { afterTask, createCharacterRenderer } from "./character-renderer";
 import { createCameraSettle } from "./camera-settle";
 import { createMouthApertureSampler, headBones } from "./mouth-aperture-sampler";
@@ -87,10 +87,7 @@ export type SceneRuntime = Awaited<ReturnType<typeof createSceneRuntime>>;
 /** Build a scene runtime on `device`, hidden (the device shows it). */
 export async function createSceneRuntime(device: SceneDevice, options: SceneHostOptions = {}) {
   const releases: (() => void)[] = [];
-  const life = new AbortController(), signal = options.signal ? AbortSignal.any([options.signal, life.signal]) : life.signal;
-  releases.push(() => life.abort());
-  try { return await assembleRuntime(device, { ...options, signal,
-    loadMotion: options.loadMotion ?? startGameMotion(options.body ?? "female", signal) }, releases); }
+  try { return await assembleRuntime(device, options, releases); }
   catch (error) {
     releaseAll(releases);
     // A step that failed because the build was aborted (a fetch cut short, say) rejects with the abort, never as a failure of its own.

@@ -28,7 +28,7 @@ export type LoadedCoreDetail = {
   eyes: THREE.Mesh;
   textures: Record<CoreTextureSlot, THREE.Texture>;
 };
-export type CoreDetailFetch = (url: string, init?: RequestInit) => Promise<Response>;
+export type CoreDetailFetch = (url: string) => Promise<Response>;
 
 async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
@@ -56,69 +56,21 @@ async function resourceBytes(resource: RenderResource, fetcher: CoreDetailFetch,
   return bytes;
 }
 
-type GeometryRead = { key: string; bytes: Promise<ArrayBuffer>; life: AbortController; wants: number; done: boolean; drop(): void };
-const geometryBytes = new WeakMap<object, Map<CoreBody, GeometryRead>>();
-/** End the viewport's CPU-byte cache as well as any pending transports, even if the disposed viewport object stays referenced. */
-export function releaseCoreDetailFiles(owner: object): void {
-  const reads = geometryBytes.get(owner);
-  geometryBytes.delete(owner);
-  for (const read of reads?.values() ?? []) if (!read.done) read.life.abort();
-  reads?.clear();
-}
+const geometryBytes = new WeakMap<object, Map<CoreBody, { key: string; bytes: Promise<ArrayBuffer> }>>();
 /**
- * A body's core head file (12 MB) as one viewport's runtimes share it: fetched and checked once, whichever runtime asks first, instead of
+ * A body's core head file (12 MB) as the renderer's runtimes share it: fetched and checked once, whichever runtime asks first, instead of
  * once per runtime (a third scene's head waited 0.09–0.5 s for it, experiment 044 §16). The bytes are the record's hash, so a core
  * prepared again (another file) is another entry; only the latest of each body is kept, and a failed read is not kept.
  */
-function sharedGeometryBytes(owner: object, body: CoreBody, resource: RenderResource, fetcher: CoreDetailFetch, signal?: AbortSignal): Promise<ArrayBuffer> {
-  let bodies = geometryBytes.get(owner);
-  if (!bodies) geometryBytes.set(owner, bodies = new Map());
+function sharedGeometryBytes(renderer: object, body: CoreBody, resource: RenderResource, fetcher: CoreDetailFetch): Promise<ArrayBuffer> {
+  let bodies = geometryBytes.get(renderer);
+  if (!bodies) geometryBytes.set(renderer, bodies = new Map());
   const key = `${resource.file}|${resource.sha256}`, kept = bodies.get(body);
-  let entry = kept?.key === key && !kept.life.signal.aborted ? kept : undefined;
-  if (!entry) {
-    const life = new AbortController();
-    const made: GeometryRead = { key, life, wants: 0, done: false,
-      bytes: resourceBytes(resource, (url, init) => fetcher(url, { ...init, signal: life.signal }), body),
-      drop: () => { if (bodies.get(body) === made) bodies.delete(body); } };
-    bodies.set(body, made); entry = made;
-    void made.bytes.then(() => { made.done = true; }, made.drop);
-  }
-  const read = entry;
-  read.wants++;
-  return new Promise((resolve, reject) => {
-    let held = true;
-    const release = () => {
-      if (!held) return;
-      held = false; signal?.removeEventListener("abort", abort);
-      if (--read.wants === 0 && !read.done) { read.drop(); read.life.abort(); }
-    };
-    const abort = () => { release(); reject(signal!.reason); };
-    if (signal?.aborted) abort(); else signal?.addEventListener("abort", abort, { once: true });
-    read.bytes.then(value => { release(); signal?.aborted ? reject(signal.reason) : resolve(value); }, error => { release(); reject(error); });
-  });
-}
-
-type CoreFiles = { record: CoreDetail; geometry: Promise<ArrayBuffer>; textures: Record<CoreTextureSlot, Promise<ArrayBuffer>> };
-/** Start verified file I/O before WebGL/context/lighting initialization. No Three/GPU objects are allocated by this read. */
-export function startCoreDetail(fetcher: CoreDetailFetch, body: CoreBody, signal: AbortSignal, owner: object = {}) {
-  const send: CoreDetailFetch = (url, init) => fetcher(url, { ...init, signal });
-  const ready = readCoreDetail(send, body).then(record => {
-    signal.throwIfAborted();
-    markPhase("core:record");
-    const geometry = sharedGeometryBytes(owner, body, record.geometry, fetcher, signal);
-    const textures = Object.fromEntries(CORE_TEXTURE_SLOTS.map(slot => [slot, resourceBytes(record.textures[slot], send, body)])) as CoreFiles["textures"];
-    // A renderer initialization failure or cancellation may leave these reads unconsumed; their signal still owns them.
-    for (const read of [geometry, ...Object.values(textures)]) void read.catch(() => {});
-    return { record, geometry, textures };
-  });
-  void ready.catch(() => {});
-  // The runtime retains its loader option. Drop its captured read after consumption so it does not retain raw texture buffers too.
-  let unread: Promise<CoreFiles> | undefined = ready;
-  return { ready, load: async (renderer: THREE.WebGLRenderer) => {
-    const pending = unread; unread = undefined;
-    if (!pending) throw Error("The core read was already consumed.");
-    return loadCoreDetail(renderer, send, body, signal, await pending);
-  } };
+  if (kept?.key === key) return kept.bytes;
+  const bytes = resourceBytes(resource, fetcher, body);
+  bodies.set(body, { key, bytes });
+  bytes.catch(() => { if (bodies.get(body)?.bytes === bytes) bodies.delete(body); });
+  return bytes;
 }
 
 /**
@@ -126,19 +78,18 @@ export function startCoreDetail(fetcher: CoreDetailFetch, body: CoreBody, signal
  * with its reason, and what was made is disposed. A step already running (a parse, a decode) finishes first.
  */
 export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: CoreDetailFetch = fetch, body: CoreBody = "female",
-  signal?: AbortSignal, files?: CoreFiles): Promise<LoadedCoreDetail> {
+  signal?: AbortSignal): Promise<LoadedCoreDetail> {
   signal?.throwIfAborted();
-  const send: CoreDetailFetch = (url, init) => fetcher(url, { ...init, ...(signal ? { signal } : {}) });
   let record: CoreDetail;
-  try { record = files?.record ?? await readCoreDetail(send, body); }
+  try { record = await readCoreDetail(fetcher, body); }
   // An abort is no failure of the files: a read cut short by it rejects with its reason, not as an unreachable preview.
   catch (error) { if (signal?.aborted) throw signal.reason; throw error; }
-  if (!files) markPhase("core:record");
+  markPhase("core:record");
   signal?.throwIfAborted();
   const textures: Partial<Record<CoreTextureSlot, THREE.Texture>> = {};
   let gltf: GLTF | undefined;
   try {
-    const data = await (files?.geometry ?? sharedGeometryBytes(renderer, body, record.geometry, fetcher, signal));
+    const data = await sharedGeometryBytes(renderer, body, record.geometry, fetcher);
     signal?.throwIfAborted();
     markPhase("core:bytes");
     const weights = restoreFirstWeights(data);
@@ -165,7 +116,7 @@ export async function loadCoreDetail(renderer: THREE.WebGLRenderer, fetcher: Cor
     }
     const loader = new THREE.TextureLoader();
     await Promise.all(CORE_TEXTURE_SLOTS.map(async slot => {
-      const bytes = await (files?.textures[slot] ?? resourceBytes(record.textures[slot], send, body));
+      const bytes = await resourceBytes(record.textures[slot], fetcher, body);
       const url = URL.createObjectURL(new Blob([bytes], { type: "image/png" }));
       try {
         const texture = await loader.loadAsync(url);
