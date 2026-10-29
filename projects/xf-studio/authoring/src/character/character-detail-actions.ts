@@ -20,6 +20,7 @@ import { DETAIL_SLOTS } from "./render-detail";
 import { withSlotLimits, type DetailLimit, type DetailNotice, type SlotLimits } from "./detail-limits";
 import { pageFailure } from "../diagnostics/page-sink";
 import { markCharacter } from "./character-timing";
+import { abortable } from "../platform/api/abortable";
 
 /** The host's preparation state (character-detail-host.ts), as the transport returns it. */
 export type HostCharacterState = {
@@ -112,7 +113,8 @@ export class CharacterDetailActions {
   /** The request whose record is shown now (a failed change on the same V falls back to it). */
   private shown: CharacterRequest | null = null;
   private disposed = false;
-  constructor(private readonly port: CharacterDetailPort) {
+  /** Only the first transaction may recover a speculative host failure, once its prerequisite has been validated. */
+  constructor(private readonly port: CharacterDetailPort, private initialRecovery?: Promise<void>) {
     port.onLimits?.(update => { if (this.status.phase === "ready") this.publish({ ...this.status, slots: withSlotLimits(this.status.slots, update) }); });
   }
 
@@ -152,6 +154,8 @@ export class CharacterDetailActions {
   }
 
   private prepare(key: string, request: CharacterRequest): Promise<void> {
+    const recoverAfter = this.initialRecovery;
+    this.initialRecovery = undefined; // The allowance belongs to this transaction, never its replacement or an explicit retry.
     // Only another V clears the scene: a changed choice on the same V keeps it, fully interactive, until the new record swaps in.
     const sameV = !!this.shown && sameCharacter(this.shown, request) && this.status.phase === "ready";
     this.current?.controller.abort();
@@ -165,7 +169,7 @@ export class CharacterDetailActions {
       this.publish({ phase: "preparing", source: request.source, message: "", notice: null, progress: null, slots: pending(),
         updating: false, updateError: null, choices: request.choices?.length ?? 0, drawn: [], partial: [], garmentTags: [], need: null });
     }
-    return this.follow(request, controller.signal, sameV).catch(error => {
+    return this.follow(request, controller.signal, sameV, recoverAfter).catch(error => {
       if (controller.signal.aborted || this.disposed) return;
       const notice = (error as { notice?: DetailNotice })?.notice ?? null;
       // Logged with a reference; shown with "Report this problem" unless it's a known notice (a host of another version).
@@ -183,9 +187,20 @@ export class CharacterDetailActions {
     });
   }
 
-  private async follow(request: CharacterRequest, signal: AbortSignal, updating: boolean) {
+  private async follow(request: CharacterRequest, signal: AbortSignal, updating: boolean, recoverAfter?: Promise<void>) {
     markCharacter("ask", { updating });
-    let state = await this.port.request(request, signal);
+    const recover = async () => {
+      const validated = recoverAfter!;
+      recoverAfter = undefined; // Spend it before any wait; the fresh request cannot enter recovery again.
+      await abortable(validated, signal);
+      signal.throwIfAborted();
+      return this.port.request(request, signal);
+    };
+    const read = async (send: () => Promise<HostCharacterState>) => {
+      try { return await send(); }
+      catch (error) { if (signal.aborted || !recoverAfter) throw error; return recover(); }
+    };
+    let state = await read(() => this.port.request(request, signal));
     for (let waiting = false; ; waiting = true) {
       for (let attempts = 0; state.phase === "preparing" || state.phase === "unknown"; attempts++) {
         if (signal.aborted) return;
@@ -200,9 +215,11 @@ export class CharacterDetailActions {
         await this.port.wait(pollDelay(attempts), signal);
         if (signal.aborted) return;
         // The host forgets a request it cancelled or never saw (a restart): ask again.
-        state = state.phase === "unknown" || attempts % 50 === 49 ? await this.port.request(request, signal) : await this.port.poll(state.key, signal);
+        state = await read(() => state.phase === "unknown" || attempts % 50 === 49 ? this.port.request(request, signal) : this.port.poll(state.key, signal));
       }
       if (signal.aborted) return;
+      // Keep an old-setup failure inside the transaction, including one arriving after adoption. Subscribers must not settle on it.
+      if (state.phase === "failed" && recoverAfter) { state = await recover(); continue; }
       if (state.phase !== "failed" || state.need !== "wolvenkit") break;
       // Waiting for WolvenKit: said with its next step, not reported as a failure; asked again now and then (NATIVE-47).
       this.waitForSetup(request, state.message, updating);

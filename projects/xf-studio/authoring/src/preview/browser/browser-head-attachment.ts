@@ -49,18 +49,23 @@ type Scene = Awaited<ReturnType<ViewportDevice["buildHead"]>>;
 
 /** The real detail service can request/read its V before setup permits construction of the head. It gains no display capability early. */
 export function startHeadDetails(request: CharacterRequest | undefined, warmStart?: Pick<CharacterWarmStart, "remember" | "files">,
-  requester = characterRequester()) {
+  requester = characterRequester(), speculative = true) {
   const scene = Promise.withResolvers<Scene>(), preparation = Promise.withResolvers<SceneDetailPreparation>();
+  const validated = speculative ? Promise.withResolvers<void>() : undefined;
   void scene.promise.catch(() => {}); void preparation.promise.catch(() => {});
-  const actions = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene.promise, undefined, warmStart, preparation.promise, requester));
+  const actions = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene.promise, undefined, warmStart, preparation.promise, requester), validated?.promise);
   const initial = request ? { key: JSON.stringify(request), promise: actions.setCharacter(request) } : undefined;
   let disposed = false;
   return {
-    actions, initial, requester, ready: preparation.resolve,
-    connect(built: Promise<Scene>) { void built.then(scene.resolve, scene.reject); void built.then(preparation.resolve, preparation.reject); },
+    actions, initial, ready: preparation.resolve,
+    connect(built: Promise<Scene>) {
+      validated?.resolve();
+      void built.then(scene.resolve, scene.reject); void built.then(preparation.resolve, preparation.reject);
+    },
     dispose() {
       if (disposed) return;
       disposed = true; actions.dispose();
+      validated?.resolve(); // Release the aborted transaction's prerequisite wait too.
       const reason = new DOMException("The head request ended.", "AbortError"); scene.reject(reason); preparation.reject(reason);
     },
   };
@@ -122,7 +127,7 @@ export type HeadAttachmentPorts = {
   warmStart?: Pick<CharacterWarmStart, "remember" | "files">;
   /** Startup's already-requested V, adopted only when the authoritative context still matches. */
   initialDetails?: ReturnType<typeof startHeadDetails>;
-  /** Retain the host want's owner even when another character supersedes startup's service before adoption. */
+  /** The page's scene-head owner supplies the same host requester for every head, across all destination transitions. */
   requester?: string;
 };
 
@@ -219,7 +224,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     const initialRequest = request.bodyGender === body ? request : undefined;
     const matches = !!ports.initialDetails && ports.initialDetails.initial?.key === JSON.stringify(initialRequest);
     if (!matches) ports.initialDetails?.dispose();
-    const details = matches ? ports.initialDetails! : startHeadDetails(initialRequest, ports.warmStart, ports.initialDetails?.requester ?? ports.requester);
+    const details = matches ? ports.initialDetails! : startHeadDetails(initialRequest, ports.warmStart, ports.requester, false);
     releases.push(() => details.dispose());
     const sceneReady = ports.viewport.buildHead(body, signal, details.ready);
     details.connect(sceneReady);
@@ -227,10 +232,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     const stopDetails = () => characterDetails.dispose();
     signal.addEventListener("abort", stopDetails, { once: true });
     releases.push(() => { signal.removeEventListener("abort", stopDetails); stopDetails(); });
-    // Setup now permits a head. A failed speculative request may have seen the old, incomplete setup; retry it once here.
-    // Successful/in-flight work is adopted unchanged, and ordinary failures after adoption still require an explicit retry.
-    let initialDetails = matches && details.initial && details.actions.failed()
-      ? { ...details.initial, promise: details.actions.retry() } : details.initial;
+    let initialDetails = details.initial;
     const scene = await sceneReady;
     releases.push(() => ports.viewport.disposeHead(scene));
     signal.throwIfAborted();

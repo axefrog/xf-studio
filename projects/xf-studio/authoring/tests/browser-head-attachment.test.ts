@@ -17,6 +17,7 @@ import { createMakeupStack, EYE_RASTER_REGION, freshWorkspace } from "./fixtures
 // bindings, service attachments, subscriptions, camera listeners, surface editors or leftover canvases.
 
 const nothingAttached = { savedV: undefined, preview: undefined, motion: undefined, characterDetails: undefined };
+const detailTurn = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
 test("a failed speculative V retries at the validated setup handoff, places once and deduplicates identical requests", async () => {
   let configured = false, requests = 0, placements = 0;
@@ -31,8 +32,8 @@ test("a failed speculative V retries at the validated setup handoff, places once
   const primed = startHeadDetails(request);
   let head: Awaited<ReturnType<typeof buildBrowserHead>> | undefined;
   try {
-    await primed.initial!.promise;
-    expect(primed.actions.failed()).toBe(true); expect(requests).toBe(1);
+    await detailTurn();
+    expect(primed.actions.snapshot().phase).toBe("preparing"); expect(requests).toBe(1);
     configured = true;
     head = await buildBrowserHead({ ...h.ports, initialDetails: primed });
     await head.prepare(new AbortController().signal, () => {});
@@ -42,6 +43,38 @@ test("a failed speculative V retries at the validated setup handoff, places once
     await head.characterDetails.setCharacter(request!);
     expect([requests, placements]).toEqual([2, 1]);
   } finally { head?.dispose(); primed.dispose(); port.mockRestore(); }
+});
+
+test.each(["ready", "failed"] as const)("an initial %s reply after adoption keeps preparation on its transaction and places once", async initial => {
+  const old = Promise.withResolvers<import("../src/character/character-detail-actions").HostCharacterState>();
+  const fresh = Promise.withResolvers<import("../src/character/character-detail-actions").HostCharacterState>();
+  const signals: AbortSignal[] = [], phases: string[] = [];
+  let placements = 0, prepared = false;
+  const port = spyOn(detailDevice, "createBrowserCharacterDetailDevice").mockImplementation(() => ({
+    request: async (_request, signal) => { signals.push(signal); return signals.length === 1 ? old.promise : fresh.promise; },
+    poll: async () => { throw Error("No polling needed."); }, clear() {}, wait: async () => {},
+    show: async () => { placements++; return { slots: [] }; },
+  }));
+  const h = harness(), request = h.ports.character.context.detailRequest(), primed = startHeadDetails(request);
+  const off = primed.actions.subscribe(() => phases.push(primed.actions.snapshot().phase));
+  let head: Awaited<ReturnType<typeof buildBrowserHead>> | undefined;
+  try {
+    head = await buildBrowserHead({ ...h.ports, initialDetails: primed });
+    const preparation = head.prepare(new AbortController().signal, () => {}).then(() => { prepared = true; });
+    old.resolve({ key: "old", phase: initial, message: initial === "failed" ? "Choose a game folder." : "", progress: null,
+      record: initial === "ready" ? "prepared.json" : null });
+    await detailTurn();
+    expect(phases).not.toContain("failed");
+    if (initial === "failed") {
+      expect(signals).toHaveLength(2); expect(signals[1]).toBe(signals[0]);
+      expect(prepared).toBe(false); expect(placements).toBe(0);
+      fresh.resolve({ key: "fresh", phase: "ready", message: "", progress: null, record: "prepared.json" });
+    }
+    expect(h.drawn).toHaveLength(0);
+    await preparation;
+    expect(prepared).toBe(true); expect(placements).toBe(1); expect(signals).toHaveLength(initial === "failed" ? 2 : 1);
+    head.show(); expect(h.drawn).toHaveLength(1);
+  } finally { off(); head?.dispose(); primed.dispose(); port.mockRestore(); }
 });
 
 test("the V is asked for before the core head's motion settles, then preparation joins that request", async () => {

@@ -79,12 +79,13 @@ const settle = () => new Promise(resolve => setTimeout(resolve, 5));
 const mockFetch = (impl: (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => Promise<Response>) =>
   spyOn(globalThis, "fetch").mockImplementation(Object.assign(impl, { preconnect: fetch.preconnect }));
 
-test("startup requests the active V before core setup, then the head adopts the same service and asks only once", async () => {
+test("startup requests the active V before core setup, then adoption awaits bounded recovery of a delayed failure", async () => {
   const requests: unknown[] = [];
   const response = Promise.withResolvers<Response>();
   const send = mockFetch(async (_url, init) => {
     requests.push(JSON.parse(init!.body as string));
-    return response.promise;
+    return requests.length === 1 ? response.promise
+      : Response.json({ key: "b".repeat(32), phase: "failed", message: "fresh fixture", recordSchema: CHARACTER_DETAIL_SCHEMA, record: null });
   });
   const o = owner({ v1: "female" });
   try {
@@ -93,9 +94,10 @@ test("startup requests the active V before core setup, then the head adopts the 
     expect(o.h.builds).toBe(0); expect(o.h.drawn).toHaveLength(0);
     const loaded = o.heads.load();
     await settle(); // The in-flight service has been adopted; it must not be restarted.
+    expect(requests).toHaveLength(1);
     response.resolve(Response.json({ key: "a".repeat(32), phase: "failed", message: "fixture", recordSchema: CHARACTER_DETAIL_SCHEMA, record: null }));
     await loaded;
-    expect(requests).toHaveLength(1); expect(o.heads.shown()).toBeDefined();
+    expect(requests).toHaveLength(2); expect(o.heads.shown()).toBeDefined();
   } finally { o.heads.dispose(); send.mockRestore(); }
 });
 
@@ -150,6 +152,30 @@ test("a different character taking over at startup handoff retains the supersede
     expect(o.heads.shown()?.body).toBe("male");
     expect(bodies).toEqual(["female", "male"]);
     expect(pages[0]).toMatch(/^[a-f0-9]{32}$/); expect(pages[1]).toBe(pages[0]);
+  } finally { o.heads.dispose(); send.mockRestore(); }
+});
+
+test("the page requester survives A to no view to B before setup, and later head changes", async () => {
+  const pages: string[] = [], signals: AbortSignal[] = [], bodies: string[] = [];
+  const send = mockFetch(async (_url, init) => {
+    pages.push(new Headers(init!.headers).get("X-XFS-Page")!);
+    signals.push(init!.signal as AbortSignal);
+    bodies.push(JSON.parse(init!.body as string).bodyGender);
+    return Response.json({ key: "a".repeat(32), phase: "failed", message: "fixture", recordSchema: CHARACTER_DETAIL_SCHEMA, record: null });
+  });
+  const o = owner({ v1: "female", v2: "male" });
+  try {
+    o.heads.prime();
+    await o.heads.show(undefined);
+    expect(signals[0]!.aborted).toBe(true);
+    o.scene.subject = "v2";
+    await o.heads.show("main");
+    await o.heads.load();
+    expect(o.heads.shown()?.body).toBe("male"); expect(bodies).toEqual(["female", "male"]);
+    o.heads.context("v2").dispatch({ kind: "character.useDefault", bodyGender: "female" });
+    await o.heads.load();
+    expect(o.heads.shown()?.body).toBe("female"); expect(bodies).toEqual(["female", "male", "female"]);
+    expect(pages[0]).toMatch(/^[a-f0-9]{32}$/); expect(new Set(pages).size).toBe(1);
   } finally { o.heads.dispose(); send.mockRestore(); }
 });
 
