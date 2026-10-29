@@ -46,8 +46,12 @@ export class AuthoringDocument {
       this.alive(); this.features.loadPrepared(state); this.lockedReason = initial.locked; this.alive();
       this.scope = this.open(options.scope ?? LOCAL_LOOK_SCOPE, stack);
       this.scope.replace(stack, options.activate !== false); this.alive();
+      let partVersion = this.features.partVersion;
       off = this.features.subscribe(change => {
         if (options.signal.aborted) return;
+        const contentChanged = partVersion !== this.features.partVersion;
+        partVersion = this.features.partVersion;
+        if (contentChanged && change.kind === "set") this.scope.recordSelection(change.features);
         this.revision++;
         if (!this.restoring) this.notify("part", change);
       });
@@ -64,10 +68,16 @@ export class AuthoringDocument {
     let publish: (() => void) | undefined;
     return this.service.open(id, {
       read: feature => { this.alive(); return this.features.read(feature); },
-      apply: values => {
+      selection: feature => {
+        const document = this.features.document(feature);
+        return document && structuredClone(document.module.editor.selection
+          ? document.module.editor.selection(document.editor, document.part ?? document.module.part.empty())
+          : document.module.editor.serialize(document.editor));
+      },
+      apply: (values, _cause, selection) => {
         if (this.options.signal.aborted || Object.keys(values).some(feature => !this.features.has(feature))) return false;
         let prepared: ReturnType<LiveFeatures["prepareRestore"]>;
-        try { prepared = this.features.prepareRestore(values); } catch { return false; }
+        try { prepared = this.features.prepareRestore(values, selection); } catch { return false; }
         if (this.options.signal.aborted) return false;
         publish = this.features.restorePrepared(prepared);
         return true;
@@ -86,6 +96,7 @@ export class AuthoringDocument {
   /** In-place feature edits announce their content change explicitly, just as applied results do. */
   changed(features: readonly string[] = this.features.features()) {
     this.alive(); this.revision++; if (features.length) this.inPlaceRevision++;
+    this.scope.recordSelection(features);
     this.notify("part", { kind: "set", features: [...features] });
   }
   subscribe(listener: (change: DocumentChange, features?: LiveFeatureChange) => void) { this.alive(); this.listeners.add(listener); return () => this.listeners.delete(listener); }

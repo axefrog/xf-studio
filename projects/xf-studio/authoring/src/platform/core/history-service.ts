@@ -86,6 +86,8 @@ export interface HistoryScope {
   readonly id: HistoryScopeId;
   /** Record `keys` as they are now (before a change); the new step's ID, or undefined when no step was added. */
   checkpoint(keys: readonly string[], label?: HistoryLabel, options?: CheckpointFlags): HistoryEntryId | undefined;
+  /** Complete the checkpoint's selection endpoints when its content is published; selection-only navigation is ignored. */
+  recordSelection(keys: readonly string[]): void;
   relabel(step: HistoryEntryId, label: HistoryLabel): void;
   /** Remove `step` only while it is the top step (an empty transaction's checkpoint). */
   discard(step: HistoryEntryId): boolean;
@@ -154,6 +156,7 @@ class Scope implements HistoryScope {
   /** The scope as the last Undo, Redo or jump left it: the target's revision and content, and the top step. */
   private expected?: { revision: unknown; fingerprint: string; top?: HistoryEntryId };
   private recordingNow = true;
+  private pendingSelection?: { step: HistoryEntryId; keys: Set<string> };
   private adjustments = 0;
   get adjusting() { return this.adjustments > 0; }
   private reset = false;
@@ -183,23 +186,40 @@ class Scope implements HistoryScope {
   checkpoint(keys: readonly string[], label?: HistoryLabel, options: CheckpointFlags = {}): HistoryEntryId | undefined {
     if (!this.recordingNow) return undefined;
     const added = this.stack.checkpoint(options.read ?? this.read, keys, { label, coalesce: options.coalesce, scope: options.scope,
-      timed: options.timed, distinct: options.distinct });
+      timed: options.timed, distinct: options.distinct, selection: this.target.selection?.bind(this.target) });
+    this.trackSelection(keys);
     if (added !== undefined) { this.reset = false; this.historySeen = true; }
     this.changed(true);
     return added;
   }
   private checkpointOpen(keys: readonly string[], label: HistoryLabel | undefined, scope: StoredScope | undefined) {
-    const added = this.stack.checkpoint(this.read, keys, { label, scope });
+    const added = this.stack.checkpoint(this.read, keys, { label, scope, selection: this.target.selection?.bind(this.target) });
+    this.trackSelection(keys);
     this.changed();
     return added;
+  }
+  private trackSelection(keys: readonly string[]) {
+    const step = this.stack.topId;
+    if (!this.target.selection || step === undefined) return;
+    const pending = this.pendingSelection;
+    this.pendingSelection = { step, keys: new Set([...(pending?.step === step ? pending.keys : []), ...keys]) };
+  }
+  recordSelection(keys: readonly string[]) {
+    const pending = this.pendingSelection;
+    if (!pending || !this.target.selection) return;
+    this.stack.recordSelection(pending.step, keys.filter(key => pending.keys.has(key)), key => this.target.selection!(key));
+    if (!this.adjustments) {
+      for (const key of keys) pending.keys.delete(key);
+      if (!pending.keys.size) this.pendingSelection = undefined;
+    }
   }
   relabel(step: HistoryEntryId, label: HistoryLabel) { this.stack.relabel(step, label); }
   discard(step: HistoryEntryId) { const removed = this.stack.discard(step); if (removed) this.changed(); return removed; }
   seal() { this.stack.seal(); }
-  clear() { this.reset = true; this.stack.clear(); this.expected = undefined; this.changed(); }
+  clear() { this.reset = true; this.stack.clear(); this.expected = undefined; this.pendingSelection = undefined; this.changed(); }
   replace(stack: HistoryStack, activate = true) {
     this.historySeen ||= this.stack.depth > 0 || this.stack.redoDepth > 0;
-    this.stack = stack; this.expected = undefined;
+    this.stack = stack; this.expected = undefined; this.pendingSelection = undefined;
     if (stack.depth || stack.redoDepth) this.reset = false;
     this.changed(activate);
   }
@@ -215,18 +235,20 @@ class Scope implements HistoryScope {
       revert: step => { this.revertTransaction(step); }, content: () => this.target.fingerprint?.(keys) ?? "",
       // A kept step is a change to this scope like any other checkpoint.
       kept: () => { this.reset = false; this.historySeen = true; this.service.changed(this, true); },
-      closed: () => { if (open) { open = false; this.adjustments--; this.changed(); } },
+      closed: () => { if (open) { open = false; this.adjustments--; this.pendingSelection = undefined; this.changed(); } },
     };
     this.adjustments++;
     try { return HistoryTransaction.open(host, policy, options.present ?? (() => true)); }
     catch (error) { this.adjustments--; throw error; }
   }
   revertTransaction(step: HistoryEntryId | undefined): boolean {
+    const selection = this.stack.selection(this.stack.depth - 1, "before");
     const values = step === undefined ? (this.stack.canUndo ? this.stack.stepParts(this.stack.depth - 1) : undefined)
       : this.stack.isTop(step) ? this.stack.revert() : undefined;
     if (!values) return false;
     if (step !== undefined) this.changed();
-    const applied = this.target.apply(values, "revert");
+    this.pendingSelection = undefined;
+    const applied = this.target.apply(values, "revert", selection);
     this.target.settled?.();
     return applied;
   }
@@ -310,10 +332,11 @@ class Scope implements HistoryScope {
       accepted = this.stack.attempt(() => {
         if (plan.direction === "undo" && !this.redoValid()) this.clearRedo();
         const moved = plan.direction === "undo" ? this.stack.undo(this.read, plan.count) : this.stack.redo(this.read, plan.count);
-        return !!moved && this.target.apply(moved.parts, plan.direction === "undo" ? "undo" : "redo");
+        return !!moved && this.target.apply(moved.parts, plan.direction === "undo" ? "undo" : "redo", moved.selection);
       });
     } finally { if (!accepted) this.expected = expected; }
     if (!accepted) return false;
+    this.pendingSelection = undefined;
     this.expected = { revision: this.target.revision?.(), fingerprint: this.target.fingerprint?.() ?? "", top: this.stack.topId };
     // The target settles even when a listener throws, so it never stays half published.
     try { this.changed(true); } finally { this.target.settled?.(); }

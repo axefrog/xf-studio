@@ -54,14 +54,21 @@ export const eyeMakeupEditor: EditorCodec<EyeMakeupEditor, Recipe> = Object.free
   empty: (): EyeMakeupEditor => ({ active: 0, selected: 0 }),
   /** Out-of-range selections fall back to the first layer and point, as the workspace-1 reader did. */
   parse(value: unknown, recipe: Recipe): EyeMakeupEditor {
-    const input = value as Partial<EyeMakeupEditor> | undefined, out: EyeMakeupEditor = { active: 0, selected: 0 };
+    const input = value as (Partial<EyeMakeupEditor> & { layerId?: unknown }) | undefined, out: EyeMakeupEditor = { active: 0, selected: 0 };
     if (input && Number.isInteger(input.active) && input.active! >= 0 && input.active! < recipe.layers.length) out.active = input.active!;
+    if (typeof input?.layerId === "string") {
+      const index = recipe.layers.findIndex(layer => layer.id === input.layerId);
+      if (index >= 0) out.active = index;
+    }
     if (input && Number.isInteger(input.selected) && input.selected! >= 0 &&
         input.selected! < (recipe.layers[out.active]?.points.length ?? 0)) out.selected = input.selected!;
     out.fieldSelection = parseFieldSelection(input?.fieldSelection, recipe);
     return out;
   },
   serialize: (editor: EyeMakeupEditor) => ({ active: editor.active, selected: editor.selected,
+    ...(editor.fieldSelection ? { fieldSelection: structuredClone(editor.fieldSelection) } : {}) }),
+  selection: (editor: EyeMakeupEditor, recipe: Recipe) => ({ selected: editor.selected,
+    layerId: recipe.layers[editor.active]?.id,
     ...(editor.fieldSelection ? { fieldSelection: structuredClone(editor.fieldSelection) } : {}) }),
 });
 

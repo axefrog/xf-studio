@@ -51,6 +51,8 @@ export interface EditorCodec<E, P> {
   /** Tolerant: invalid or stale values fall back to defaults for this part. */
   parse(value: unknown, part: P): E;
   serialize(editor: E): unknown;
+  /** History selection, accepted by `parse`; include stable item identities when positions can name different items. */
+  selection?(editor: E, part: P): unknown;
 }
 
 /** Feature-wide workspace memory (for eye makeup: remembered Glitter-model and Colour-shift settings). */

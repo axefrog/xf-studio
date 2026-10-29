@@ -17,11 +17,13 @@
  *   Redo and any other step end the run.
  * - **Redo** is session-only: Undo moves steps onto the Redo list with the values as they were after them, and Redo puts them
  *   back with their identity. Whether Redo is still valid is the service's decision; it clears the list otherwise.
+ * - **Selection** keeps the endpoints changed by a step, captured with its content publication rather than later navigation.
+ *   Moves restore those endpoints; unchanged selections use the target's replay rule. Old saved steps need no selection field.
  * - **Data.** `data()` is the plain `LookHistoryData` form (kept steps and their chunks, without labels, times or Redo);
  *   `fromData`, `fromSteps` and `fromBodies` (a feature's whole parts, as older workspaces stored them) read it back.
  */
 import { HISTORY_LIMIT, LOOK_HISTORY_1, UNKNOWN_HISTORY_LABEL, type ChunkId, type HistoryEntryId, type HistoryLabel,
-  type HistoryParts, type HistoryScope, type LookHistoryData, type StoredLookEntry } from "../api/history";
+  type HistoryParts, type HistoryScope, type HistorySelection, type LookHistoryData, type StoredLookEntry } from "../api/history";
 import { ChunkStore } from "./chunk-store";
 
 /** Reads the current value of one key (for the look, a feature's parsed part); undefined when there is none. */
@@ -89,8 +91,8 @@ export const WHOLE_VALUES: HistoryParts = Object.freeze({ chunks: (_key: string,
 
 type Refs = Record<string, ChunkId[] | null>;
 /** `distinct`: the step was recorded although the top step held the same content, so Redo puts it back the same way. */
-type Entry = HistoryStepInfo & { scope: HistoryScope; before: Refs; coalesce?: string; distinct?: true };
-type RedoEntry = { id: HistoryEntryId; label: HistoryLabel; at?: number; scope: HistoryScope; after: Refs; distinct?: true };
+type Entry = HistoryStepInfo & { scope: HistoryScope; before: Refs; coalesce?: string; distinct?: true; selection?: HistorySelection };
+type RedoEntry = { id: HistoryEntryId; label: HistoryLabel; at?: number; scope: HistoryScope; after: Refs; distinct?: true; selection?: HistorySelection };
 export type CheckpointOptions = {
   scope?: HistoryScope; label?: HistoryLabel;
   /** Joins the top step while it is unsealed under the same key (a continuous edit). */
@@ -99,6 +101,7 @@ export type CheckpointOptions = {
   timed?: boolean;
   /** Add a step even when the top step already holds exactly this content. */
   distinct?: boolean;
+  selection?: LookReader;
 };
 
 /** Step identities are unique for the whole session, across scopes, looks and restores. */
@@ -170,7 +173,9 @@ export class HistoryStack {
       const before: Refs = {};
       for (const [feature, ids] of Object.entries(entry.before))
         before[feature] = ids === null ? null : (Array.isArray(ids) ? ids : []).map(ref);
-      return { id: newId(), scope: entry.scope, before };
+      const selection = entry.selection && Object.fromEntries(Object.entries(entry.selection).filter(([key, change]) =>
+        Object.hasOwn(before, key) && change && Object.hasOwn(change, "before") && Object.hasOwn(change, "after")));
+      return { id: newId(), scope: entry.scope, before, ...(selection ? { selection: structuredClone(selection) } : {}) };
     });
     history.trimmedBefore = data.trimmed === true || data.entries.length > limit;
     return history;
@@ -193,6 +198,7 @@ export class HistoryStack {
     const top = this.entries.at(-1);
     if (options.coalesce !== undefined && top?.coalesce === options.coalesce) {
       for (const key of keys) if (!Object.hasOwn(top.before, key)) top.before[key] = this.encodeOne(read, key);
+      this.startSelection(top, keys, options.selection);
       if (options.label) top.label = { ...options.label };
       return undefined;
     }
@@ -201,11 +207,39 @@ export class HistoryStack {
       this.releaseRefs(before);
       if (options.label) top!.label = { ...options.label };
       if (options.coalesce !== undefined) top!.coalesce = options.coalesce;
+      this.startSelection(top!, keys, options.selection);
       return undefined;
     }
-    return this.push({ id: newId(), scope: options.scope ?? (keys.length > 1 ? "look" : "part"),
+    const entry: Entry = { id: newId(), scope: options.scope ?? (keys.length > 1 ? "look" : "part"),
       label: copyLabel(options.label), ...(options.timed === false ? {} : { at: Date.now() }), before,
-      ...(options.coalesce === undefined ? {} : { coalesce: options.coalesce }), ...(options.distinct ? { distinct: true as const } : {}) });
+      ...(options.coalesce === undefined ? {} : { coalesce: options.coalesce }), ...(options.distinct ? { distinct: true as const } : {}) };
+    this.startSelection(entry, keys, options.selection);
+    return this.push(entry);
+  }
+  private startSelection(entry: Entry, keys: readonly string[], read?: LookReader) {
+    if (!read) return;
+    const selection = { ...entry.selection };
+    for (const key of keys) if (!Object.hasOwn(selection, key)) {
+      const before = structuredClone(read(key));
+      selection[key] = { before, after: before };
+    }
+    entry.selection = selection;
+  }
+  /** Complete the pending checkpoint from the content publication, never from later navigation. */
+  recordSelection(step: HistoryEntryId, keys: readonly string[], read: LookReader) {
+    const entry = this.entries.at(-1);
+    if (entry?.id !== step || !entry.selection) return;
+    const selection = { ...entry.selection };
+    for (const key of keys) if (Object.hasOwn(selection, key))
+      selection[key] = { before: selection[key].before, after: structuredClone(read(key)) };
+    entry.selection = selection;
+  }
+  selection(index: number, endpoint: "before" | "after"): Record<string, unknown> {
+    return this.selectionOf(this.entries[index]?.selection, endpoint);
+  }
+  private selectionOf(selection: HistorySelection | undefined, endpoint: "before" | "after"): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(selection ?? {}).filter(([, change]) =>
+      JSON.stringify(change.before) !== JSON.stringify(change.after)).map(([key, change]) => [key, structuredClone(change[endpoint])]));
   }
   /** End the current continuous edit: the next checkpoint starts a step of its own even with the same key (CORE-95). */
   seal() { const top = this.entries.at(-1); if (top) delete top.coalesce; }
@@ -253,29 +287,32 @@ export class HistoryStack {
    * it, and the values to show are returned once (only the keys the steps touched). Undefined when
    * fewer steps are kept.
    */
-  undo(read: LookReader, count = 1): { parts: LookParts; steps: HistoryStepInfo[] } | undefined {
+  undo(read: LookReader, count = 1): { parts: LookParts; steps: HistoryStepInfo[]; selection: Record<string, unknown> } | undefined {
     if (count < 1 || this.entries.length < count) return undefined;
     this.seal();
-    const state = new Map<string, ChunkId[] | null>(), steps: HistoryStepInfo[] = [];
+    const state = new Map<string, ChunkId[] | null>(), steps: HistoryStepInfo[] = [], selection: Record<string, unknown> = {};
     for (let i = 0; i < count; i++) {
       const entry = this.pop()!;
       const after: Refs = {};
       for (const key of Object.keys(entry.before)) after[key] = this.current(state, read, key);
       this.redoList.push({ id: entry.id, label: entry.label ? { ...entry.label } : { ...UNKNOWN_HISTORY_LABEL },
-        ...(entry.at === undefined ? {} : { at: entry.at }), scope: entry.scope, after, ...(entry.distinct ? { distinct: true as const } : {}) });
+        ...(entry.at === undefined ? {} : { at: entry.at }), scope: entry.scope, after, selection: entry.selection,
+        ...(entry.distinct ? { distinct: true as const } : {}) });
+      Object.assign(selection, this.selectionOf(entry.selection, "before"));
       steps.push({ id: entry.id, ...(entry.label ? { label: { ...entry.label } } : {}), ...(entry.at === undefined ? {} : { at: entry.at }) });
       for (const [key, refs] of Object.entries(entry.before)) this.replace(state, key, refs);
     }
-    return { parts: this.settle(state), steps };
+    return { parts: this.settle(state), steps, selection };
   }
   /**
    * Redo `count` steps as one change: each goes back on top with its identity (the values as they are
    * now become its "before"), and the values to show are returned once. Undefined without enough Redo.
    */
-  redo(read: LookReader, count = 1): { parts: LookParts; pushed: number } | undefined {
+  redo(read: LookReader, count = 1): { parts: LookParts; pushed: number; selection: Record<string, unknown> } | undefined {
     if (count < 1 || this.redoList.length < count) return undefined;
     this.seal();
     const state = new Map<string, ChunkId[] | null>();
+    const selection: Record<string, unknown> = {};
     let pushed = 0;
     for (let i = 0; i < count; i++) {
       const step = this.redoList.pop()!;
@@ -283,10 +320,12 @@ export class HistoryStack {
       for (const key of Object.keys(step.after)) before[key] = this.current(state, read, key);
       if (!step.distinct && this.sameAsTop(before)) this.releaseRefs(before);
       else { pushed++; this.push({ id: this.entries.some(entry => entry.id === step.id) ? newId() : step.id, label: { ...step.label },
-        ...(step.at === undefined ? {} : { at: step.at }), scope: step.scope, before, ...(step.distinct ? { distinct: true as const } : {}) }); }
+        ...(step.at === undefined ? {} : { at: step.at }), scope: step.scope, before, selection: step.selection,
+        ...(step.distinct ? { distinct: true as const } : {}) }); }
+      Object.assign(selection, this.selectionOf(step.selection, "after"));
       for (const [key, refs] of Object.entries(step.after)) this.replace(state, key, refs);
     }
-    return { parts: this.settle(state), pushed };
+    return { parts: this.settle(state), pushed, selection };
   }
   get redoDepth() { return this.redoList.length; }
   /** Every step identity the stack still holds: kept, redo-able and the one a step at the limit displaced. */
@@ -331,8 +370,10 @@ export class HistoryStack {
     const entries: StoredLookEntry[] = this.entries.map(entry => {
       for (const refs of Object.values(entry.before)) for (const id of refs ?? [])
         if (!Object.hasOwn(chunks, id)) chunks[id] = this.store.value(id);
+      const selection = Object.fromEntries(Object.entries(entry.selection ?? {}).filter(([, change]) =>
+        JSON.stringify(change.before) !== JSON.stringify(change.after)));
       return { scope: entry.scope, before: Object.fromEntries(Object.entries(entry.before).map(([feature, refs]) =>
-        [feature, refs && [...refs]])) };
+        [feature, refs && [...refs]])), ...(Object.keys(selection).length ? { selection: structuredClone(selection) } : {}) };
     });
     return { schema: LOOK_HISTORY_1, entries, chunks, ...(this.trimmedBefore ? { trimmed: true as const } : {}) };
   }

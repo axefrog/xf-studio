@@ -42,9 +42,9 @@ export class FeatureDocument {
     const part = state.part === undefined ? undefined : this.module.part.parse(this.module.part.serialize(state.part));
     return { part, editor: this.parseEditor(state.editor, part) };
   }
-  prepareRestore(part: unknown | undefined): LiveFeatureState {
+  prepareRestore(part: unknown | undefined, selection?: { editor: unknown }): LiveFeatureState {
     const parsed = part === undefined ? undefined : this.module.part.parse(this.module.part.serialize(part));
-    const editor = this.replay.editor ? this.replay.editor({ part: this.livePart, editor: this.liveEditor }, parsed)
+    const editor = selection ? selection.editor : this.replay.editor ? this.replay.editor({ part: this.livePart, editor: this.liveEditor }, parsed)
       : this.module.editor.serialize(this.liveEditor);
     return { part: parsed, editor: this.parseEditor(editor, parsed) };
   }
@@ -55,7 +55,7 @@ export class FeatureDocument {
     this.changed(kind, partChanged);
   }
   restored(previous: unknown) { this.replay.restored?.(previous); }
-  /** The part an Undo, Redo or cancelled transaction restores (undefined: the look lacked it); the editor state is re-read against it. */
+  /** The part an Undo, Redo or cancelled transaction restores (undefined: the look lacked it); absent selection uses the replay rule. */
   restorePart(part: unknown | undefined) {
     const previous = this.livePart;
     this.commit(this.prepareRestore(part), "restore"); this.restored(previous);
@@ -110,10 +110,11 @@ export class LiveFeatures {
     this.restorePrepared(prepared)();
     return prepared.map(item => item.feature);
   }
-  prepareRestore(parts: Readonly<Record<string, unknown | undefined>>) {
+  prepareRestore(parts: Readonly<Record<string, unknown | undefined>>, selection: Readonly<Record<string, unknown>> = {}) {
     return Object.entries(parts).flatMap(([feature, part]) => {
       const document = this.documents.get(feature);
-      return document ? [{ feature, document, state: document.prepareRestore(part) }] : [];
+      return document ? [{ feature, document, state: document.prepareRestore(part,
+        Object.hasOwn(selection, feature) ? { editor: selection[feature] } : undefined) }] : [];
     });
   }
   /** Commit now, returning publication for the history target's `settled` hook, outside the stack's rollback boundary. */

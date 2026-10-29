@@ -20,6 +20,71 @@ import { freshWorkspace } from "./fixtures/eye-region";
 import { namedCore } from "./fixtures/named-targets";
 const label = (text: string): HistoryLabel => ({ label: text, actionKind: text });
 
+function selectableStore(limit = HISTORY_LIMIT) {
+  const content = store({ a: 0, b: 0 }, { content: true }), selection: Record<string, unknown> = { a: "a0", b: "b0" };
+  const scope = createHistoryService().open(LOOK_SCOPE, { ...content.target, selection: key => selection[key],
+    apply(values, cause, next) {
+      if (!content.target.apply(values, cause)) return false;
+      Object.assign(selection, next); return true;
+    } }, { limit });
+  const set = (key: string, value: number, selected: string) => {
+    content.set(key, value); selection[key] = selected; scope.recordSelection([key]);
+  };
+  return { ...content, scope, selection, set };
+}
+
+test("selection endpoints survive refused moves and a displaced limit step, without recording navigation", () => {
+  const { scope, selection, set, refuseNext } = selectableStore(2);
+  for (let i = 1; i <= 3; i++) { scope.checkpoint(["a"], label(`Step ${i}`)); set("a", i, `a${i}`); }
+  selection.a = "navigation";
+  const data = scope.data(), timeline = scope.timeline();
+  refuseNext();
+  expect(scope.undo()).toBe(false);
+  expect(selection.a).toBe("navigation");
+  expect(scope.data()).toEqual(data);
+  expect(scope.timeline()).toEqual(timeline);
+  expect(scope.undo()).toBe(true);
+  expect(selection.a).toBe("a2");
+  expect(scope.trimmed).toBe(false);
+  expect(scope.redo()).toBe(true);
+  expect(selection.a).toBe("a3");
+  expect(scope.trimmed).toBe(true);
+  expect(scope.jumpTo(scope.timeline().startId)).toBe(true);
+  expect(selection.a).toBe("a1");
+});
+
+test("one look step captures separately published keys, and coalescing and cancellation keep selection endpoints", () => {
+  const { scope, selection, set, values } = selectableStore();
+  scope.checkpoint(["a", "b"]);
+  set("a", 1, "a1"); set("b", 1, "b1");
+  expect(scope.undo()).toBe(true);
+  expect(selection).toEqual({ a: "a0", b: "b0" });
+  expect(scope.redo()).toBe(true);
+  expect(selection).toEqual({ a: "a1", b: "b1" });
+  for (let i = 2; i <= 3; i++) {
+    scope.checkpoint(["a"], label("Continuous"), { coalesce: "a" }); set("a", i, `a${i}`);
+  }
+  expect(scope.state().depth).toBe(2);
+  expect(scope.undo()).toBe(true);
+  expect(selection.a).toBe("a1");
+  expect(scope.redo()).toBe(true);
+  expect(selection.a).toBe("a3");
+  const run = scope.begin(["a"], CONTROL_TRANSACTION);
+  set("a", 4, "a4"); run.applied(true, () => label("Adjust"));
+  set("a", 5, "a5"); run.applied(true, () => label("Adjust"));
+  run.cancel();
+  expect([values.a, selection.a]).toEqual([3, "a3"]);
+  expect(scope.canRedo()).toBe(false);
+  const kept = scope.begin(["a"], CONTROL_TRANSACTION);
+  set("a", 6, "a6"); kept.applied(true, () => label("Adjust"));
+  set("a", 7, "a7"); kept.applied(true, () => label("Adjust"));
+  kept.commit(); selection.a = "navigation";
+  expect(scope.undo()).toBe(true);
+  expect(selection.a).toBe("a3");
+  expect(scope.redo()).toBe(true);
+  expect(selection.a).toBe("a7");
+});
+
 /** A target over a record of values, counting how often moves are applied; `refuse` makes the next apply inconsistent. */
 function store(initial: Record<string, unknown>, options: { content?: boolean } = {}) {
   const values: Record<string, unknown> = { ...initial };

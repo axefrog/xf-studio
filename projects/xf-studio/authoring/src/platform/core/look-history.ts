@@ -37,6 +37,8 @@ export function lookHistoryBodies(data: LookHistoryData, parts: HistoryParts): {
   let feature: string | undefined;
   const bodies: unknown[] = [];
   for (const entry of data.entries) {
+    // Whole-part legacy storage cannot carry selection endpoints.
+    if (entry.selection && Object.keys(entry.selection).length) return undefined;
     const keys = Object.keys(entry.before);
     if (entry.scope !== "part" || keys.length !== 1 || (feature !== undefined && keys[0] !== feature)) return undefined;
     feature = keys[0];

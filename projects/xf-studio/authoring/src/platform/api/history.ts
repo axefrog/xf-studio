@@ -73,7 +73,10 @@ export const LOOK_HISTORY_1 = "xfs/look-history-1";
  * One kept step as the look history stores it: the parts it touched, each as the chunk list of its
  * body before the step, or `null` when the look did not have that part yet.
  */
-export type StoredLookEntry = { scope: HistoryScope; before: Readonly<Record<string, readonly ChunkId[] | null>> };
+export type HistorySelection = Readonly<Record<string, { readonly before: unknown; readonly after: unknown }>>;
+export type StoredLookEntry = { scope: HistoryScope; before: Readonly<Record<string, readonly ChunkId[] | null>>;
+  /** Only selections changed by this step; absent in older saved histories. */
+  selection?: HistorySelection };
 
 /**
  * A look's history as plain data (in memory and in `xfs/look-history-1`): kept steps oldest first
@@ -123,7 +126,9 @@ export interface HistoryTarget {
    * Show `values` (undefined: remove), published once. False when they cannot be applied consistently (CORE-94): target and history
    * remain unchanged, including Undo and Redo. A target must validate before mutating anything.
    */
-  apply(values: Readonly<Record<string, unknown | undefined>>, cause: HistoryCause): boolean;
+  apply(values: Readonly<Record<string, unknown | undefined>>, cause: HistoryCause, selection?: Readonly<Record<string, unknown>>): boolean;
+  /** Detached plain editor selection for a key; navigation alone never records a step. */
+  selection?(key: string): unknown;
   /** Why the target can't move now (a V whose last session's changes are still being restored), or undefined: Undo and Redo wait. */
   unavailable?(): string | undefined;
   /**
