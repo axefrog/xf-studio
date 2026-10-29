@@ -1,8 +1,9 @@
 import type { PreviewCoreHost } from "./preview-core-host";
-import { CORE_BODIES, type CoreBody } from "../preview-core-recipe";
-import { realpath, stat } from "node:fs/promises";
+import { CORE_BODIES, parseCoreAssetName, PREVIEW_CORE_RECORD_FILE, type CoreBody } from "../preview-core-recipe";
+import { readFile, realpath, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { isBelow } from "../../platform/api/path-containment";
+import { sha256Hex } from "../../formats/content-hash";
 
 /** Both hosts serve the same validated bytes; a warm browser can retain its 12 MB head instead of transferring it again. */
 export async function servePreviewCoreAsset(host: Pick<PreviewCoreHost, "asset">, name: string, request: Request): Promise<Response> {
@@ -16,10 +17,18 @@ export async function servePreviewCoreAsset(host: Pick<PreviewCoreHost, "asset">
   } catch { return new Response("Not found", { status: 404 }); }
   // The asynchronous existence/containment checks above are not evidence that the bytes still belong to the verified generation.
   if (!asset.current()) return new Response("Not found", { status: 404 });
+  let record: Buffer<ArrayBuffer> | undefined;
+  if (parseCoreAssetName(name)?.file === PREVIEW_CORE_RECORD_FILE) {
+    // Capture, hash and send one buffer. A later path read (including Bun's lazy file response) is not the checked record.
+    try { record = await readFile(asset.path, { signal: request.signal }); }
+    catch { if (request.signal.aborted) throw request.signal.reason; return new Response("Not found", { status: 404 }); }
+    request.signal.throwIfAborted();
+    if (`"${sha256Hex(record)}"` !== asset.etag || !asset.current()) return new Response("Not found", { status: 404 });
+  }
   const headers = { "ETag": asset.etag, "Cache-Control": "private, no-cache", "X-Content-Type-Options": "nosniff", "Content-Type": file.type };
   if (request.headers.get("If-None-Match")?.split(",").some(tag => tag.trim().replace(/^W\//, "") === asset.etag || tag.trim() === "*"))
     return new Response(null, { status: 304, headers });
-  return new Response(request.method === "HEAD" ? null : file, { headers });
+  return new Response(request.method === "HEAD" ? null : record ?? file, { headers });
 }
 
 /**

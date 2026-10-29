@@ -46,7 +46,8 @@ function cachedCore(options: Pick<PreviewCoreHostOptions, "jobs" | "signal"> & {
   const restart = () => new PreviewCoreHost({ ...hostOptions, cacheRoot: cache.root, settings: () => ({ gameRoot: game, wolvenKitCli: cli }), now: () => 0 });
   const host = restart();
   const path = join(entry, core.PREVIEW_CORE_ASSET_DIRECTORY, "head.glb");
-  return { root, host, restart, path, receipt: join(entry, "preview-verified.json"), asset: (name: string) => join(entry, core.PREVIEW_CORE_ASSET_DIRECTORY, name) };
+  return { root, host, restart, path, manifestPath: join(entry, core.PREVIEW_CORE_MANIFEST_FILE), receipt: join(entry, "preview-verified.json"),
+    asset: (name: string) => join(entry, core.PREVIEW_CORE_ASSET_DIRECTORY, name) };
 }
 const assetRequest = (tag?: string) => new Request("http://127.0.0.1/assets/head.glb", { headers: tag ? { "If-None-Match": tag } : {} });
 const corrupt = (path: string) => { const data = readFileSync(path); data[0]! ^= 1; writeFileSync(path, data); };
@@ -170,6 +171,73 @@ test("changed core bindings are refused before the frame even when all resource 
         new Request("http://127.0.0.1/assets/preview-core.json"))).status).toBe(404);
     } finally { fresh.dispose(); }
   } finally { restarted?.dispose(); f.host.dispose(); fake.restore(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("the core record response sends exactly its checked buffer even if the file changes before the body is consumed", async () => {
+  const f = cachedCore(), path = f.asset(PREVIEW_CORE_RECORD_FILE), original = readFileSync(path);
+  try {
+    const response = await servePreviewCoreAsset(f.host, PREVIEW_CORE_RECORD_FILE, new Request("http://127.0.0.1/assets/preview-core.json"));
+    expect(response.status).toBe(200);
+    corrupt(path); // Bun.file responses read lazily: checking a path cannot vouch for the eventual body.
+    const sent = new Uint8Array(await response.arrayBuffer());
+    expect(Buffer.from(sent)).toEqual(original);
+    expect(response.headers.get("ETag")).toBe(`"${createHash("sha256").update(sent).digest("hex")}"`);
+  } finally { f.host.dispose(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test.each([
+  { file: PREVIEW_CORE_RECORD_FILE, field: "sha256", value: undefined }, { file: PREVIEW_CORE_RECORD_FILE, field: "sha256", value: null },
+  { file: PREVIEW_CORE_RECORD_FILE, field: "sha256", value: "not-a-digest" }, { file: "head.glb", field: "sha256", value: 123 },
+  { file: "head-color.png", field: "sha256", value: "a".repeat(63) },
+  { file: PREVIEW_CORE_RECORD_FILE, field: "bytes", value: undefined }, { file: PREVIEW_CORE_RECORD_FILE, field: "bytes", value: -1 },
+  { file: "head.glb", field: "bytes", value: 1.5 },
+])("invalid manifest resource metadata refuses readiness before legacy receipt reuse (%j)", async change => {
+  const f = cachedCore(), fake = unreliableCoreMetadata(f.root, "mirrored-change");
+  let restarted: PreviewCoreHost | undefined;
+  try {
+    await f.host.readSnapshot();
+    const receipt = JSON.parse(readFileSync(f.receipt, "utf8"));
+    receipt.schema = "xfs/preview-core-verified-1";
+    for (const entry of receipt.generation) delete entry.contentSha256;
+    writeFileSync(f.receipt, JSON.stringify(receipt));
+    const manifest = JSON.parse(readFileSync(f.manifestPath, "utf8"));
+    manifest.files.find((entry: { name: string }) => entry.name === change.file)[change.field] = change.value;
+    writeFileSync(f.manifestPath, JSON.stringify(manifest));
+    fake.reads.mockClear(); restarted = f.restart();
+    expect(core.previewCoreReadiness(join(f.root, "cache"), join(f.root, "game")).state).toBe("none");
+    expect((await restarted.readSnapshot()).phase).not.toBe("ready");
+    expect((await servePreviewCoreAsset(restarted, PREVIEW_CORE_RECORD_FILE,
+      new Request("http://127.0.0.1/assets/preview-core.json", { headers: { "If-None-Match": "*" } }))).status).toBe(404);
+    expect(fake.reads).not.toHaveBeenCalled(); // An invalid trust root never reaches bulk verification or receipt reuse.
+  } finally { restarted?.dispose(); f.host.dispose(); fake.restore(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test.each(["old-version", "missing-binding"])("a %s receipt is fully verified and rewritten with a required record binding", async change => {
+  const f = cachedCore(), fake = unreliableCoreMetadata(f.root, "mirrored-change");
+  let restarted: PreviewCoreHost | undefined;
+  try {
+    await f.host.readSnapshot();
+    const receipt = JSON.parse(readFileSync(f.receipt, "utf8"));
+    if (change === "old-version") receipt.schema = "xfs/preview-core-verified-1";
+    else for (const entry of receipt.generation) delete entry.contentSha256;
+    writeFileSync(f.receipt, JSON.stringify(receipt)); fake.reads.mockClear(); restarted = f.restart();
+    expect((await restarted.readSnapshot()).phase).toBe("ready");
+    expect(fake.reads.mock.calls.length).toBeGreaterThan(0);
+    const repaired = JSON.parse(readFileSync(f.receipt, "utf8"));
+    expect(repaired.schema).toBe("xfs/preview-core-verified-2");
+    expect(repaired.generation.find((entry: { path: string }) => entry.path === f.asset(PREVIEW_CORE_RECORD_FILE)).contentSha256)
+      .toBe(createHash("sha256").update(readFileSync(f.asset(PREVIEW_CORE_RECORD_FILE))).digest("hex"));
+  } finally { restarted?.dispose(); f.host.dispose(); fake.restore(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("a legacy in-memory generation cannot omit the record's content binding", async () => {
+  const f = cachedCore(), fake = unreliableCoreMetadata(f.root, "mirrored-change");
+  try {
+    const checked = core.previewCoreReadiness(join(f.root, "cache"), join(f.root, "game"));
+    if (checked.state !== "ready") throw Error("The synthetic core must be ready before removing its binding.");
+    const legacy = checked.generation.map(file => { const copy = { ...file }; delete copy.contentSha256; return copy; });
+    expect(core.previewCoreGenerationCurrent(legacy)).toBe(false);
+  } finally { f.host.dispose(); fake.restore(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
 test("a successful post-frame receipt audit changes no state or receipt and does not repeat", async () => {

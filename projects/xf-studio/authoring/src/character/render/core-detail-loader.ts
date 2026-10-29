@@ -42,7 +42,14 @@ export async function readCoreDetail(fetcher: CoreDetailFetch = fetch, body: Cor
   catch (error) { throw new HeadLoadError("preview_unreachable", "The 3D view record could not be read.", { cause: error }); }
   if (response.status === 404) throw new HeadLoadError("preview_unreachable", "The 3D view hasn't been prepared from your game files yet.");
   if (!response.ok) throw new HeadLoadError("preview_unreachable", "The 3D view record could not be read.");
-  try { return parseCoreDetail(await response.json()); }
+  try {
+    // Mandatory strong content identity also refuses unchecked record bytes retained by an older page/cache.
+    const expected = /^"([a-f0-9]{64})"$/.exec(response.headers.get("ETag") ?? "")?.[1];
+    if (!expected) throw Error("The 3D view record has no content hash.");
+    const bytes = await response.arrayBuffer();
+    if (await sha256Hex(bytes) !== expected) throw Error("The 3D view record does not match its content hash.");
+    return parseCoreDetail(JSON.parse(new TextDecoder().decode(bytes)));
+  }
   catch (error) { throw new HeadLoadError("preview_damaged", "The 3D view record is damaged.", { cause: error }); }
 }
 
