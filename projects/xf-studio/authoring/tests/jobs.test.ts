@@ -69,6 +69,94 @@ const want = (jobs: JobScheduler, requester: string, key: string, lane: JobLane,
   jobs.want(requester, { key, lane, run, ...extra });
 
 describe("the job scheduler", () => {
+  test("shown continuations cross short I/O gaps without ahead CPU taking a slice in every gap", async () => {
+    const { jobs, clock, advance, flush, now, pendingTimers } = setup(0), shownAt: number[] = [], aheadAt: number[] = [];
+    const shown = jobs.cooperate("shown", async context => {
+      shownAt.push(now());
+      for (let i = 0; i < 8; i++) {
+        await new Promise<void>(resolve => clock.after(5, resolve));
+        await context.turn(); shownAt.push(now());
+      }
+    });
+    const ahead = jobs.cooperate("ahead", async () => { aheadAt.push(now()); });
+    await advance(39);
+    expect(shownAt).toEqual([0, 5, 10, 15, 20, 25, 30, 35]);
+    expect(aheadAt).toEqual([]);
+    await advance(1); await Promise.all([shown, ahead]); await flush();
+    expect(shownAt.at(-1)).toBe(40);
+    expect(aheadAt).toEqual([40]); // Released early when shown finishes, without paying the remaining grace.
+    expect(pendingTimers()).toBe(0);
+  });
+
+  test("ahead gets a fixed grace deadline and 1 ms slices during long shown I/O, then ordinary slices", async () => {
+    const { jobs, flush, advance, now, pendingTimers } = setup(0), io = Promise.withResolvers<void>(), next = Promise.withResolvers<void>();
+    const last = Promise.withResolvers<void>(), log: string[] = [];
+    const shown = jobs.cooperate("shown", async () => { await io.promise; });
+    const ahead = jobs.cooperate("ahead", async context => {
+      log.push(`start ${now()}`); await next.promise; await context.turn(); log.push(`resume ${now()}`);
+      await last.promise; await context.turn(); log.push(`end ${now()}`);
+    });
+    await advance(49); expect(log).toEqual([]);
+    // More shown activity must not reset the existing ahead deadline.
+    const extraShown = jobs.cooperate("shown", async () => {});
+    await flush(); await extraShown;
+    await advance(1); expect(log).toEqual(["start 50"]);
+    await advance(1); next.resolve(); await flush();
+    await advance(49); expect(log).toEqual(["start 50"]);
+    await advance(1); expect(log).toEqual(["start 50", "resume 101"]);
+    io.resolve(); await shown; await flush();
+    await advance(1); last.resolve();
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+    expect(log).toEqual(["start 50", "resume 101", "end 102"]);
+    await ahead; await flush();
+    expect(pendingTimers()).toBe(0);
+  });
+
+  test("shown failure releases a waiting ahead read and its grace timer immediately", async () => {
+    const { jobs, flush, pendingTimers } = setup(0), failed = Promise.withResolvers<void>(); let calls = 0;
+    const shown = jobs.cooperate("shown", async () => { await failed.promise; }).catch(error => error.message);
+    const ahead = jobs.cooperate("ahead", async () => { calls++; });
+    await flush(); expect(calls).toBe(0); expect(pendingTimers()).toBe(1);
+    failed.reject(Error("read failed")); await flush();
+    expect(await shown).toBe("read failed"); await ahead;
+    expect(calls).toBe(1); expect(pendingTimers()).toBe(0);
+  });
+
+  test("a shared ahead lookup can drain a stopped parent's tail while shown awaits it and exclusive Clear waits", async () => {
+    const { jobs, flush, advance, pendingTimers } = setup(0), read = Promise.withResolvers<void>(), life = new AbortController();
+    const log: string[] = []; let lookup!: Promise<void>;
+    const parent = want(jobs, "prefetch", "check", "ahead", async context => {
+      lookup = jobs.cooperate("ahead", async turn => { await read.promise; await turn.turn(); log.push("lookup"); }, life.signal);
+      context.afterwards(lookup);
+      await Promise.race([lookup, new Promise<void>(resolve => context.signal.addEventListener("abort", () => resolve(), { once: true }))]);
+    });
+    await flush();
+    const shown = jobs.cooperate("shown", async () => { await lookup; log.push("shown"); });
+    await flush();
+    const clear = want(jobs, "clear", "clear", "person", async () => { log.push("clear"); }, { exclusive: true });
+    const person = want(jobs, "page", "V", "person", async () => { log.push("person"); });
+    await advance(1); read.resolve(); await flush();
+    expect(parent.state().phase).toBe("stopped"); expect(log).toEqual([]);
+    await advance(49); expect(log).toEqual([]);
+    await advance(1); await shown; await clear.settled; await person.settled; await jobs.idle();
+    expect(log).toEqual(["lookup", "shown", "clear", "person"]);
+    life.abort(); await flush(); expect(pendingTimers()).toBe(0);
+  });
+
+  test.each(["ahead", "shown"] as const)("aborting %s during the grace period removes its wake-up or releases ahead immediately", async lane => {
+    const { jobs, flush, pendingTimers } = setup(0), shownLife = new AbortController(), aheadLife = new AbortController();
+    const io = Promise.withResolvers<void>(); let calls = 0;
+    const shown = jobs.cooperate("shown", async () => { await io.promise; }, shownLife.signal);
+    const ahead = jobs.cooperate("ahead", async () => { calls++; }, aheadLife.signal).catch(error => error.name);
+    await flush(); expect(calls).toBe(0); expect(pendingTimers()).toBe(1);
+    (lane === "ahead" ? aheadLife : shownLife).abort();
+    await flush();
+    expect(await ahead).toBe(lane === "ahead" ? "AbortError" : undefined);
+    expect(calls).toBe(lane === "ahead" ? 0 : 1);
+    expect(pendingTimers()).toBe(0); // Even when an abandoned shown callback has not returned yet.
+    io.resolve(); await shown; await flush(); expect(pendingTimers()).toBe(0);
+  });
+
   test.each([0, 400])("a stopped check's cooperative lookup tail drains before exclusive Clear and later person work (quiet=%s)", async quiet => {
     const { jobs, flush, advance } = setup(quiet), life = new AbortController();
     const read = Promise.withResolvers<void>(), log: string[] = [];
@@ -117,6 +205,8 @@ describe("the job scheduler", () => {
       log.push(`${lane} start`); await next.promise; await context.turn(); log.push(`${lane} end`);
     }));
     await flush();
+    expect(log).toEqual(["person start", "shown start"]);
+    await advance(50);
     expect(log).toEqual(["person start", "shown start", "ahead start"]);
     await advance(8); next.resolve(); await flush(); await Promise.all(reads);
     expect(log).toEqual(["person start", "shown start", "ahead start", "person end", "shown end", "ahead end"]);
@@ -141,6 +231,8 @@ describe("the job scheduler", () => {
       log.push("shown end");
     });
     await flush();
+    expect(log).toEqual(["shown start"]);
+    await advance(50); // The dependency's fixed deadline expires even though its shown caller is still in flight.
     expect(log).toEqual(["shown start", "dependency", "shown end"]);
     await shown; await advance(400); await background.settled;
     expect(log).toEqual(["shown start", "dependency", "shown end", "ahead job"]);

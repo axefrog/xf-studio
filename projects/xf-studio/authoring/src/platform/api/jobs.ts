@@ -66,9 +66,10 @@ export interface Want<T> {
 export interface JobScheduler {
   /**
    * Cooperative reads outside the single preparation slot. Initial admission and ready CPU continuations use the same lane order as
-   * jobs; turns yield after the CPU slice or when a higher read is ready. A read never waits for jobs, tails, holds or another async
-   * scope to finish, so a dependency/tail can always progress even while exclusive work waits for it. No permit is held across I/O.
-   * The caller owns cancellation; no restart or commit policy is added. Job quiet periods remain admission rules for jobs only.
+   * jobs; turns yield after the CPU slice or when a higher read is ready. While shown reads are in flight, ahead turns defer for up to
+   * 50 ms for short I/O gaps and use 1 ms CPU slices. Each eligibility deadline is fixed when queued, never extended by shown work.
+   * A read never waits for jobs, tails, holds or another async scope to finish: even a shown dependency becomes eligible at that
+   * deadline. No permit is held across I/O. The caller owns cancellation; job quiet periods remain admission rules for jobs only.
    */
   cooperate<T>(lane: JobLane, run: (context: Pick<JobContext, "signal" | "turn">) => Promise<T>, signal?: AbortSignal): Promise<T>;
   /** Wants a job for `requester`, replacing its previous want. `signal` aborting releases it (a lease's, a request's). */
