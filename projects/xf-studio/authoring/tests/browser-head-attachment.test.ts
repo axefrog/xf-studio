@@ -1,7 +1,9 @@
 import { layeredPreviewWiring, type LayeredSurfaceWiring } from "../src/preview/browser/layered-preview-wiring";
 import { expect, spyOn, test } from "bun:test";
 import { CharacterDetailActions } from "../src/character/character-detail-actions";
-import { buildBrowserHead, startHeadDetails } from "../src/preview/browser/browser-head-attachment";
+import { buildBrowserHead, createHeadDetailRequester, startHeadDetails } from "../src/preview/browser/browser-head-attachment";
+import { DEFAULT_CHARACTER } from "../src/character/character-detail-request";
+import { CHARACTER_DETAIL_SCHEMA } from "../src/character/render-detail";
 import * as detailDevice from "../src/character/browser/browser-character-detail-device";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import type { CameraState } from "../src/app/workspace/makeup-workspace";
@@ -18,6 +20,72 @@ import { createMakeupStack, EYE_RASTER_REGION, freshWorkspace } from "./fixtures
 
 const nothingAttached = { savedV: undefined, preview: undefined, motion: undefined, characterDetails: undefined };
 const detailTurn = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+
+test("requester acquisition revokes its previous lease synchronously; releasing an old lease cannot revoke the new one", () => {
+  const owner = createHeadDetailRequester(), first = owner.acquire();
+  let stopped = false;
+  first.signal.addEventListener("abort", () => { stopped = true; });
+  const second = owner.acquire();
+  expect(stopped).toBe(true); expect(first.signal.aborted).toBe(true); expect(second.id).toBe(first.id);
+  first.release(); expect(second.signal.aborted).toBe(false);
+  const concurrent = createHeadDetailRequester().acquire();
+  expect(concurrent.id).not.toBe(second.id);
+  second.release(); concurrent.release();
+});
+
+test("reusing an incoming requester disposes its old service and preload before the new service can send", async () => {
+  const owner = createHeadDetailRequester(), signals: AbortSignal[] = [];
+  let preloadSignal: AbortSignal | undefined;
+  const port = spyOn(detailDevice, "createBrowserCharacterDetailDevice").mockImplementation(() => ({
+    request: async (_request, signal) => {
+      if (signals.length) { expect(signals[0]!.aborted).toBe(true); expect(preloadSignal?.aborted).toBe(true); }
+      signals.push(signal);
+      return { key: "ready", phase: "ready", message: "", progress: null, record: "prepared.json" };
+    },
+    poll: async () => { throw Error("No polling needed."); }, clear() {}, wait: async () => {}, show: async () => ({ slots: [] }),
+    preload: async (_request, signal) => {
+      preloadSignal = signal;
+      await new Promise<void>(resolve => signal.addEventListener("abort", () => resolve(), { once: true }));
+    },
+  }));
+  const old = startHeadDetails(DEFAULT_CHARACTER, undefined, owner, false), outer = new AbortController();
+  let next: ReturnType<typeof startHeadDetails> | undefined;
+  try {
+    await old.initial!.promise;
+    const preload = old.actions.preload({ ...DEFAULT_CHARACTER, body: false }, outer.signal);
+    expect(preloadSignal?.aborted).toBe(false);
+    next = startHeadDetails(DEFAULT_CHARACTER, undefined, owner, false);
+    await next.initial!.promise; await preload;
+    expect(outer.signal.aborted).toBe(false);
+    const count = signals.length;
+    await old.actions.setCharacter({ ...DEFAULT_CHARACTER, body: false });
+    expect(signals).toHaveLength(count);
+    old.dispose(); expect(signals[1]!.aborted).toBe(false);
+  } finally { next?.dispose(); old.dispose(); outer.abort(); port.mockRestore(); }
+});
+
+test("aborting an owned preload clears its polling timer before release finishes", async () => {
+  const originalSet = setTimeout, originalClear = clearTimeout;
+  const timers: ReturnType<typeof setTimeout>[] = [], live = new Set<unknown>();
+  const set = spyOn(globalThis, "setTimeout").mockImplementation(Object.assign((...args: Parameters<typeof setTimeout>) => {
+    const timer = originalSet(...args); timers.push(timer); live.add(timer); return timer;
+  }, originalSet));
+  const clear = spyOn(globalThis, "clearTimeout").mockImplementation((...args: Parameters<typeof clearTimeout>) => {
+    live.delete(args[0]); originalClear(...args);
+  });
+  const controller = new AbortController();
+  let sends = 0;
+  const device = detailDevice.createBrowserCharacterDetailDevice({ details: {}, setCharacterDetails() {}, prepareDetails: async () => {} } as never,
+    async () => { sends++; return Response.json({ key: "a".repeat(32), phase: "preparing", message: "", progress: null,
+      recordSchema: CHARACTER_DETAIL_SCHEMA, record: null }); });
+  try {
+    const preload = device.preload!(DEFAULT_CHARACTER, controller.signal);
+    for (let step = 0; step < 50 && !live.size; step++) await Promise.resolve();
+    expect(live.size).toBe(1); expect(sends).toBe(1);
+    controller.abort(); await preload;
+    expect(live.size).toBe(0); expect(sends).toBe(1);
+  } finally { controller.abort(); set.mockRestore(); clear.mockRestore(); for (const timer of timers) originalClear(timer); }
+});
 
 test("a failed speculative V retries at the validated setup handoff, places once and deduplicates identical requests", async () => {
   let configured = false, requests = 0, placements = 0;

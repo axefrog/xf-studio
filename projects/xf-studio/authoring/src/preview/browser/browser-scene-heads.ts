@@ -41,11 +41,10 @@ import type { CharacterContextActions } from "../../character/character-context-
 import type { CharacterScenePorts, CharacterService } from "../../character/character-service";
 import type { CoreBody } from "../../character/render-detail";
 import { createBrowserChoicePreviewDevice } from "../../character/browser/browser-choice-preview-device";
-import { characterRequester } from "../../character/browser/browser-character-detail-device";
 import { pageFailure } from "../../diagnostics/page-sink";
 import { SceneResidency, type PreparationStage, type PreparationState, type ResidencySnapshot, type ResidencyWant } from "../scene-residency";
 import { suspendablePreviews, type SuspendablePreviews } from "../../character/choice-preview-suspension";
-import { buildBrowserHead, startHeadDetails, type AttachedHead, type HeadAttachmentPorts } from "./browser-head-attachment";
+import { buildBrowserHead, createHeadDetailRequester, startHeadDetails, type AttachedHead, type HeadAttachmentPorts } from "./browser-head-attachment";
 import { previewFields } from "../preview-view-graph";
 import type { ViewRoute, ViewRuntimes } from "../view-routes";
 
@@ -111,8 +110,10 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   const contexts = new Map<string, { context: CharacterContextActions; release: () => void; previews: SuspendablePreviews | undefined }>();
   let started = false, disposed = false, scheduled = false;
   let initial: { character: string; details: ReturnType<typeof startHeadDetails> } | undefined;
-  // One page, one host want: this identity is independent of priming, heads, characters and empty destinations.
-  const requester = characterRequester();
+  // Sequential, unshown construction keeps its requester even across empty destinations and cancelled builds.
+  // A head retains its stream upon becoming resident; future construction then gets a different requester.
+  let incomingRequester = createHeadDetailRequester();
+  const headRequesters = new WeakMap<AttachedHead, ReturnType<typeof createHeadDetailRequester>>();
   /** The view drawn now (undefined: none): the one the scenes port names first, then the one `show(view)` drew last. */
   let drawnView: string | undefined = ports.scenes.view();
   const drawn = () => drawnView;
@@ -136,6 +137,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     build: async (want, signal, progress) => {
       progress({ stage: want.body === "male" ? "core" : "build" });
       // Same-scene requests share construction and preparation. Resolve their destination after every wait.
+      const requester = incomingRequester;
       const primed = initial; initial = undefined;
       if (primed && primed.character !== want.character) primed.details.dispose();
       const head = await buildBrowserHead({ ...ports.head, view: () => destination(want),
@@ -148,6 +150,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
           if (!residency.shown()) ports.pending(message, residency.preparation()?.fraction ?? fraction);
         }, buildSignal).then(() => progress({ stage: "build" })),
         notice: ports.notice }, signal);
+      headRequesters.set(head, requester);
       // Shown, a change it isn't prepared for prepares it again (it says so only while shown); the head's release ends the subscription.
       head.onUnprepared(() => { if (residency.shown() === head) void residency.refresh().catch(() => { /* Superseded, or shown anyway. */ }); });
       return head;
@@ -159,6 +162,8 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     stages: want => want.body === "male" ? STAGES_MALE : STAGES,
     show: (head, want) => {
       const view = destination(want);
+      // Promote before show exposes services/callbacks: this resident and another incoming head may both be preparing details.
+      if (headRequesters.get(head) === incomingRequester) incomingRequester = createHeadDetailRequester();
       head.show(view);
       mountEditor(head, view);
       // The V's context stays attached while heads swap: creator changes are never refused for a reload (the old `not_ready`).
@@ -318,7 +323,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     const request = context.detailRequest();
     if (initial?.character === want.character && initial.details.initial?.key === JSON.stringify(request)) return;
     initial?.details.dispose();
-    const details = startHeadDetails(request, ports.head.warmStart, requester);
+    const details = startHeadDetails(request, ports.head.warmStart, incomingRequester);
     initial = { character: want.character, details };
   }
 

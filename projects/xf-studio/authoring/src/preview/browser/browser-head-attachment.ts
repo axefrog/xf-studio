@@ -21,7 +21,7 @@
  * over, browser-scene-heads.ts).
  */
 import { characterRequester, createBrowserCharacterDetailDevice } from "../../character/browser/browser-character-detail-device";
-import { CharacterDetailActions } from "../../character/character-detail-actions";
+import { CharacterDetailActions, type CharacterDetailPort } from "../../character/character-detail-actions";
 import type { CharacterWarmStart } from "../../character/browser/character-warm-start";
 import type { CharacterContextActions } from "../../character/character-context-actions";
 import type { CharacterRequest } from "../../character/character-detail-request";
@@ -47,27 +47,51 @@ type ViewportDevice = ReturnType<typeof createBrowserViewportDevice>;
 type SceneDetailPreparation = Parameters<NonNullable<Parameters<ViewportDevice["buildHead"]>[2]>>[0];
 type Scene = Awaited<ReturnType<ViewportDevice["buildHead"]>>;
 
+/** One sequential detail stream. Reusing its ID first revokes the previous service; resident heads keep separate streams. */
+export function createHeadDetailRequester() {
+  const id = characterRequester();
+  let active: AbortController | undefined;
+  return {
+    acquire() {
+      const previous = active; active = undefined;
+      previous?.abort(); // Its service and preloads stop synchronously, before another service receives this ID.
+      const life = new AbortController(); active = life;
+      return { id, signal: life.signal, release() { if (active === life) active = undefined; life.abort(); } };
+    },
+  };
+}
+type HeadDetailRequester = ReturnType<typeof createHeadDetailRequester>;
+
 /** The real detail service can request/read its V before setup permits construction of the head. It gains no display capability early. */
 export function startHeadDetails(request: CharacterRequest | undefined, warmStart?: Pick<CharacterWarmStart, "remember" | "files">,
-  requester = characterRequester(), speculative = true) {
+  requester = createHeadDetailRequester(), speculative = true) {
+  const lease = requester.acquire();
   const scene = Promise.withResolvers<Scene>(), preparation = Promise.withResolvers<SceneDetailPreparation>();
   const validated = speculative ? Promise.withResolvers<void>() : undefined;
   void scene.promise.catch(() => {}); void preparation.promise.catch(() => {});
-  const actions = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene.promise, undefined, warmStart, preparation.promise, requester), validated?.promise);
-  const initial = request ? { key: JSON.stringify(request), promise: actions.setCharacter(request) } : undefined;
+  const port: CharacterDetailPort = { ...createBrowserCharacterDetailDevice(scene.promise, undefined, warmStart, preparation.promise, lease.id) };
+  const preload = port.preload;
+  if (preload) port.preload = (request, signal) => preload(request, AbortSignal.any([signal, lease.signal]));
+  const actions = new CharacterDetailActions(port, validated?.promise);
   let disposed = false;
+  function dispose() {
+    if (disposed) return;
+    disposed = true;
+    lease.signal.removeEventListener("abort", dispose);
+    lease.release(); actions.dispose();
+    validated?.resolve(); // Release the aborted transaction's prerequisite wait too.
+    const reason = new DOMException("The head request ended.", "AbortError"); scene.reject(reason); preparation.reject(reason);
+  }
+  lease.signal.addEventListener("abort", dispose, { once: true });
+  if (lease.signal.aborted) dispose();
+  const initial = request ? { key: JSON.stringify(request), promise: actions.setCharacter(request) } : undefined;
   return {
     actions, initial, ready: preparation.resolve,
     connect(built: Promise<Scene>) {
       validated?.resolve();
       void built.then(scene.resolve, scene.reject); void built.then(preparation.resolve, preparation.reject);
     },
-    dispose() {
-      if (disposed) return;
-      disposed = true; actions.dispose();
-      validated?.resolve(); // Release the aborted transaction's prerequisite wait too.
-      const reason = new DOMException("The head request ended.", "AbortError"); scene.reject(reason); preparation.reject(reason);
-    },
+    dispose,
   };
 }
 
@@ -127,8 +151,8 @@ export type HeadAttachmentPorts = {
   warmStart?: Pick<CharacterWarmStart, "remember" | "files">;
   /** Startup's already-requested V, adopted only when the authoritative context still matches. */
   initialDetails?: ReturnType<typeof startHeadDetails>;
-  /** The page's scene-head owner supplies the same host requester for every head, across all destination transitions. */
-  requester?: string;
+  /** Exclusive incoming stream; a resident head retains it while the scene-head owner allocates a different stream for construction. */
+  requester?: HeadDetailRequester;
 };
 
 export type AttachedHead = {
@@ -229,7 +253,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     const sceneReady = ports.viewport.buildHead(body, signal, details.ready);
     details.connect(sceneReady);
     const characterDetails = details.actions;
-    const stopDetails = () => characterDetails.dispose();
+    const stopDetails = () => details.dispose();
     signal.addEventListener("abort", stopDetails, { once: true });
     releases.push(() => { signal.removeEventListener("abort", stopDetails); stopDetails(); });
     let initialDetails = details.initial;

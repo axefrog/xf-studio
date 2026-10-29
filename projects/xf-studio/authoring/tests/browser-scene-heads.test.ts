@@ -6,6 +6,13 @@
  */
 import { expect, spyOn, test } from "bun:test";
 import { CharacterDetailActions } from "../src/character/character-detail-actions";
+import * as detailDevice from "../src/character/browser/browser-character-detail-device";
+import { CharacterDetailHost } from "../src/character/host/character-detail-host";
+import { CharacterDetailError } from "../src/character/host/character-detail-service";
+import type { CharacterRequest } from "../src/character/character-detail-request";
+import { join } from "node:path";
+import { rmSync } from "node:fs";
+import { tempDir } from "./temp-dir";
 import { CHARACTER_DETAIL_SCHEMA } from "../src/character/render-detail";
 import { createBrowserSceneHeads, type SceneHeadsPorts } from "../src/preview/browser/browser-scene-heads";
 import type { CharacterScenePorts } from "../src/character/character-service";
@@ -155,7 +162,7 @@ test("a different character taking over at startup handoff retains the supersede
   } finally { o.heads.dispose(); send.mockRestore(); }
 });
 
-test("the page requester survives A to no view to B before setup, and later head changes", async () => {
+test("the incoming requester survives A to no view to B before setup; resident heads then keep separate requesters", async () => {
   const pages: string[] = [], signals: AbortSignal[] = [], bodies: string[] = [];
   const send = mockFetch(async (_url, init) => {
     pages.push(new Headers(init!.headers).get("X-XFS-Page")!);
@@ -175,8 +182,99 @@ test("the page requester survives A to no view to B before setup, and later head
     o.heads.context("v2").dispatch({ kind: "character.useDefault", bodyGender: "female" });
     await o.heads.load();
     expect(o.heads.shown()?.body).toBe("female"); expect(bodies).toEqual(["female", "male", "female"]);
-    expect(pages[0]).toMatch(/^[a-f0-9]{32}$/); expect(new Set(pages).size).toBe(1);
+    expect(pages[0]).toMatch(/^[a-f0-9]{32}$/); expect(pages[1]).toBe(pages[0]); expect(pages[2]).not.toBe(pages[1]);
   } finally { o.heads.dispose(); send.mockRestore(); }
+});
+
+test("real host: a slow shown-A style update and incoming-B takeover complete without cancelling or restarting each other", async () => {
+  const root = tempDir("xfs-head-requesters-"), log: string[] = [];
+  const style = Promise.withResolvers<void>(), next = Promise.withResolvers<void>();
+  const styleStarted = Promise.withResolvers<void>(), nextStarted = Promise.withResolvers<void>();
+  const requests: { who: string; page: string }[] = [];
+  const who = (request: CharacterRequest) => request.bodyGender === "male" ? "B" : request.choices?.length ? "A-style" : "A";
+  const host = new CharacterDetailHost({ cacheRoot: root, settings: () => ({ gameRoot: join(root, "game"), launchRoute: "direct",
+    mo2Root: null, mo2ProfileId: null, manualModRoot: null, wolvenKitCli: process.execPath }),
+    prepare: options => new Promise((resolve, reject) => {
+      const name = who(options.request); log.push(`start ${name}`);
+      let finished = false;
+      const aborted = () => {
+        if (finished) return; finished = true; log.push(`cancel ${name}`);
+        reject(new CharacterDetailError("character_cancelled", "cancelled"));
+      };
+      options.signal!.addEventListener("abort", aborted, { once: true });
+      if (name === "A-style") styleStarted.resolve(); else if (name === "B") nextStarted.resolve();
+      void (name === "A-style" ? style.promise : name === "B" ? next.promise : Promise.resolve()).then(() => {
+        if (finished) return; finished = true; options.signal!.removeEventListener("abort", aborted); log.push(`finish ${name}`);
+        resolve({ record: {} as never, recordFile: `${(name === "B" ? "b" : "a").repeat(64)}.json`, degraded: false });
+      });
+    }) });
+  const original = detailDevice.createBrowserCharacterDetailDevice;
+  const port = spyOn(detailDevice, "createBrowserCharacterDetailDevice").mockImplementation((source, _fetcher, warm, preparation, requester) => {
+    const device = original(source, async (url, init) => {
+      if (init?.method === "POST") {
+        const request = JSON.parse(init.body as string) as CharacterRequest, page = new Headers(init.headers).get("X-XFS-Page")!;
+        requests.push({ who: who(request), page });
+        return Response.json(host.request(request, page));
+      }
+      return Response.json(host.state(new URL(String(url), "http://127.0.0.1").searchParams.get("key")!));
+    }, warm, preparation, requester);
+    // Only scene/file mechanics are faked: actual actions, headers, host wants/leases, scheduler and polls run.
+    return { ...device, show: async () => ({ slots: [] }), wait: (ms, signal) => device.wait(Math.min(ms, 5), signal) };
+  });
+  const o = owner({ v1: "female", v2: "male" });
+  const deadline = <T>(work: Promise<T>) => {
+    let timer: ReturnType<typeof setTimeout>;
+    return Promise.race([work, new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(Error("Head takeover timed out")), 2000); })])
+      .finally(() => clearTimeout(timer));
+  };
+  try {
+    await deadline(o.heads.load());
+    const shown = o.heads.shown()!;
+    const updating = shown.characterDetails.setCharacter({ ...o.heads.context("v1").detailRequest(),
+      choices: [{ part: "head", option: "hairstyle", choice: "uncached-style" }] });
+    await deadline(styleStarted.promise);
+    o.scene.subject = "v2";
+    const takeover = o.heads.load();
+    await new Promise(resolve => setTimeout(resolve, 35)); // Several polls while A runs and B waits for the real scheduler.
+    expect(o.heads.shown()).toBe(shown); expect(shown.characterDetails.snapshot().updating).toBe(true);
+    const a = requests.find(request => request.who === "A-style")!, b = requests.find(request => request.who === "B")!;
+    expect(a).toBeDefined(); expect(b).toBeDefined(); expect(b.page).not.toBe(a.page);
+    expect(log).toEqual(["start A", "finish A", "start A-style"]);
+    style.resolve(); await deadline(updating); await deadline(nextStarted.promise);
+    next.resolve(); await deadline(takeover);
+    expect(o.heads.shown()?.body).toBe("male");
+    expect(log).toEqual(["start A", "finish A", "start A-style", "finish A-style", "start B", "finish B"]);
+    expect(requests.map(request => request.who)).toEqual(["A", "A-style", "B"]);
+  } finally {
+    o.heads.dispose(); host.cancel(); style.resolve(); next.resolve();
+    await host.settled(); port.mockRestore(); rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("cancelled incoming construction reuses its exclusive requester after stopping the old transaction, without borrowing the resident's", async () => {
+  const pages: string[] = [], signals: AbortSignal[] = [];
+  const send = mockFetch(async (_url, init) => {
+    if (pages.length === 2) expect(signals[1]!.aborted).toBe(true);
+    pages.push(new Headers(init!.headers).get("X-XFS-Page")!); signals.push(init!.signal as AbortSignal);
+    if (JSON.parse(init!.body as string).bodyGender === "male")
+      return new Promise<Response>((_resolve, reject) => signals[1]!.addEventListener("abort", () => reject(signals[1]!.reason), { once: true }));
+    return Response.json({ key: "a".repeat(32), phase: "failed", message: "fixture", recordSchema: CHARACTER_DETAIL_SCHEMA, record: null });
+  });
+  const o = owner({ v1: "female", v2: "male", v3: "female" });
+  try {
+    await o.heads.load();
+    const resident = o.heads.shown();
+    o.gate.open.male = false;
+    o.scene.subject = "v2";
+    const superseded = o.heads.load();
+    await settle();
+    expect(pages).toHaveLength(2); expect(o.heads.shown()).toBe(resident);
+    o.scene.subject = "v3";
+    await o.heads.load(); await superseded;
+    expect(pages).toHaveLength(3); expect(pages[1]).not.toBe(pages[0]); expect(pages[2]).toBe(pages[1]);
+    expect(o.heads.shown()?.characterContext).toBe(o.heads.context("v3"));
+    expect(signals[2]!.aborted).toBe(false);
+  } finally { o.gate.release("male"); o.heads.dispose(); send.mockRestore(); }
 });
 
 test("P3-ii: acquiring and editing an unseen V's data requests no head or preview device", async () => {

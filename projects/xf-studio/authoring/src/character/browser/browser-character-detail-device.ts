@@ -40,6 +40,14 @@ export const CHARACTER_ENDPOINT = "/api/preview-character";
 /** This page's name for the host (character-detail-server.ts `X-XFS-Page`): a page supersedes only its own earlier V (PIPE-103). */
 export const characterRequester = () => [...crypto.getRandomValues(new Uint8Array(16))].map(byte => byte.toString(16).padStart(2, "0")).join("");
 
+/** Both polling streams release their timer/listener when the transaction ends. */
+const wait = (ms: number, signal: AbortSignal) => new Promise<void>(resolve => {
+  if (signal.aborted) { resolve(); return; }
+  const done = () => { clearTimeout(timer); signal.removeEventListener("abort", done); resolve(); };
+  const timer = setTimeout(done, ms);
+  signal.addEventListener("abort", done, { once: true });
+});
+
 function hostState(value: unknown): HostCharacterState {
   const state = value as HostCharacterState & { recordSchema?: unknown };
   if (!state || typeof state.key !== "string" || !["preparing", "ready", "failed", "unknown"].includes(state.phase))
@@ -173,7 +181,7 @@ export function createBrowserCharacterDetailDevice(source: Scene | Promise<Scene
         let state = await ask();
         // A prepared choice answers within a few polls; one the host is still preparing is not waited for.
         for (let attempt = 0; state.phase === "preparing" && attempt < PRELOAD_POLLS; attempt++) {
-          await new Promise(resolve => setTimeout(resolve, 25 * 2 ** Math.min(attempt, 4)));
+          await wait(25 * 2 ** Math.min(attempt, 4), signal);
           if (signal.aborted) return;
           state = answerState(await (await fetcher(`${CHARACTER_ENDPOINT}?key=${encodeURIComponent(state.key)}`, { signal })).json());
         }
@@ -199,9 +207,6 @@ export function createBrowserCharacterDetailDevice(source: Scene | Promise<Scene
     // Another V: the previous one leaves the scene and GPU memory whole, kept parts included.
     clear() { scene?.setCharacterDetails(null); scene?.releaseKeptParts?.(); shown = null; shownSlots = []; },
     onLimits(listener) { limitListeners.add(listener); return () => { limitListeners.delete(listener); }; },
-    wait: (ms, signal) => new Promise(resolve => {
-      const timer = setTimeout(resolve, ms);
-      signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
-    }),
+    wait,
   };
 }
