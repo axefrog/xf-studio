@@ -60,7 +60,7 @@ Gesture proposals (sent inside a gesture session; the session owns the Undo step
 | `shape.replace` | layer | content | transaction | next: object |  |
 | `point.replace` | point | content | transaction | index: integer, next: object |  |
 | `field.replace` | field | content | transaction | fieldId: string, next: object |  |
-| `path.replacePoints` | layer | content | transaction | points: object |  |
+| `path.replacePoints` | layer | content | transaction | points: object, selected?: integer |  |
 
 ## Collection (`collection`, system family)
 

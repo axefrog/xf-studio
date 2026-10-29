@@ -118,7 +118,7 @@ export type StudioGestureProposal =
   | { kind: "shape.replace"; next: Layer }
   | { kind: "point.replace"; index: number; next: Partial<Point> }
   | { kind: "field.replace"; fieldId: string; next: Partial<WarpField> }
-  | { kind: "path.replacePoints"; points: Point[] };
+  | { kind: "path.replacePoints"; points: Point[]; selected?: number };
 
 type Handlers = { readonly [O in StudioOwnerId]: ActionHandler<StudioOwnerActions[O]> };
 type AsyncHandlers = {

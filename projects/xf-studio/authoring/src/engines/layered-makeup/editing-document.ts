@@ -15,5 +15,5 @@ export interface EditingDocument {
   replaceRecipe(recipe: Recipe, active?: number): void;
   publishLayer(recipe: Recipe, layerIndex: number): void;
   applyActionState(state: RecipeActionState, effect: RecipeActionEffect): void;
-  gestureChanged(layerIndex: number, kind: string): void;
+  gestureChanged(layerIndex: number, kind: string, selected?: number): void;
 }

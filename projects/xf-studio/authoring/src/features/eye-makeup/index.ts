@@ -8,7 +8,7 @@
  */
 import { featureActionTable, featureId, type FeatureModule } from "../../platform/api";
 import type { Recipe } from "../../engines/layered-makeup/recipe";
-import { applyRecipeGesture, type GestureEdit } from "../../engines/layered-makeup/recipe-actions";
+import { applyRecipeGesture, type GestureEdit, type RecipeGestureResult } from "../../engines/layered-makeup/recipe-actions";
 import { EYE_MAKEUP_REGION } from "./region";
 import { EYE_MAKEUP_FEATURE } from "../../legacy/eye-makeup/recipe-schema";
 import { gestureHistoryLabel, historyLabel } from "../../engines/layered-makeup/history-labels";
@@ -42,7 +42,7 @@ const KINDS: Record<EyeMakeupAction["kind"], true> = {
 };
 
 /** What one gesture frame changed: the layer the preview reschedules and the edit's kind. */
-export type EyeMakeupGestureResult = { layerIndex: number; kind: GestureEdit["kind"] };
+export type EyeMakeupGestureResult = RecipeGestureResult;
 
 export const EYE_MAKEUP: FeatureModule<EyeMakeupAction, EyeMakeupScope, typeof EYE_MAKEUP_ID, Recipe, EyeMakeupEditorState,
   EyeMakeupEffect, GestureEdit, EyeMakeupGestureResult> = Object.freeze({

@@ -208,7 +208,8 @@ export class AuthoringDocument {
   get fieldSelection() { return this.state.fieldSelection; }
   set fieldSelection(value: FieldSelection) { this.state = { ...this.state, fieldSelection: value }; this.notify("selection"); }
   /** Gesture proposals preserve the live layer identity; publish after their validated in-place write. */
-  gestureChanged(layerIndex?: number, kind?: string) {
+  gestureChanged(layerIndex?: number, kind?: string, selected?: number) {
+    if (selected !== undefined && layerIndex !== undefined) this.state = { ...this.state, active: layerIndex, selected };
     this.geometryRevision++; this.changedLayerIndex = layerIndex;
     this.changedGestureKind = kind;
     this.look.changed([this.feature]);

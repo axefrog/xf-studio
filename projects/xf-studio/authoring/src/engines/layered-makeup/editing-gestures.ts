@@ -19,7 +19,7 @@ export type GestureProposal =
   | { kind: "shape.replace"; next: Layer }
   | { kind: "point.replace"; index: number; next: Partial<Point> }
   | { kind: "field.replace"; fieldId: string; next: Partial<WarpField> }
-  | { kind: "path.replacePoints"; points: Point[] };
+  | { kind: "path.replacePoints"; points: Point[]; selected?: number };
 export type GestureTarget = { kind: "shape" | "path" } | { kind: "point"; index: number } | { kind: "field"; fieldId: string };
 /** The flat UV editor's view ID. */
 export const FLAT_EDITOR_VIEW: ViewId = "uv";

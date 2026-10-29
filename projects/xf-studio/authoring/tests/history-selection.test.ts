@@ -1,10 +1,13 @@
 import { expect, test } from "bun:test";
 import { createTrustedAuthoringCore } from "./fixtures/makeup-core";
 import { namedCore } from "./fixtures/named-targets";
-import { freshWorkspace } from "./fixtures/eye-region";
+import { EYE_REGION, freshWorkspace } from "./fixtures/eye-region";
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { parseWorkspace, serializeWorkspace } from "../src/app/workspace/makeup-workspace";
 import { AuthoringDocument } from "./fixtures/makeup-document";
+import { createLayeredEditorAdapters } from "../src/preview/browser/layered-editor-adapters";
+import { defaultUVView, uvRegion, uvToPixel } from "../src/legacy/eye-makeup/uv-view";
+import type { StudioAction } from "../src/app/studio-application";
 
 function fixture(workspace = freshWorkspace()) {
   const core = namedCore(createTrustedAuthoringCore(workspace, {}, STUDIO_COMPOSITION));
@@ -65,6 +68,92 @@ function squareWorkspace() {
     { u: .7, v: .7, weight: 1 }, { u: .3, v: .7, weight: .6 } ];
   return workspace;
 }
+
+test("UV double-click publishes insertion and selection together, and Undo/Redo restore both endpoints", () => {
+  const keys = ["document", "window", "ResizeObserver"] as const;
+  const previous = keys.map(key => Object.getOwnPropertyDescriptor(globalThis, key));
+  const context = new Proxy({}, { get: () => () => {} });
+  const canvas = Object.assign(new EventTarget(), { width: 720, height: 310, style: {},
+    getContext: () => context, getBoundingClientRect: () => ({ left: 10, top: 20, width: 720, height: 310 }),
+    setPointerCapture() {}, hasPointerCapture: () => false, releasePointerCapture() {} }) as unknown as HTMLCanvasElement;
+  Object.assign(globalThis, { document: { createElement: () => ({ getContext: () => context }) },
+    window: Object.assign(new EventTarget(), { devicePixelRatio: 1 }), ResizeObserver: class { observe() {} disconnect() {} } });
+  const workspace = squareWorkspace(); workspace.recipe.layers[0].symmetry = false;
+  const core = fixture(workspace), life = new AbortController();
+  let editor: { dispose(): void } | undefined;
+  try {
+    const flat = createLayeredEditorAdapters(EYE_REGION).flat!.create(canvas, {
+      state: { ...core, app: core.application }, source: "uv", signal: life.signal,
+      look: () => ({ collection: "local", look: "local" }),
+      complete: action => core.targets.complete(action, core.application.descriptor(action.kind)) as StudioAction,
+      check: () => ({ available: true }), input() {}, message() {},
+    }, { initial: defaultUVView(), persist() {}, canvases: () => [], albedo: () => undefined });
+    editor = flat;
+    const publications: { points: number; selected: number }[] = [];
+    core.document.subscribe(change => { if (change === "recipe") publications.push({
+      points: core.document.recipe.layers[0].points.length, selected: core.document.selected }); });
+    const pixel = uvToPixel({ u: .75, v: .5 }, uvRegion(flat.snapshot()), 720, 310);
+    canvas.ondblclick!.call(canvas, { button: 0, clientX: pixel.x + 10, clientY: pixel.y + 20,
+      shiftKey: false, ctrlKey: false, altKey: false, metaKey: false } as MouseEvent);
+    expect(core.document.recipe.layers[0].points).toHaveLength(5);
+    expect(core.document.selected).toBe(2);
+    expect(core.document.history.timeline().steps.at(-1)?.label).toBe("Edit path");
+    const afterInsertion = publications.slice();
+    core.dispatch({ kind: "history.undo" });
+    expect(core.document.recipe.layers[0].points).toHaveLength(4);
+    expect(core.document.selected).toBe(0);
+    core.dispatch({ kind: "history.redo" });
+    expect(core.document.recipe.layers[0].points).toHaveLength(5);
+    expect(core.document.selected).toBe(2);
+    expect(afterInsertion).toEqual([{ points: 5, selected: 2 }]);
+  } finally {
+    editor?.dispose(); life.abort(); core.dispose();
+    keys.forEach((key, i) => { const descriptor = previous[i];
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); });
+  }
+});
+
+test("grouped removal and recreation of the selected warp restores selection even when the ID is reused", () => {
+  const workspace = squareWorkspace(), layer = workspace.recipe.layers[0];
+  layer.fields = [ { id: "W", u: .4, v: .4, du: 0, dv: 0, radius: .03 },
+    { id: "V", u: .6, v: .5, du: 0, dv: 0, radius: .03 } ];
+  workspace.fieldSelection = { [layer.id]: "W" };
+  const { app, document, dispatch, dispose } = fixture(workspace);
+  try {
+    expect(app.transaction({ label: "Replace warp", actionKind: "test.replaceWarp" }, ["eye-makeup"], () => {
+      dispatch({ kind: "field.remove", layerId: layer.id, fieldId: "W" });
+      dispatch({ kind: "field.add", layerId: layer.id, fieldId: "W" });
+      return { ok: true };
+    }).ok).toBe(true);
+    expect(document.fieldSelection[layer.id]).toBe("W");
+    const endpoints = document.history.data().entries.at(-1)!.selection?.["eye-makeup"];
+    expect(endpoints?.structural).toBe(true);
+    expect(endpoints?.before).toEqual(endpoints?.after);
+    dispatch({ kind: "field.select", layerId: layer.id, fieldId: "V" });
+    dispatch({ kind: "history.undo" });
+    expect(document.fieldSelection[layer.id]).toBe("W");
+    dispatch({ kind: "field.select", layerId: layer.id, fieldId: "V" });
+    dispatch({ kind: "history.redo" });
+    expect(document.fieldSelection[layer.id]).toBe("W");
+  } finally { dispose(); }
+});
+
+test("warp removal that leaves selection unchanged preserves later navigation", () => {
+  const workspace = squareWorkspace(), layer = workspace.recipe.layers[0];
+  layer.fields = ["W", "V", "Z"].map(id => ({ id, u: .4, v: .4, du: 0, dv: 0, radius: .03 }));
+  workspace.fieldSelection = { [layer.id]: "V" };
+  const { document, dispatch, dispose } = fixture(workspace);
+  try {
+    dispatch({ kind: "field.remove", layerId: layer.id, fieldId: "Z" });
+    expect(document.fieldSelection[layer.id]).toBe("V");
+    expect(document.history.data().entries.at(-1)!.selection?.["eye-makeup"]).toBeUndefined();
+    dispatch({ kind: "field.select", layerId: layer.id, fieldId: "W" });
+    dispatch({ kind: "history.undo" });
+    expect(document.fieldSelection[layer.id]).toBe("W");
+    dispatch({ kind: "history.redo" });
+    expect(document.fieldSelection[layer.id]).toBe("W");
+  } finally { dispose(); }
+});
 
 test.each(["remove", "insert"] as const)("point %s restores selection when topology reuses its numeric index", edit => {
   const { document, dispatch, dispose } = fixture(squareWorkspace());

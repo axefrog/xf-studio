@@ -461,9 +461,8 @@ export function createUVEditor(canvas: HTMLCanvasElement, elements: {
     candidates.sort((a, b) => (a.section?.distancePx ?? Infinity) - (b.section?.distancePx ?? Infinity));
     const chosen = candidates[0], result = chosen && insertPathPoint(l.points, chosen.click, scale);
     if (!result) { hooks.message(l.points.length >= 24 ? "A shape supports up to 24 points." : "Choose a curve section inside the texture area and away from existing points."); return; }
-    hooks.begin(); hooks.apply({ kind: "path.replacePoints", points: result.points });
+    hooks.begin(); hooks.apply({ kind: "path.replacePoints", points: result.points, selected: result.index });
     hooks.finish?.();
-    hooks.select(result.index);
     view.side = p.u <= .5 ? "low" : "high";
   };
   const resize = new ResizeObserver(draw); resize.observe(canvas);

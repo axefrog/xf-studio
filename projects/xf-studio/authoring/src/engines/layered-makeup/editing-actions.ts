@@ -10,14 +10,14 @@ import type { EyeMakeupAction, EyeMakeupEditorState, EyeMakeupEffect, EyeMakeupR
 import type { FeatureActionSpec, GestureProvider } from "../../platform/api";
 import type { Recipe } from "./recipe";
 import type { LayeredMakeupRegion } from "./region";
-import { remembers, type GestureEdit, type ReadonlyRecipeState, type RecipeAction, type RecipeActionEffect,
+import { remembers, type GestureEdit, type RecipeGestureResult, type ReadonlyRecipeState, type RecipeAction, type RecipeActionEffect,
   type RecipeActionState } from "./recipe-actions";
 import type { GlitterChoices, LayerChoices } from "./glitter-model";
 
 /** Eye makeup's registered spec for one action kind (from the injected registry). */
 export type EyeMakeupSpec = FeatureActionSpec<Recipe, EyeMakeupEditorState, EyeMakeupAction, string, EyeMakeupEffect>;
 /** Eye makeup's registered gestures: one frame applied in place, returning the changed layer. */
-export type EyeMakeupGestures = GestureProvider<Recipe, GestureEdit, { layerIndex: number; kind: GestureEdit["kind"] }>;
+export type EyeMakeupGestures = GestureProvider<Recipe, GestureEdit, RecipeGestureResult>;
 
 export type EyeMakeupPort = {
   /** Eye makeup's layered-makeup region (its models, mirror, textures and wording), from the composition. */
@@ -76,7 +76,8 @@ export function eyeMakeupPort(editing: EditingDocument,
     gesture(gestures, edit) {
       const changed = gestures.apply(editing.recipe, edit);
       if (!changed) return false;
-      recipe.publishGesture(changed.layerIndex, changed.kind);
+      if (changed.selection?.structural) editing.history.declareSelectionChange([editing.feature]);
+      recipe.publishGesture(changed.layerIndex, changed.kind, changed.selection?.selected);
       return true;
     },
   };
@@ -92,7 +93,7 @@ export class RecipeActions {
   private listeners = new Set<(effect: RecipeActionEffect) => void>();
   constructor(private read: () => RecipeActionState, private write: (state: RecipeActionState, effect: RecipeActionEffect) => void,
     private history: { checkpoint(recipe: Recipe): void }, private choices: GlitterChoices, private presetId: () => string,
-    private gestureChanged?: (layerIndex: number, kind: GestureEdit["kind"]) => void, private signal?: AbortSignal) {
+    private gestureChanged?: (layerIndex: number, kind: GestureEdit["kind"], selected?: number) => void, private signal?: AbortSignal) {
     signal?.addEventListener("abort", () => this.listeners.clear(), { once: true });
   }
   snapshot(): ReadonlyRecipeState { return structuredClone(this.read()); }
@@ -128,9 +129,9 @@ export class RecipeActions {
    * Publish a gesture edit eye makeup's registered gesture provider applied in place: the changed
    * layer is scheduled for the preview, as every gesture frame always was.
    */
-  publishGesture(layerIndex: number, kind: GestureEdit["kind"]) {
+  publishGesture(layerIndex: number, kind: GestureEdit["kind"], selected?: number) {
     if (this.signal?.aborted) throw Error("This recipe editor has ended.");
-    this.gestureChanged?.(layerIndex, kind);
+    this.gestureChanged?.(layerIndex, kind, selected);
     const effect: RecipeActionEffect = { kind: "scheduled", layerIndex };
     for (const listener of this.listeners) listener(effect);
   }

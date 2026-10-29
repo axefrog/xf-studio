@@ -41,7 +41,7 @@ export function createAuthoringEditing(state: DocumentState, ports: {
       const primary = features.document(id)!, owner = composition.registry.owner(id);
       const editor = factory({ look, scope: document.scopeId, signal: life.signal,
         editing: {
-          state() { alive(); return primary.state(); }, set(part, editor) { alive(); primary.set(part, editor); },
+          state() { alive(); return primary.state(); }, set(part, editor, partChanged) { alive(); primary.set(part, editor, partChanged); },
           changed() { alive(); document.changed([id]); }, get history() { alive(); return document.history; },
           action(kind) { const route = composition.registry.route(kind); if (!route.ok || route.owner.id !== id) throw Error(`${kind} is not an action of ${id}.`); return route.spec; },
           gestures: owner?.owner === "feature" ? owner.gestures : undefined,

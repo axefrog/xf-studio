@@ -33,11 +33,18 @@ export function createLayeredMakeupEditor(host: FeatureEditorHost, feature: stri
     },
     publishLayer(recipe, layerIndex) { live.set(recipe, live.state().editor); publish({ effect: { kind: "immediate", layerIndex } }); },
     applyActionState(next, effect) { const { recipe, ...editor } = next; live.set(recipe, editor); publish({ effect }); },
-    gestureChanged(layerIndex, gestureKind) { live.changed(); publish({ effect: { kind: "gesture", layerIndex }, gestureKind }); },
+    gestureChanged(layerIndex, gestureKind, selected) {
+      if (selected === undefined) live.changed();
+      else {
+        const { recipe, ...editor } = read();
+        live.set(recipe, { ...editor, active: layerIndex, selected }, true);
+      }
+      publish({ effect: { kind: "gesture", layerIndex }, gestureKind });
+    },
   };
   const memory = live.memory as { choices?: GlitterChoices } | undefined;
   const recipe = new RecipeActions(read, editing.applyActionState, editing, memory?.choices ?? {}, live.key,
-    (index, kind) => editing.gestureChanged(index, kind), host.signal);
+    (index, kind, selected) => editing.gestureChanged(index, kind, selected), host.signal);
   const eyeMakeup = eyeMakeupPort(editing, recipe, region, undefined, live.newId);
   const spec = (kind: string) => live.action(kind) as EyeMakeupSpec;
   const provider = live.gestures as EyeMakeupGestures;

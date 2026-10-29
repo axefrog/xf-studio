@@ -92,5 +92,5 @@ export const EYE_MAKEUP_GESTURE_DESCRIPTORS = {
   "shape.replace": desc("layer", "content", "transaction", { next: input("object") }),
   "point.replace": desc("point", "content", "transaction", { index: target("integer"), next: input("object") }),
   "field.replace": desc("field", "content", "transaction", { fieldId: target("string"), next: input("object") }),
-  "path.replacePoints": desc("layer", "content", "transaction", { points: input("object") }),
+  "path.replacePoints": desc("layer", "content", "transaction", { points: input("object"), selected: { ...input("integer", 0), required: false } }),
 } satisfies Record<GestureEdit["kind"], ActionDescriptor<EyeMakeupScope>>;

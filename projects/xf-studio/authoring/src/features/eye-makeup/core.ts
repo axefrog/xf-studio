@@ -66,8 +66,11 @@ export function applyEyeMakeup(state: EyeMakeupState, action: EyeMakeupAction): 
   const nextChoices: Record<string, LayerChoices> = {};
   for (const [key, remembered] of Object.entries(result.choices))
     if (key.startsWith(`${SCOPE}/`)) nextChoices[key.slice(SCOPE.length + 1)] = remembered;
+  const selectedLayer = state.part.layers[editor.active]?.id;
   const selectionChanged = action.kind === "point.insert" || action.kind === "point.remove" &&
-    state.part.layers[editor.active]?.id === action.layerId && action.index <= editor.selected;
+    selectedLayer === action.layerId && action.index <= editor.selected ||
+    (action.kind === "field.add" || action.kind === "field.remove") && selectedLayer === action.layerId &&
+    editor.fieldSelection[action.layerId] !== result.state.fieldSelection[action.layerId];
   return { part: result.state.recipe, changed: true, effect: result.effect, ...(selectionChanged ? { selectionChanged: true as const } : {}),
     editor: { active: result.state.active, selected: result.state.selected, fieldSelection: result.state.fieldSelection,
       choices: nextChoices } };

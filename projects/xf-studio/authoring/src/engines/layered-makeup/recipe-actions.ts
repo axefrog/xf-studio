@@ -78,7 +78,10 @@ export type GestureEdit =
   | { kind: "shape.replace"; layerId: string; expectedLayer: Layer; next: Layer }
   | { kind: "point.replace"; layerId: string; expectedLayer: Layer; index: number; expectedPoint: Point; next: Partial<Point> }
   | { kind: "field.replace"; layerId: string; expectedLayer: Layer; fieldId: string; expectedField: WarpField; next: Partial<WarpField> }
-  | { kind: "path.replacePoints"; layerId: string; expectedLayer: Layer; points: Point[] };
+  | { kind: "path.replacePoints"; layerId: string; expectedLayer: Layer; points: Point[]; selected?: number };
+export type RecipeGestureResult = { layerIndex: number; kind: GestureEdit["kind"];
+  /** A topology edit explicitly chooses the point left selected, even if its index is reused. */
+  selection?: { selected: number; structural: true } };
 type ReadonlyDeep<T> = T extends (infer U)[] ? readonly ReadonlyDeep<U>[] :
   T extends object ? { readonly [K in keyof T]: ReadonlyDeep<T[K]> } : T;
 export type ReadonlyRecipeState = ReadonlyDeep<RecipeActionState>;
@@ -88,10 +91,12 @@ export type ReadonlyRecipeState = ReadonlyDeep<RecipeActionState>;
  * be the live one (stable identities until pointer release, so a stale gesture cannot edit a new
  * preset), then it is validated with the feature's `models` and applied in place. Returns the changed layer, or undefined.
  */
-export function applyRecipeGesture(recipe: Recipe, action: GestureEdit, models: LayerModelRegistry): { layerIndex: number; kind: GestureEdit["kind"] } | undefined {
+export function applyRecipeGesture(recipe: Recipe, action: GestureEdit, models: LayerModelRegistry): RecipeGestureResult | undefined {
   const layerIndex = recipe.layers.findIndex(layer => layer.id === action.layerId);
   if (layerIndex < 0 || recipe.layers[layerIndex] !== action.expectedLayer) return undefined;
-  return applyGestureEdit(action, models) ? { layerIndex, kind: action.kind } : undefined;
+  if (!applyGestureEdit(action, models)) return undefined;
+  return { layerIndex, kind: action.kind, ...(action.kind === "path.replacePoints" && action.selected !== undefined ?
+    { selection: { selected: action.selected, structural: true as const } } : {}) };
 }
 
 /** Validate a gesture proposal before changing its live target, preserving point/field identity. */

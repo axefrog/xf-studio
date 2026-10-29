@@ -40,7 +40,8 @@ export type FeatureEditorFactory = (host: FeatureEditorHost) => FeatureEditor;
 /** Mutable ports are available only to the registered editor, never to a presentation snapshot. */
 export interface FeatureEditHost {
   state(): { part: unknown; editor: unknown };
-  set(part: unknown, editor: unknown): void;
+  /** Publish content and editor state together; flag content mutated in place explicitly. */
+  set(part: unknown, editor: unknown, partChanged?: boolean): void;
   changed(): void;
   readonly history: {
     readonly id: HistoryScopeId;
