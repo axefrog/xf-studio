@@ -29,6 +29,8 @@ export function createBrowserViewportDevice(options: {
   deviceFactory?: (host: HTMLElement, options: RendererDeviceOptions) => SceneDevice & Pick<RendererDevice, "show" | "dispose">;
   /** The head's WebGL context was lost or came back (the renderer device reports it; the composition root logs it). */
   onContext?: (event: "lost" | "restored") => void;
+  /** A visible head has crossed its first frame; hidden preparation never triggers the core host's ahead verification. */
+  afterFirstFrame?: (body: CoreBody) => void;
   /** Source of key, pointer, focus and visibility events for modifier tracking. */
   window?: Pick<Window, "addEventListener"> & { document?: Pick<Document, "addEventListener" | "visibilityState"> };
 }) {
@@ -36,6 +38,23 @@ export function createBrowserViewportDevice(options: {
   /** The head pane's one renderer device (profiles phase 4a-ii): made with the first head, kept for the window. */
   let device: SceneDevice & Pick<RendererDevice, "show" | "dispose"> | undefined;
   let disposed = false;
+  const displayed = new Set<CoreBody>();
+  let firstFrame: number | undefined, frameEpoch = 0;
+  const cancelFirstFrame = () => { frameEpoch++; if (firstFrame !== undefined) cancelAnimationFrame(firstFrame); firstFrame = undefined; };
+  const afterFirstFrame = (scene: Scene) => {
+    cancelFirstFrame();
+    if (disposed || options.signal?.aborted || !options.afterFirstFrame || displayed.has(scene.body) || typeof requestAnimationFrame !== "function") return;
+    const epoch = frameEpoch;
+    firstFrame = requestAnimationFrame(() => {
+      if (epoch !== frameEpoch || disposed || options.signal?.aborted || viewer !== scene) return;
+      firstFrame = requestAnimationFrame(() => {
+        if (epoch !== frameEpoch) return;
+        firstFrame = undefined;
+        if (disposed || options.signal?.aborted || viewer !== scene) return;
+        displayed.add(scene.body); options.afterFirstFrame?.(scene.body);
+      });
+    });
+  };
   /** The head shown on the device (several may be resident; the scene runtime owner decides which: preview/scene-residency.ts). */
   let viewer: Scene | undefined;
   /** Who else hears the context's loss and restore (the runtime owner drops warm runtimes on a loss). */
@@ -87,7 +106,7 @@ export function createBrowserViewportDevice(options: {
     surfaceEditor = undefined;
     attachment.reportInput("head", { editable: false });
   }
-  options.signal?.addEventListener("abort", () => { releaseEditor(); for (const item of resources.values()) item.dispose(); resources.clear(); }, { once: true });
+  options.signal?.addEventListener("abort", () => { cancelFirstFrame(); releaseEditor(); for (const item of resources.values()) item.dispose(); resources.clear(); }, { once: true });
   return {
     attachment,
     /**
@@ -109,16 +128,18 @@ export function createBrowserViewportDevice(options: {
       releaseEditor();
       viewer = scene;
       device!.show(scene.slot);
+      afterFirstFrame(scene);
     },
     /** `scene` stops being the shown head (another is about to be shown, or it goes): its on-head editor goes, a gesture settled. */
     hideHead(scene: Scene) {
       if (viewer !== scene) return;
+      cancelFirstFrame();
       releaseEditor();
       viewer = undefined;
     },
     /** Dispose a head (shown or not); the renderer device stays. A head shown now is hidden first. */
     disposeHead(scene: Scene) {
-      if (viewer === scene) { releaseEditor(); viewer = undefined; }
+      if (viewer === scene) { cancelFirstFrame(); releaseEditor(); viewer = undefined; }
       resources.get(scene)?.dispose(); resources.delete(scene);
       scene.dispose();
     },
@@ -167,6 +188,7 @@ export function createBrowserViewportDevice(options: {
     dispose() {
       if (disposed) return;
       disposed = true;
+      cancelFirstFrame();
       releaseEditor();
       for (const item of resources.values()) item.dispose();
       resources.clear(); contextListeners.clear(); viewer = undefined;

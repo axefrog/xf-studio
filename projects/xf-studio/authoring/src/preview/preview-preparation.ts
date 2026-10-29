@@ -28,7 +28,7 @@ export type PreviewState = {
 export type PreviewAction = { kind: "preview.refresh" } | { kind: "preview.prepare" } | { kind: "preview.cancel" } | { kind: "preview.rebuild" };
 /** `body` names another body's core (the masculine V's); without it the feminine core, which the rest of this module follows. */
 export type PreviewTransport = (action: PreviewTransportAction, body?: CoreBody, options?: PreviewTransportOptions) => Promise<{ ok: boolean; data: unknown }>;
-export type PreviewTransportAction = "refresh" | "prepare" | "cancel" | "rebuild";
+export type PreviewTransportAction = "refresh" | "prepare" | "cancel" | "rebuild" | "verify";
 /** `signal` cuts the request off. */
 export type PreviewTransportOptions = { signal?: AbortSignal };
 export type PreviewOutcome = { ok: true } | { ok: false; message: string };
@@ -119,11 +119,12 @@ function previewCard(state: PreviewState, detectedGame: string | null,
 export const shouldAutoStart = (state: PreviewState, alreadyAttempted: boolean) => state.phase === "idle" && state.canPrepare && !alreadyAttempted;
 
 export class PreviewPreparationActions {
-  private readonly host: PolledHostState<PreviewState, "refresh" | "prepare" | "cancel" | "rebuild">;
+  private readonly host: PolledHostState<PreviewState, PreviewTransportAction>;
   /** Ends every `ensureBody` call still waiting when the service is disposed. */
   private readonly life = new AbortController();
+  private readonly displayed = new Set<CoreBody>();
   constructor(private readonly transport: PreviewTransport, private readonly pollMs = 700, private readonly timers?: HostTimers) {
-    this.host = new PolledHostState<PreviewState, "refresh" | "prepare" | "cancel" | "rebuild">({ transport, isState: isPreviewState, working: state => state.phase === "preparing",
+    this.host = new PolledHostState<PreviewState, PreviewTransportAction>({ transport: action => transport(action, undefined, { signal: this.life.signal }), isState: isPreviewState, working: state => state.phase === "preparing",
       refresh: "refresh", pollMs, timers, messages: {
         invalid: "The 3D view state is unavailable. Restart XF Studio and try again.",
         unreachable: "XF Studio couldn't reach its 3D view service. Restart XF Studio and try again." } });
@@ -132,6 +133,14 @@ export class PreviewPreparationActions {
   /** Contact with the host's preparation service (failed polls are retried while it works). */
   connection(): HostConnection { return this.host.connection(); }
   subscribe(listener: () => void) { return this.host.subscribe(listener); }
+  /** The visible head crossed its first frame. The host owns a single ahead audit; publication follows ordinary preparation state. */
+  async afterFirstFrame(body: CoreBody): Promise<void> {
+    if (this.life.signal.aborted || this.displayed.has(body)) return;
+    this.displayed.add(body);
+    if (body === "female") { await this.host.request("verify"); return; }
+    // The setup card follows the feminine core; another body's audit must not replace that state.
+    try { await this.transport("verify", body, { signal: this.life.signal }); } catch { /* Contact loss is retried by normal readiness reads. */ }
+  }
   capability(action: PreviewAction): { available: boolean; reason?: string } {
     if (action.kind === "preview.refresh") return { available: true };
     const state = this.host.snapshot();

@@ -6,16 +6,19 @@ import * as files from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { savesFolderProbe, SAVES_FOLDER_DISPLAY } from "../src/saves/host/saves-host-sources";
-import { servePreviewCoreAsset } from "../src/preview/host/preview-core-server";
+import { createPreviewCoreHandler, servePreviewCoreAsset } from "../src/preview/host/preview-core-server";
 import { tempDir } from "./temp-dir";
-import { PreviewCoreHost } from "../src/preview/host/preview-core-host";
+import { PreviewCoreHost, type PreviewCoreHostOptions } from "../src/preview/host/preview-core-host";
+import { hostJobs } from "../src/host/host-jobs";
 import * as core from "../src/preview/host/preview-core-service";
 import { contentFingerprint } from "../src/host/derived-cache";
 import { PREVIEW_CORE_DERIVER_VERSION, PREVIEW_CORE_FILES, PREVIEW_CORE_RECIPE, previewCoreRecipeSha256 } from "../src/preview/preview-core-recipe";
 
 /** Synthetic cached bytes with the production recipe/manifest identity; validation and HTTP use the real host. */
-function cachedCore() {
+function cachedCore(options: Pick<PreviewCoreHostOptions, "jobs" | "signal"> & { tool?: boolean } = {}) {
   const root = tempDir("xfs-core-generation-"), game = join(root, "game");
+  const { tool, ...hostOptions } = options, cli = tool ? join(root, "WolvenKit.CLI.exe") : null;
+  if (cli) writeFileSync(cli, "synthetic tool; never launched");
   mkdirSync(join(game, "archive", "pc", "content"), { recursive: true });
   const cache = new core.PreviewCoreCache(join(root, "cache"), PREVIEW_CORE_RECIPE, false), work = cache.createWork();
   mkdirSync(join(work, core.PREVIEW_CORE_ASSET_DIRECTORY));
@@ -32,7 +35,7 @@ function cachedCore() {
   cache.writeStatus({ recipeId: PREVIEW_CORE_RECIPE.id, recipeRevision: PREVIEW_CORE_RECIPE.revision,
     deriverVersion: PREVIEW_CORE_DERIVER_VERSION, state: "ready", code: null, message: "Ready", gameRoot: game,
     contentFingerprint: contentFingerprint(game, "archive/pc/content"), cacheName: "synthetic" });
-  const restart = () => new PreviewCoreHost({ cacheRoot: cache.root, settings: () => ({ gameRoot: game, wolvenKitCli: null }), now: () => 0 });
+  const restart = () => new PreviewCoreHost({ ...hostOptions, cacheRoot: cache.root, settings: () => ({ gameRoot: game, wolvenKitCli: cli }), now: () => 0 });
   const host = restart();
   const path = join(entry, core.PREVIEW_CORE_ASSET_DIRECTORY, "head.glb");
   return { root, host, restart, path, receipt: join(entry, "preview-verified.json"), asset: (name: string) => join(entry, core.PREVIEW_CORE_ASSET_DIRECTORY, name) };
@@ -42,7 +45,7 @@ const corrupt = (path: string) => { const data = readFileSync(path); data[0]! ^=
 
 const unreliableKinds = ["coarse", "milliseconds", "zero-change", "missing-change", "zero-inode", "missing-inode", "zero-device", "missing-nanoseconds"] as const;
 /** A filesystem whose tuple survives a same-size edit. Keep real file reads, hashes, host and HTTP validation. */
-function unreliableCoreMetadata(root: string, kind: typeof unreliableKinds[number]) {
+function unreliableCoreMetadata(root: string, kind: typeof unreliableKinds[number] | "mirrored-change") {
   const actualStat = metadata.statSync, actualOpen = files.open, kept = new Map<string, BigIntStats>();
   const projected = (path: string, value: BigIntStats): BigIntStats => {
     if (!path.startsWith(root)) return value;
@@ -60,6 +63,10 @@ function unreliableCoreMetadata(root: string, kind: typeof unreliableKinds[numbe
     if (kind === "zero-inode") fixed.ino = 0n;
     if (kind === "missing-inode") Reflect.deleteProperty(fixed, "ino");
     if (kind === "zero-device") fixed.dev = 0n;
+    if (kind === "mirrored-change") {
+      fixed.mtimeNs = value.mtimeNs / 1_000_000n * 1_000_000n + 123_400n;
+      fixed.ctimeNs = fixed.mtimeNs; // A provider synthesizes ctime from mtime, despite plausible high precision and IDs.
+    }
     if (kind === "missing-nanoseconds") for (const field of ["mtimeNs", "ctimeNs", "birthtimeNs"]) Reflect.deleteProperty(fixed, field);
     kept.set(path, fixed);
     return fixed;
@@ -95,6 +102,140 @@ test.each([...unreliableKinds])("unreliable core metadata (%s) rehashes across r
     expect((await servePreviewCoreAsset(restarted, "head.glb", assetRequest(asset!.etag))).status).toBe(404);
     expect((await f.restart().readSnapshot()).phase).not.toBe("ready");
   } finally { fake.restore(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("a receipt backed by mirrored ctime starts fast; one ahead audit after the frame detects restored-mtime corruption", async () => {
+  const jobs = hostJobs(), admission = spyOn(jobs, "cooperate"), life = new AbortController();
+  const f = cachedCore({ jobs, signal: life.signal }), fake = unreliableCoreMetadata(f.root, "mirrored-change");
+  let restarted: PreviewCoreHost | undefined;
+  try {
+    expect((await f.host.readSnapshot()).phase).toBe("ready"); // Establish the full-verification receipt.
+    const tag = (await f.host.asset("head.glb"))!.etag, stats = statSync(f.path, { bigint: true });
+    expect(stats.ino > 0n && stats.dev > 0n).toBe(true);
+    expect(stats.ctimeNs).toBe(stats.mtimeNs); expect(stats.mtimeNs % 1_000_000n).not.toBe(0n);
+    const previous = statSync(f.path); corrupt(f.path); utimesSync(f.path, previous.atime, previous.mtime);
+    fake.reads.mockClear(); restarted = f.restart();
+    expect((await restarted.readSnapshot()).phase).toBe("ready");
+    expect((await servePreviewCoreAsset(restarted, "head.glb", assetRequest(tag))).status).toBe(304);
+    expect(fake.reads).not.toHaveBeenCalled(); expect(admission).not.toHaveBeenCalled();
+    const handler = createPreviewCoreHandler(restarted);
+    const response = await handler(new Request("http://127.0.0.1/api/preview-core", { method: "POST",
+      headers: { Origin: "http://127.0.0.1", "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify" }) }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ phase: "needs-setup", needs: ["wolvenkit"] });
+    expect(fake.reads.mock.calls.length).toBeGreaterThan(0); expect(admission.mock.calls.map(call => call[0])).toEqual(["ahead"]);
+    expect(metadata.existsSync(f.receipt)).toBe(false); expect(restarted.ready()).toBe(false);
+    expect((await servePreviewCoreAsset(restarted, "head.glb", assetRequest(tag))).status).toBe(404);
+    const reads = fake.reads.mock.calls.length;
+    await restarted.afterFirstFrame(); await restarted.afterFirstFrame();
+    expect(fake.reads.mock.calls.length).toBe(reads); expect(admission).toHaveBeenCalledTimes(1);
+  } finally { life.abort(); await restarted?.settled(); fake.restore(); admission.mockRestore(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("a successful post-frame receipt audit changes no state or receipt and does not repeat", async () => {
+  const f = cachedCore(), fake = unreliableCoreMetadata(f.root, "mirrored-change");
+  let restarted: PreviewCoreHost | undefined;
+  try {
+    await f.host.readSnapshot(); restarted = f.restart();
+    const before = await restarted.readSnapshot(), receipt = readFileSync(f.receipt, "utf8");
+    fake.reads.mockClear();
+    expect(await restarted.afterFirstFrame()).toEqual(before);
+    expect(fake.reads.mock.calls.length).toBeGreaterThan(0);
+    const reads = fake.reads.mock.calls.length;
+    expect(await restarted.afterFirstFrame()).toEqual(before); expect(fake.reads.mock.calls.length).toBe(reads);
+    expect(readFileSync(f.receipt, "utf8")).toBe(receipt);
+  } finally { restarted?.dispose(); f.host.dispose(); fake.restore(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("a post-frame mismatch invalidates readiness and enters ordinary preparation when setup is usable", async () => {
+  const f = cachedCore({ tool: true }), fake = unreliableCoreMetadata(f.root, "mirrored-change");
+  await f.host.readSnapshot(); const restarted = f.restart(); await restarted.readSnapshot();
+  const finish = Promise.withResolvers<core.PreviewCoreResult>();
+  let preparationSignal: AbortSignal | undefined;
+  const prepare = spyOn(core, "ensurePreviewCore").mockImplementation(options => { preparationSignal = options.signal; return finish.promise; });
+  try {
+    const previous = statSync(f.path); corrupt(f.path); utimesSync(f.path, previous.atime, previous.mtime);
+    expect(await restarted.afterFirstFrame()).toMatchObject({ phase: "preparing", code: null, canCancel: true });
+    expect(prepare).toHaveBeenCalledTimes(1); expect(metadata.existsSync(f.receipt)).toBe(false);
+    expect(restarted.ready()).toBe(false);
+  } finally {
+    restarted.dispose(); f.host.dispose(); expect(preparationSignal?.aborted).toBe(true);
+    finish.reject(new core.PreviewCoreError("preview_cancelled", "The verification test ended.")); await restarted.settled();
+    prepare.mockRestore(); fake.restore(); rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test("a full initial hash needs no post-frame receipt audit", async () => {
+  const f = cachedCore(), reads = spyOn(files, "open");
+  try {
+    await f.host.readSnapshot(); reads.mockClear();
+    expect((await f.host.afterFirstFrame()).phase).toBe("ready"); expect(reads).not.toHaveBeenCalled();
+  } finally { f.host.dispose(); reads.mockRestore(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("another body's preparation does not suppress a shown receipt's verification", async () => {
+  const f = cachedCore({ tool: true }), fake = unreliableCoreMetadata(f.root, "mirrored-change");
+  await f.host.readSnapshot(); const restarted = f.restart(); await restarted.readSnapshot();
+  const finish = Promise.withResolvers<core.PreviewCoreResult>();
+  const prepare = spyOn(core, "ensurePreviewCore").mockImplementation(() => finish.promise);
+  try {
+    expect(restarted.prepare("male").phase).toBe("preparing");
+    const previous = statSync(f.path); corrupt(f.path); utimesSync(f.path, previous.atime, previous.mtime);
+    fake.reads.mockClear();
+    expect(await restarted.afterFirstFrame("female")).toMatchObject({ phase: "idle", canPrepare: false });
+    expect(fake.reads.mock.calls.length).toBeGreaterThan(0);
+    expect(metadata.existsSync(f.receipt)).toBe(false); expect(prepare).toHaveBeenCalledTimes(1);
+  } finally {
+    restarted.dispose(); f.host.dispose(); finish.reject(new core.PreviewCoreError("preview_cancelled", "The verification test ended."));
+    await restarted.settled(); prepare.mockRestore(); fake.restore(); rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test("core lifetime cancellation stops the post-frame audit, closes its file and leaves the receipt intact", async () => {
+  const life = new AbortController(), f = cachedCore({ signal: life.signal });
+  await f.host.readSnapshot();
+  const restarted = f.restart(); await restarted.readSnapshot();
+  const receipt = readFileSync(f.receipt, "utf8"), entered = Promise.withResolvers<void>(), resume = Promise.withResolvers<void>();
+  const original = files.open;
+  let paused = false, closed = 0;
+  const reads = spyOn(files, "open").mockImplementation(async (path, flags, mode) => {
+    const file = await original(path, flags, mode);
+    if (!paused && String(path) === f.path) {
+      paused = true;
+      const getStat = file.stat.bind(file), close = file.close.bind(file);
+      file.stat = (async (options?: StatOptions) => { entered.resolve(); await resume.promise; return getStat(options); }) as typeof file.stat;
+      file.close = async () => { closed++; return close(); };
+    }
+    return file;
+  });
+  const audit = restarted.afterFirstFrame();
+  try {
+    await entered.promise; life.abort(); resume.resolve();
+    await expect(audit).rejects.toMatchObject({ name: "AbortError" });
+    await restarted.settled(); expect(closed).toBe(1);
+    expect(readFileSync(f.receipt, "utf8")).toBe(receipt);
+  } finally { life.abort(); resume.resolve(); await audit.catch(() => {}); reads.mockRestore(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("a post-frame mismatch cannot invalidate a newer published core status", async () => {
+  const f = cachedCore(); await f.host.readSnapshot();
+  const restarted = f.restart(); await restarted.readSnapshot();
+  const receipt = readFileSync(f.receipt, "utf8"), cache = new core.PreviewCoreCache(join(f.root, "cache"), PREVIEW_CORE_RECIPE, false);
+  const original = files.open;
+  let changed = false;
+  const reads = spyOn(files, "open").mockImplementation(async (path, flags, mode) => {
+    const file = await original(path, flags, mode);
+    if (!changed) {
+      changed = true; corrupt(f.path);
+      cache.writeStatus({ ...cache.readStatus()!, message: "A newer preparation owns this status." });
+    }
+    return file;
+  });
+  try {
+    await restarted.afterFirstFrame();
+    expect(changed).toBe(true); expect(cache.readStatus()?.message).toBe("A newer preparation owns this status.");
+    expect(readFileSync(f.receipt, "utf8")).toBe(receipt);
+  } finally { restarted.dispose(); f.host.dispose(); reads.mockRestore(); rmSync(f.root, { recursive: true, force: true }); }
 });
 
 test("an existing legacy receipt cannot vouch for edited bytes on coarse metadata", async () => {

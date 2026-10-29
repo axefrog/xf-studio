@@ -13,6 +13,40 @@ import { tempDir } from "./temp-dir";
 const roots: string[] = [];
 afterAll(() => { for (const root of roots) rmSync(root, { recursive: true, force: true }); });
 const temporary = () => { const root = tempDir("xfs-preview-host-"); roots.push(root); return root; };
+
+test("post-frame verification is once per body, publishes plain setup state and aborts its request with the page service", async () => {
+  const calls: { action: string; body?: string; signal?: AbortSignal }[] = [], done = Promise.withResolvers<{ ok: boolean; data: unknown }>();
+  const actions = new PreviewPreparationActions(async (action, body, options) => {
+    calls.push({ action, body, signal: options?.signal });
+    if (action === "verify") return done.promise;
+    return { ok: true, data: { schema: "xfs/preview-core-state-1", phase: "ready", message: "Ready", needs: [], canPrepare: false, canCancel: false } };
+  });
+  await actions.dispatch({ kind: "preview.refresh" });
+  const pending = actions.afterFirstFrame("female");
+  await actions.afterFirstFrame("female");
+  expect(calls.map(call => call.action)).toEqual(["refresh", "verify"]);
+  actions.dispose(); expect(calls[1]!.signal?.aborted).toBe(true);
+  done.resolve({ ok: true, data: { schema: "xfs/preview-core-state-1", phase: "idle", message: "Prepare again", needs: [], canPrepare: true, canCancel: false } });
+  await pending;
+  expect(actions.snapshot()?.phase).toBe("ready");
+  await actions.afterFirstFrame("male"); expect(calls).toHaveLength(2);
+});
+
+test("a post-frame mismatch uses ordinary preparation state and polling, while a male audit leaves the setup card's body unchanged", async () => {
+  const replies: PreviewState[] = [], bodies: (string | undefined)[] = [];
+  const actions = new PreviewPreparationActions(async (action, body) => {
+    bodies.push(body);
+    return { ok: true, data: { schema: "xfs/preview-core-state-1", phase: action === "refresh" ? "ready" : "preparing", message: "Preparing again",
+      needs: [], canPrepare: false, canCancel: action !== "refresh" } };
+  }, 700);
+  const off = actions.subscribe(() => { replies.push(actions.snapshot()!); });
+  try {
+    await actions.dispatch({ kind: "preview.refresh" }); await actions.afterFirstFrame("female");
+    expect(actions.snapshot()?.phase).toBe("preparing");
+    await actions.afterFirstFrame("male"); expect(bodies).toEqual([undefined, undefined, "male"]);
+    expect(replies.map(reply => reply.phase)).toEqual(["ready", "preparing"]);
+  } finally { off(); actions.dispose(); }
+});
 function setup() {
   const root = temporary();
   const game = join(root, "game"), cli = join(root, "WolvenKit.CLI.exe");

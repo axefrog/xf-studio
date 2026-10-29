@@ -82,3 +82,42 @@ test("the viewport releases the shared device once after its caller releases the
   await expect(viewport.buildHead()).rejects.toMatchObject({ name: "AbortError" });
   expect(contexts).toBe(0);
 });
+
+const frameEndings = ["shown", "early", "abort", "hide", "runtime", "viewport"] as const;
+test.each([...frameEndings])("first-frame notification waits for a visible frame, is once per body and retires pending callbacks (%s)", async (ending: typeof frameEndings[number]) => {
+  const raf = globalThis.requestAnimationFrame, cancel = globalThis.cancelAnimationFrame;
+  const frames = new Map<number, FrameRequestCallback>(), life = new AbortController(), called: string[] = [];
+  let serial = 0;
+  globalThis.requestAnimationFrame = callback => { frames.set(++serial, callback); return serial; };
+  globalThis.cancelAnimationFrame = id => { frames.delete(id); };
+  const tick = () => { const work = [...frames.values()]; frames.clear(); for (const callback of work) callback(0); };
+  const viewport = createBrowserViewportDevice({ signal: life.signal, window: new EventTarget(), headHost: {} as HTMLElement,
+    queryContext: () => { throw Error("No hit expected"); }, afterFirstFrame: body => called.push(body),
+    deviceFactory: (() => ({ show() {}, dispose() {} })) as never,
+    sceneFactory: (async (_device: Parameters<typeof createSceneRuntime>[0], options: Parameters<typeof createSceneRuntime>[1]) =>
+      ({ body: options?.body, slot: "fixture", dispose() {} })) as unknown as typeof createSceneRuntime });
+  try {
+    const scene = await viewport.buildHead();
+    expect(frames.size).toBe(0); // Hidden construction does not schedule the audit.
+    viewport.showHead(scene);
+    if (ending === "early") {
+      const late = [...frames.values()][0]!;
+      life.abort(); expect(frames.size).toBe(0); late(0);
+      expect(called).toEqual([]); expect(frames.size).toBe(0); return;
+    }
+    tick(); expect(called).toEqual([]); expect(frames.size).toBe(1);
+    const late = [...frames.values()][0]!;
+    if (ending === "abort") life.abort();
+    if (ending === "hide") viewport.hideHead(scene);
+    if (ending === "runtime") viewport.disposeHead(scene);
+    if (ending === "viewport") viewport.dispose();
+    if (ending !== "shown") {
+      expect(frames.size).toBe(0); late(0); expect(called).toEqual([]); expect(frames.size).toBe(0);
+    } else {
+      tick(); expect(called).toEqual(["female"]);
+      viewport.hideHead(scene); viewport.showHead(scene); expect(frames.size).toBe(0);
+      const male = await viewport.buildHead("male"); viewport.showHead(male); tick(); tick();
+      expect(called).toEqual(["female", "male"]); expect(frames.size).toBe(0);
+    }
+  } finally { life.abort(); viewport.dispose(); globalThis.requestAnimationFrame = raf; globalThis.cancelAnimationFrame = cancel; }
+});

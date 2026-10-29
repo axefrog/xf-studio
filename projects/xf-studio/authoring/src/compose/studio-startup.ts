@@ -358,6 +358,7 @@ async function start(host: StudioHost, root: HTMLElement, composition: StudioSta
   const tabFixtures = verification ? tabVerification(sessionState, services, documents.outbox, access.writable, () => statusSource.changed()) : undefined;
   const headHost = byId("device-head");
   const viewportDevice = createBrowserViewportDevice({ signal, surface: registeredEditorAdapters(core)?.surface, headHost, queryContext: hit => core.app.contextQuery(hit, targets.namedView(drawnView())), renderers: composition.renderers, optionalRenderers: experiments, referenceTextures: browserReferenceTextures(verification),
+    afterFirstFrame: body => { void host.previewPreparation.afterFirstFrame(body); },
     onContext: event => event === "lost" ? diagnostics.contextLost("3D view") : diagnostics.contextRestored("3D view") });
   // The workspace's own editor fields, V and arrangement as the migration found them: stored back unchanged (an older build opens them).
   const frozenEditor = { features: workspace.liveFeatures, locked: workspace.liveLocked,

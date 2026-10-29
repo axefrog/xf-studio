@@ -3,7 +3,10 @@ import type { Registry, AnyOwner } from "../../platform/core/registry";
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parseCoreAssetName, PREVIEW_CORE_RECIPES, type CoreBody } from "../preview-core-recipe";
-import { ensurePreviewCore, PREVIEW_CORE_STEPS, PreviewCoreCache, PreviewCoreError, previewCoreReadiness, previewCoreReadinessAsync, previewCoreGenerationCurrent } from "./preview-core-service";
+import { ensurePreviewCore, PREVIEW_CORE_STEPS, PreviewCoreCache, PreviewCoreError, previewCoreReadiness, previewCoreReadinessAsync, previewCoreGenerationCurrent,
+  invalidatePreviewCoreVerification } from "./preview-core-service";
+import type { JobScheduler } from "../../platform/api/jobs";
+import { hostWork } from "../../host/host-jobs";
 import type { GameAssetExporter } from "../../game/host/game-asset-export";
 import { createWolvenKitGameAssetExporter } from "../../game/host/game-asset-export-wolvenkit";
 import { hostFailure } from "../../diagnostics/host/host-log";
@@ -45,6 +48,8 @@ export type PreviewCoreHostOptions = {
   exporter?: (cli: string | null) => GameAssetExporter;
   log?: (message: string) => void;
   now?: () => number;
+  jobs?: JobScheduler;
+  signal?: AbortSignal;
 };
 
 const MESSAGES = {
@@ -68,7 +73,16 @@ export class PreviewCoreHost {
   private lastDurationSeconds: number | null = null;
   private readinessMemo = new Map<CoreBody, { key: string; value: ReturnType<typeof previewCoreReadiness>; at: number }>();
   private checks = new Map<CoreBody, { key: string; promise: Promise<void>; life: AbortController; wants: number }>();
-  constructor(private readonly options: PreviewCoreHostOptions) {}
+  private readonly life = new AbortController();
+  private readonly verifications = new Map<CoreBody, { key: string; promise: Promise<void>; life: AbortController; mismatch: boolean }>();
+  private readonly stop = () => this.dispose();
+  constructor(private readonly options: PreviewCoreHostOptions) {
+    if (options.signal?.aborted) this.dispose(); else options.signal?.addEventListener("abort", this.stop, { once: true });
+  }
+  private mustHash(body: CoreBody, key: string) {
+    const checked = this.verifications.get(body);
+    return checked?.key === key && checked.mismatch;
+  }
 
   private fresh(memo: { key: string; value: ReturnType<typeof previewCoreReadiness>; at: number } | undefined, key: string) {
     return memo?.key === key && (this.options.now ?? Date.now)() - memo.at < 5_000 &&
@@ -82,18 +96,20 @@ export class PreviewCoreHost {
     if (this.fresh(memo, key)) return memo!.value;
     const { recipe } = PREVIEW_CORE_RECIPES[body];
     const plate = registeredPreviewPreparation(this.options.registry, body);
-    const value = previewCoreReadiness(this.options.cacheRoot, gameRoot, recipe, plate);
+    const value = previewCoreReadiness(this.options.cacheRoot, gameRoot, recipe, plate, { full: this.mustHash(body, key) });
     this.readinessMemo.set(body, { key, value, at: now });
     return value;
   }
-  private forget() {
+  private forget(body?: CoreBody) {
     this.readinessMemo.clear();
     for (const check of this.checks.values()) check.life.abort();
     this.checks.clear();
+    for (const [core, check] of this.verifications) if (!body || core === body) check.life.abort();
   }
 
   /** Shared HTTP validation; an obsolete completion cannot publish after a rebuild/settings change. */
   async readSnapshot(body: CoreBody = "female", signal?: AbortSignal): Promise<PreviewCoreState> {
+    this.life.signal.throwIfAborted();
     signal?.throwIfAborted();
     const settings = this.options.settings(), key = `${settings.gameRoot}`, memo = this.readinessMemo.get(body);
     if (this.running?.body !== body && isGame(settings.gameRoot) && !this.fresh(memo, key)) {
@@ -101,7 +117,8 @@ export class PreviewCoreHost {
       if (!check || check.key !== key) {
         const { recipe } = PREVIEW_CORE_RECIPES[body], plate = registeredPreviewPreparation(this.options.registry, body);
         const made = { key, promise: Promise.resolve(), life: new AbortController(), wants: 0 };
-        made.promise = previewCoreReadinessAsync(this.options.cacheRoot, settings.gameRoot, recipe, plate, made.life.signal).then(value => {
+        made.promise = previewCoreReadinessAsync(this.options.cacheRoot, settings.gameRoot, recipe, plate, made.life.signal,
+          { full: this.mustHash(body, key) }).then(value => {
           if (this.checks.get(body) === made && `${this.options.settings().gameRoot}` === key)
             this.readinessMemo.set(body, { key, value: value.state === "ready" && !previewCoreGenerationCurrent(value.generation)
               ? { state: "none" } : value, at: (this.options.now ?? Date.now)() });
@@ -124,6 +141,44 @@ export class PreviewCoreHost {
         }
       }
     }
+    return this.snapshot(body);
+  }
+
+  /** A displayed frame releases one receipt audit per body/session. It owns no preparation slot or page lease. */
+  async afterFirstFrame(body: CoreBody = "female", signal?: AbortSignal): Promise<PreviewCoreState> {
+    this.life.signal.throwIfAborted(); signal?.throwIfAborted();
+    let check = this.verifications.get(body);
+    const settings = this.options.settings(), key = `${settings.gameRoot}`;
+    const target = this.readinessMemo.get(body);
+    if (!check && this.running?.body !== body && target?.key === key && target.value.state === "ready" && target.value.receipt) {
+      const expected = target.value, { recipe } = PREVIEW_CORE_RECIPES[body];
+      const plate = registeredPreviewPreparation(this.options.registry, body);
+      const made = { key, promise: Promise.resolve(), life: new AbortController(), mismatch: false };
+      this.verifications.set(body, made); check = made;
+      made.promise = hostWork(this.options.jobs, "ahead", turn => previewCoreReadinessAsync(this.options.cacheRoot,
+        settings.gameRoot, recipe, plate, made.life.signal, { full: true, turn }), made.life.signal).then(value => {
+        if (made.life.signal.aborted || this.life.signal.aborted || `${this.options.settings().gameRoot}` !== key
+          || this.running?.body === body || value.state === "ready") return;
+        let invalidated = false;
+        try { invalidated = invalidatePreviewCoreVerification(this.options.cacheRoot, recipe, plate, expected); }
+        catch { invalidated = true; this.options.log?.("The prepared 3D view files changed; their verification receipt could not be removed."); }
+        if (!invalidated) {
+          // A newer status belongs to its own preparation; withdraw only this scan's older memo.
+          if (this.readinessMemo.get(body) === target) this.readinessMemo.delete(body);
+          return;
+        }
+        made.mismatch = true;
+        this.forget(body);
+        this.readinessMemo.set(body, { key, value: { state: "none" }, at: (this.options.now ?? Date.now)() });
+        this.options.log?.("The prepared 3D view files changed. Preparing them again from the game files.");
+        this.prepare(body);
+      }).catch(() => {
+        if (!made.life.signal.aborted && !this.life.signal.aborted)
+          this.options.log?.("The prepared 3D view could not be checked again just now.");
+      });
+    }
+    await check?.promise;
+    this.life.signal.throwIfAborted(); signal?.throwIfAborted();
     return this.snapshot(body);
   }
 
@@ -173,6 +228,8 @@ export class PreviewCoreHost {
     const promise = ensurePreviewCore({ gameRoot: settings.gameRoot!, cacheRoot: this.options.cacheRoot, exporter, signal: controller.signal, body, plateRecipe: registeredPreviewPreparation(this.options.registry, body),
       progress: (_step, index, total, label) => { this.progress = { index, total, label }; } })
       .then(result => {
+        const checked = this.verifications.get(body);
+        if (checked) checked.mismatch = false;
         this.lastDurationSeconds = Math.round(((this.options.now ?? Date.now)() - started) / 100) / 10;
         this.options.log?.(`3D preview ${result.reused ? "reused" : "prepared"} in ${this.lastDurationSeconds}s (${result.manifest.source.label}).`);
       })
@@ -183,7 +240,7 @@ export class PreviewCoreHost {
         this.options.log?.(`3D preview preparation stopped: ${code}. ${(error as PreviewCoreError).detail ?? ""}`.trim());
         if (code !== "preview_cancelled") hostFailure("preview", code, message, error);
       })
-      .finally(() => { this.running = null; this.progress = null; this.forget(); });
+      .finally(() => { this.running = null; this.progress = null; this.forget(body); });
     this.running = { controller, promise, body };
     return this.snapshot(body);
   }
@@ -197,7 +254,7 @@ export class PreviewCoreHost {
     if (this.running) return this.snapshot(body);
     const settings = this.options.settings();
     if (isGame(settings.gameRoot) && isFile(settings.wolvenKitCli)) {
-      this.forget();
+      this.forget(body);
       const { recipe } = PREVIEW_CORE_RECIPES[body];
       const plate = registeredPreviewPreparation(this.options.registry, body);
       const readiness = previewCoreReadiness(this.options.cacheRoot, settings.gameRoot, recipe, plate);
@@ -205,7 +262,7 @@ export class PreviewCoreHost {
         try { new PreviewCoreCache(this.options.cacheRoot, recipe, !!plate).remove(dirname(readiness.directory)); }
         catch (error) { this.options.log?.(`The damaged 3D preview could not be removed: ${(error as Error).message}`); }
       }
-      this.forget();
+      this.forget(body);
     }
     return this.prepare(body);
   }
@@ -217,7 +274,17 @@ export class PreviewCoreHost {
   }
 
   /** Wait for a running preparation (tests and shutdown). */
-  async settled(): Promise<void> { await this.running?.promise; }
+  async settled(): Promise<void> {
+    await Promise.all([...this.verifications.values()].map(check => check.promise));
+    await this.running?.promise; // A mismatch may have started ordinary preparation while the audit was settling.
+  }
+
+  /** The host owner ends scans, requests and preparation together. */
+  dispose(): void {
+    if (this.life.signal.aborted) return;
+    this.life.abort(); this.options.signal?.removeEventListener("abort", this.stop);
+    this.running?.controller.abort(); this.forget();
+  }
 
   /**
    * Absolute path of one derived core file when that body's core is ready, else null. Served names are the body's prefix and

@@ -227,14 +227,14 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
   const holotable = createHolotableHandler(), verificationHolotable = createHolotableHandler();
   const token = randomBytes(32).toString("hex");
   // The core preview has one source: the derivation from the player's own game files.
-  const previewCore = new PreviewCoreHost({ registry: STUDIO_REGISTRY, cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
+  const jobs = hostJobs();
+  const previewCore = new PreviewCoreHost({ registry: STUDIO_REGISTRY, jobs, signal: shutdown.signal, cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter,
     // The preview runs WolvenKit only once it is ready to run (present, verified, with its .NET runtime).
     settings: () => ({ gameRoot: savedSettings()?.gameRoot ?? null, wolvenKitCli: wolvenKit.usable() }),
     log: logTo("preview") });
   const previewCoreRequest = createPreviewCoreHandler(previewCore);
   // Brows, lashes and hair: resolved from the launch route Build uses (MO2, manual or game folder) and
   // exported from the winning archives into the same private preview cache.
-  const jobs = hostJobs();
   const prepared = new PreparedFiles({ scheduler: jobs, log: logTo("character") });
   const characterDetails = new CharacterDetailHost({ cacheRoot: desktopPreviewCache(dataRoot), exporter: previewExporter, jobs, prepared,
     settings: () => {
@@ -529,7 +529,7 @@ export function createDesktopServer(staticRoot: string, dataRoot: string, versio
       leases.close();
       diagnostics.trace.flush();
       shutdown.abort();
-      previewCore.cancel();
+      previewCore.dispose();
       characterDetails.cancel();
       wolvenKit.cancel();
       server.stop(true);

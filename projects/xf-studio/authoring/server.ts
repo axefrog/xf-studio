@@ -131,7 +131,8 @@ const verificationModInstallRequest = createModInstallHandler(installHost(verifi
 // The 3D preview core (head, plate, eyes, maps and their record) is derived from the configured game and
 // served only from this cache; `XFS_PREVIEW_CORE_CACHE` relocates it.
 const previewCacheRoot = resolve(process.env.XFS_PREVIEW_CORE_CACHE || resolve(import.meta.dir, "data", "preview-cache"));
-const previewCore = new PreviewCoreHost({ registry: STUDIO_REGISTRY,
+const jobs = hostJobs();
+const previewCore = new PreviewCoreHost({ registry: STUDIO_REGISTRY, jobs,
   cacheRoot: previewCacheRoot,
   settings: () => ({ gameRoot: packageToolPaths(localSettings.load().settings).gamepath, wolvenKitCli: wolvenKit.usable() }),
   log: diagnostics.log.logger("preview"),
@@ -143,7 +144,6 @@ const previewCoreRequest = createPreviewCoreHandler(previewCore);
 // `XFS_PREPARED_BUDGET_GB` sets the prepared files' disk budget (prepared-files.ts `preparedBudgetFrom`; `off` never evicts): a verification server borrowing
 // another server's warm caches turns eviction off so it never trims them. One owner keeps every host's prepared files within it, the
 // baseline reference characters within their own small share (they never evict the user's prepared V); one scheduler runs the work.
-const jobs = hostJobs();
 const prepared = new PreparedFiles({ scheduler: jobs, log: diagnostics.log.logger("character"),
   budget: preparedBudgetFrom(process.env.XFS_PREPARED_BUDGET_GB, message => { hostFailure("character", "prepared_budget_setting", message, undefined, "warn"); }) });
 const characterDetails = new CharacterDetailHost({ cacheRoot: previewCacheRoot, jobs, prepared,
@@ -250,7 +250,7 @@ const verificationSavesRequest = createSavesHandler(savesHostSources({ allowOver
   diagnostics.log.logger("saves"), "/api/verification/saves");
 // Holotable (early access): its headless service starts on the first request, never at startup; the verification workspace has its own.
 const holotable = createHolotableHandler(), verificationHolotable = createHolotableHandler();
-process.on("exit", () => { holotable.dispose(); verificationHolotable.dispose(); });
+process.on("exit", () => { previewCore.dispose(); holotable.dispose(); verificationHolotable.dispose(); });
 const build = await buildBrowser(resolve(root, "build"));
 if (!build.success) {
   console.error(build.logs);

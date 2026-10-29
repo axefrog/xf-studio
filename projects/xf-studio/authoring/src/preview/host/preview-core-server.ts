@@ -24,7 +24,7 @@ export async function servePreviewCoreAsset(host: Pick<PreviewCoreHost, "asset">
 
 /**
  * Host endpoint for the 3D preview preparation. GET returns the read-only state (`?body=male` for the masculine V's core);
- * POST takes only `{ action: "prepare" | "cancel" | "rebuild", body?: "female" | "male" }` (rebuild prepares a damaged
+ * POST takes only `{ action: "prepare" | "cancel" | "rebuild" | "verify", body?: "female" | "male" }` (rebuild prepares a damaged
  * preview again; the body defaults to the feminine core). Paths come from the host's own settings, never the browser.
  * Callers mount it behind their own session checks (the desktop adds a token cookie).
  */
@@ -55,9 +55,10 @@ export function createPreviewCoreHandler(host: PreviewCoreHost, options: { trust
     const action = (body as { action?: unknown })?.action, which = (body as { body?: unknown })?.body ?? "female";
     const keys = body && typeof body === "object" ? Object.keys(body).sort().join() : "";
     if (!body || typeof body !== "object" || Array.isArray(body) || (keys !== "action" && keys !== "action,body") || !isBody(which) ||
-        (action !== "prepare" && action !== "cancel" && action !== "rebuild"))
+        (action !== "prepare" && action !== "cancel" && action !== "rebuild" && action !== "verify"))
       return json({ code: "invalid", error: "Choose prepare, rebuild or cancel." }, 400);
-    const state = action === "prepare" ? host.prepare(which) : action === "rebuild" ? host.rebuild(which) : host.cancel(which);
-    return json(state, action !== "cancel" && !state.canCancel && state.phase !== "ready" ? 409 : 200);
+    const state = action === "verify" ? await host.afterFirstFrame(which, request.signal)
+      : action === "prepare" ? host.prepare(which) : action === "rebuild" ? host.rebuild(which) : host.cancel(which);
+    return json(state, action !== "cancel" && action !== "verify" && !state.canCancel && state.phase !== "ready" ? 409 : 200);
   };
 }
