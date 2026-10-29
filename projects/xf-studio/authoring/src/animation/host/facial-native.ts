@@ -9,6 +9,8 @@ import type { MorphTargetBinds } from "../../engines/facial-rig/bake";
 import type { SetClip } from "../facial-catalogue";
 import type { AnimClip } from "../../native/anim-set";
 import type { NativeDecoder } from "../../native/native-decode";
+import type { NativePriority } from "../../native/native-priority";
+import { currentLane } from "../../host/host-jobs";
 import { asArray, cname, cr2wRoot, isObject } from "../../game/red-json";
 
 /** Most time one facial document may take in the decode worker (the setup decodes in about 60 ms). */
@@ -29,10 +31,11 @@ export function setClipOf(clip: AnimClip): SetClip {
     jointKeys: clip.buffer === "compressed" ? clip.counts.compressed + clip.counts.raw : 0 };
 }
 
+const clipPriority = (priority?: "background"): NativePriority => priority ?? (currentLane() === "person" ? "person" : "shown");
 /** One clip of a set, by name (null: not in the set, or not readable here). */
 export async function nativeClip(decoder: NativeDecoder, archivePath: string, hash: string, name: string, priority?: "background"): Promise<SetClip | null> {
   if (!decoder.decodeAnim) return null;
-  const outcome = await decoder.decodeAnim({ archivePath, hash, op: "clip", clip: name, ...(priority ? { priority } : {}) });
+  const outcome = await decoder.decodeAnim({ archivePath, hash, op: "clip", clip: name, priority: clipPriority(priority) });
   return outcome.ok && outcome.clip ? setClipOf(outcome.clip) : null;
 }
 
@@ -44,7 +47,7 @@ export async function nativeSetClips(decoder: NativeDecoder, archivePath: string
   priority: () => "background" | undefined = () => undefined): Promise<Map<string, SetClip> | null> {
   if (!decoder.decodeAnim) return null;
   const first = priority();
-  const index = await decoder.decodeAnim({ archivePath, hash, op: "index", ...(first ? { priority: first } : {}) });
+  const index = await decoder.decodeAnim({ archivePath, hash, op: "index", priority: clipPriority(first) });
   if (!index.ok || !index.index) return null;
   const out = new Map<string, SetClip>();
   for (const info of index.index.clips) {

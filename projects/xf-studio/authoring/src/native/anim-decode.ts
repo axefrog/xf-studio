@@ -8,15 +8,14 @@ import type { Decompress } from "./kark";
 import { DecodeSession, DEFAULT_LIMITS, type NativeLimits } from "./limits";
 import { classifyNativeFailure, type NativeFailureKind } from "./native-errors";
 import { type AnimClip, type AnimRig, type AnimSetIndex, decodeAnimClip, readAnimRig, readAnimSetIndex } from "./anim-set";
+import type { PrioritisedNativeRequest } from "./native-priority";
 
-export type NativeAnimRequest = {
+export type NativeAnimRequest = PrioritisedNativeRequest & {
   readonly archivePath: string;
   /** Depot hash, decimal. */
   readonly hash: string;
   /** This request's time budget in a worker. */
   readonly timeoutMs?: number;
-  /** `background`: decoded only when no other request waits (the pose catalogue's set index). */
-  readonly priority?: "background";
 } & ({ readonly op: "index" } | { readonly op: "clip"; readonly clip: string } | { readonly op: "rig" });
 
 export type NativeAnimOutcome =

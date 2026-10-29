@@ -60,6 +60,10 @@ export const MAX_SOLVE_FRAMES = 64;
 /** Version of what the start-point cache holds; part of its key. */
 export const START_POINT_VERSION = 3;
 const STEP_TIMEOUT_MS = 3 * 60_000;
+// Temporary PREV-196 phase probe; no timers or retained request state. Remove after the coordinator's timing run.
+const blinkPhase = (phase: string) => {
+  if (process.env.XFS_TRACE_BLINK === "1") console.info(`[PREV-196 blink @${performance.now().toFixed(1)} ms] ${phase}`);
+};
 
 /**
  * Which solver answers: XF Studio's own in this process (`inProcess`, the default everywhere), or the pinned IO Suite checkout run by
@@ -470,7 +474,11 @@ export class FacialHost {
     const wanted = previous?.key === key && previous.wantStartPoints === undefined;
     entry.startPointsWanted = wanted ? Promise.resolve() : new Promise<void>(settle => { entry.wantStartPoints = () => { entry.wantStartPoints = undefined; settle(); }; });
     this.current = entry;
-    entry.promise = Promise.all([(previous?.promise ?? Promise.resolve()).catch(() => {}), this.clearing]).then(() => this.prepare(entry, settings)).finally(() => entry.rigSettled?.()).catch(error => {
+    blinkPhase(`rig preparation created; previous=${!!previous} clear=${!!this.clearing}`);
+    entry.promise = Promise.all([(previous?.promise ?? Promise.resolve()).catch(() => {}), this.clearing]).then(() => {
+      blinkPhase("previous preparation / Clear released");
+      return this.prepare(entry, settings);
+    }).finally(() => entry.rigSettled?.()).catch(error => {
       if (error instanceof Superseded || entry.controller.signal.aborted) return;
       entry.failures++; entry.failedAt = this.now();
       hostFailure("facial", "facial_prepare_failed", "Your V's face couldn't be prepared for live expressions.", error, "warn");
@@ -486,6 +494,7 @@ export class FacialHost {
   }
 
   private async prepareRig(entry: Preparation, settings: CharacterDetailSettings, turn: () => Promise<void>) {
+    blinkPhase("rig shown admitted");
     const signal = entry.controller.signal, superseded = () => { if (signal.aborted) throw new Superseded(); };
     if (!settings.gameRoot) {
       entry.rig = { phase: "unconfigured", reason: NOT_SET_UP };
@@ -497,24 +506,33 @@ export class FacialHost {
     // WolvenKit is optional: XF Studio's own reader reads the face, and WolvenKit only what the reader refuses.
     const cli = settings.wolvenKitCli && existsSync(settings.wolvenKitCli) ? settings.wolvenKitCli : null;
     const tool = cli ? wolvenKitIdentityKey(wolvenKitIdentity(cli)) : "native";
+    blinkPhase(`installation acquire start opens=${this.installations.stats.opens} checks=${this.installations.stats.checks}`);
     const installation = await this.installations.acquire({ gameRoot: settings.gameRoot, launchRoute: settings.launchRoute, mo2Root: settings.mo2Root,
       mo2ProfileId: settings.mo2ProfileId, manualModRoot: settings.manualModRoot, wolvenKitCli: cli, cacheDir: this.options.resolverCache, log: this.options.log });
+    blinkPhase(`installation acquire done opens=${this.installations.stats.opens} checks=${this.installations.stats.checks}`);
     superseded();
     entry.installation = installation;
     const graph = installation.graph, decoder = installation.fetcher.nativeDecoder;
     // The face: skeleton and the facial setup V's face rig names (design D1), natively first; the game's blink clip likewise.
+    blinkPhase("face setup selection start");
     const setup = await this.faceSetup(installation);
+    blinkPhase("face setup selection done");
     superseded();
     const [skeletonRef, additivesRef] = [FACE_SKELETON, FACIAL_ADDITIVES].map(refFromPath) as [DepotRef, DepotRef], setupRef = setup.ref;
     const documents = new Map<string, unknown>(), identity: string[] = [];
     for (const ref of [skeletonRef, setupRef]) {
+      const name = ref === skeletonRef ? "skeleton" : "setup";
+      blinkPhase(`${name} CPU turn start`);
       await turn();
+      blinkPhase(`${name} CPU turn done`);
       const located = graph.locate(ref), archive = located.lookup.winner;
       if (!archive) continue;
       identity.push(`${fingerprint(archive.id)}|${located.entry.hash}`);
       if (decoder) {
+        blinkPhase(`${name} native document start`);
         try { const document = await nativeDocument(decoder, archive, located.entry.hash, this.options.log); if (document) documents.set(ref.hash, document); }
         catch (error) { hostFailure("facial", "native_face_unreadable", "XF Studio's reader couldn't read V's face; WolvenKit is asked instead.", error, "warn"); }
+        blinkPhase(`${name} native document done`);
       }
     }
     superseded();
@@ -522,6 +540,7 @@ export class FacialHost {
     const wanted = [{ ref: skeletonRef, extension: "rig" }, { ref: setupRef, extension: "facialsetup" }].filter(item => !documents.has(item.ref.hash));
     if (wanted.length) {
       if (!cli) throw Error("The face skeleton or facial setup couldn't be read by XF Studio's reader, and WolvenKit isn't set up.");
+      blinkPhase("rig/setup WolvenKit fallback start");
       const files = await this.readJson(cli, tool, graph, wanted, signal);
       superseded();
       for (const item of wanted) {
@@ -530,13 +549,17 @@ export class FacialHost {
         documents.set(item.ref.hash, readDocument(found.file));
         if (item.ref === skeletonRef) rigJson = found.file; else setupJson = found.file;
       }
+      blinkPhase("rig/setup WolvenKit fallback done");
     }
     const skeletonDocument = documents.get(skeletonRef.hash), setupDocument = documents.get(setupRef.hash);
     if (!skeletonDocument || !setupDocument) throw Error("The face skeleton or facial setup is missing from the game files.");
+    blinkPhase("rig vocabulary/rest start");
     const { vocabulary, rest } = readFaceRig(skeletonDocument, setupDocument, setup.path);
     const wrinkleSources = wrinkleSourceTracks(setupDocument), eyes = eyeTracks(setupDocument);
     let compiled: CompiledFacialRig | null = null, compileError: string | undefined;
+    blinkPhase("rig vocabulary/rest done; compile CPU turn start");
     await turn();
+    blinkPhase("compile CPU turn done; compile start");
     const compileStarted = performance.now();
     try { compiled = compileFacialRig(skeletonDocument, setupDocument); }
     catch (error) {
@@ -544,20 +567,26 @@ export class FacialHost {
       hostFailure("facial", "face_not_compiled", "XF Studio's facial solver couldn't take V's facial setup.", error, "warn");
     }
     this.options.log?.(`Facial setup compiled in ${Math.round(performance.now() - compileStarted)} ms.`);
+    blinkPhase("compile done; blink source start");
     let blink: Rig["blink"] = null;
     try {
       const located = graph.locate(additivesRef), archive = located.lookup.winner;
       let clips: ReadonlyMap<string, import("../facial-catalogue").SetClip> | null = null;
       if (archive && decoder) {
+        blinkPhase("blink native clip start");
         const clip = await nativeClip(decoder, archive.id, located.entry.hash, BLINK_CLIP).catch(() => null);
+        blinkPhase("blink native clip done");
         if (clip) clips = new Map([[clip.name, clip]]);
       }
       if (!clips && archive && cli) {
+        blinkPhase("blink WolvenKit fallback start");
         const additives = (await this.readJson(cli, tool, graph, [{ ref: additivesRef, extension: "anims" }], signal)).get(additivesRef.hash);
         if (additives) clips = readAnimSet(readDocument(additives.file)).clips;
+        blinkPhase("blink WolvenKit fallback done");
       }
       if (clips) blink = readBlink(clips, vocabulary);
     } catch (error) { hostFailure("facial", "blink_unreadable", `The game's blink (${BLINK_CLIP}) couldn't be read; expressions show without it.`, error, "warn"); }
+    blinkPhase("blink source done; rig publish start");
     superseded();
     const baked = (setupDocument as { Data?: { RootChunk?: { bakedData?: { Data?: { JointRegions?: unknown } } } } }).Data?.RootChunk?.bakedData?.Data?.JointRegions;
     entry.rigData = { vocabulary, rest, blink, setup, rigJson, setupJson, wrinkleSources, eyeTracks: eyes, compiled, ...(compileError ? { compileError } : {}),
@@ -601,7 +630,11 @@ export class FacialHost {
       const graph = installation.graph, rigRef = refFromPath(PHOTO_MODE_FACE_RIG);
       const document = async (ref: DepotRef) => {
         const located = graph.locate(ref), winner = located.lookup.winner;
-        return winner ? (await installation.fetcher.fetch(winner, located.entry, "app"))?.document ?? null : null;
+        const label = ref.hash === rigRef.hash ? "face rig app" : "face rig patch";
+        blinkPhase(`${label} fetch start`);
+        const document = winner ? (await installation.fetcher.fetch(winner, located.entry, "app"))?.document ?? null : null;
+        blinkPhase(`${label} fetch done`);
+        return document;
       };
       const apps: unknown[] = [];
       const rig = await document(rigRef);
@@ -701,13 +734,18 @@ export class FacialHost {
    * eyes' morph targets. Null, with the reason logged, when the face or the clip can't be read.
    */
   async blink(): Promise<FacialBlinkRecord | { reason: string }> {
+    blinkPhase("request");
     // With the IO Suite oracle in use the whole face is the oracle's: the page reads the developer's prepared blink instead.
     if (!("inProcess" in this.options.solver())) return { reason: ORACLE_BLINK };
     const entry = this.ensure();
-    return hostWork(this.options.jobs, "shown", () => this.readBlink(entry), entry.controller.signal);
+    const answer = await hostWork(this.options.jobs, "shown", () => this.readBlink(entry), entry.controller.signal);
+    blinkPhase("answer ready");
+    return answer;
   }
   private async readBlink(entry: Preparation): Promise<FacialBlinkRecord | { reason: string }> {
+    blinkPhase("shown admitted; waiting for rig");
     await entry.rigReady;
+    blinkPhase("rig ready");
     const rig = entry.rigData;
     if (!rig?.compiled || !rig.blink) return { reason: !rig ? entry.rig.reason ?? "V's face couldn't be read from your game files." : "The game's blink couldn't be read from your game files." };
     rig.blinkRecord ??= this.bakeBlink(entry, rig).catch(error => {
@@ -718,21 +756,27 @@ export class FacialHost {
     return (await rig.blinkRecord) ?? { reason: "The game's blink couldn't be prepared." };
   }
   private async bakeBlink(entry: Preparation, rig: Rig): Promise<FacialBlinkRecord> {
+    blinkPhase("clip bake start");
     const compiled = rig.compiled!, blink = rig.blink!, rest = bakedRest(compiled);
     const clipTimes = Array.from({ length: Math.min(MAX_SOLVE_FRAMES, Math.round(blink.clip.duration * BLINK_RATE) + 1) }, (_, i) => Math.min(blink.clip.duration, i / BLINK_RATE));
     const closureTimes = Array.from({ length: BLINK_STEPS + 1 }, (_, i) => i / BLINK_STEPS);
     const [clip, closure] = bakeClips(compiled, [{ frames: clipTimes.map(t => clipFrame(compiled, blink.clip, t)), times: clipTimes },
       { frames: closureTimes.map(c => clipFrame(compiled, blink.clip, c * blink.closedTime)), times: closureTimes }]) as [BakedFrames, BakedFrames];
+    blinkPhase("clip bake done");
     // Each eye shape's seats (the blink re-seats its rig on the shown shape; knowledge/facial-animation.md §4).
     let shapes: Record<string, Record<string, number[]>> | undefined;
     try {
       const installation = entry.installation, graph = installation?.graph;
-      const read = async (path: string) => {
+      const read = async (path: string, name: string) => {
+        blinkPhase(`${name} morph fetch start`);
         const ref = refFromPath(path), winner = graph?.locate(ref).lookup.winner;
-        return winner && installation ? (await installation.fetcher.fetch(winner, graph!.locate(ref).entry, "morphtarget"))?.document ?? null : null;
+        const document = winner && installation ? (await installation.fetcher.fetch(winner, graph!.locate(ref).entry, "morphtarget"))?.document ?? null : null;
+        blinkPhase(`${name} morph fetch done`);
+        return document;
       };
-      const [head, eyes] = await Promise.all([read(FACE_MORPHS), read(EYE_MORPHS)]);
+      const [head, eyes] = await Promise.all([read(FACE_MORPHS, "head"), read(EYE_MORPHS, "eyes")]);
       if (head) shapes = eyeShapeSeats(rest, rig.regions, morphBinds(head), eyes ? morphBinds(eyes) : []);
+      blinkPhase("eye seats done");
     } catch (error) { hostFailure("facial", "eye_shapes_unreadable", "The eye shapes' joint seats couldn't be read; the blink turns about the base shape.", error, "warn"); }
     const description = { schema: "xfs/game-blink-1",
       closure: { animation: "eye_blink_closure", tracks: ["eye_l_blink", "eye_r_blink"], steps: BLINK_STEPS, clip: BLINK_CLIP, closedTime: blink.closedTime },
@@ -1124,7 +1168,10 @@ export function createFacialHandler(host: FacialHost) {
     if (url.pathname === FACIAL_EXPRESSIONS_ENDPOINT && request.method === "GET") return json(host.expressions({ background: url.searchParams.get("prefetch") === "1" }));
     if (url.pathname === FACIAL_BLINK_ENDPOINT && request.method === "GET") {
       const blink = await host.blink();
-      return "reason" in blink ? json({ code: "unavailable", error: blink.reason }, 503) : json(blink);
+      blinkPhase("response creation start");
+      const response = "reason" in blink ? json({ code: "unavailable", error: blink.reason }, 503) : json(blink);
+      blinkPhase("response creation done");
+      return response;
     }
     if (url.pathname === FACIAL_SOLVE_ENDPOINT && request.method === "POST") {
       if (request.headers.get("Content-Type")?.split(";")[0] !== "application/json") return json({ ok: false, code: "invalid", message: "Send JSON." }, 400);

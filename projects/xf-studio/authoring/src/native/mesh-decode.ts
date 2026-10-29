@@ -20,6 +20,7 @@ import { meshGeometry, morphGeometry, type NativeGeometry } from "./mesh-glb";
 import { referencePath } from "./morph-blob";
 import { classifyNativeFailure, NativeUnsupportedError, type NativeFailureKind } from "./native-errors";
 import type { RedDocument } from "./red-model";
+import type { PrioritisedNativeRequest } from "./native-priority";
 
 /**
  * Version of the mesh output rules; part of the mesh reader's identity in cache keys. Bump it whenever what a mesh decodes to changes
@@ -32,7 +33,7 @@ export const NATIVE_MESH_VERSION = 3;
 /** The reader's caps with room for a large mesh's buffers (decompressed bytes count against `maxDecodedBytes`). */
 export const MESH_READ_LIMITS: NativeLimits = Object.freeze({ ...DEFAULT_LIMITS, maxDecodedBytes: 160 * 2 ** 20 });
 
-export interface NativeGeometryRequest {
+export interface NativeGeometryRequest extends PrioritisedNativeRequest {
   readonly archivePath: string;
   /** Depot hash, decimal. */
   readonly hash: string;

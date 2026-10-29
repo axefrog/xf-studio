@@ -40,6 +40,7 @@ import type { NativeFailureKind } from "../../native/native-errors";
 import { NATIVE_JSON_PAYLOADS, type NativeAnswerLedger, NativeFirstFetcher, openNativeDecoderAsync } from "../../native/native-fetch-port";
 import { GAME_OODLE_LIBRARY } from "../../native/oodle";
 import { inLowerLane, personWorking } from "../../host/host-jobs";
+import { nativeDecodeLanes } from "./native-decode-lanes";
 
 export interface InstallationOptions {
   readonly baseOnly?: boolean;
@@ -729,7 +730,7 @@ export class ResolverFetcher implements ResourceFetchPort {
   /** `fetchJsonResource`'s null answers that may not repeat (the catalogue's texts; cc-catalogue-host.ts `readTextResources`). */
   jsonTransientNulls = 0;
   constructor(readonly wolvenKit: WolvenKitFetcher, route: NativeRoute | null | undefined, cacheDir: string) {
-    this.native = route?.decoder ? new NativeFirstFetcher(route.decoder, wolvenKit, { strict: route.strict,
+    this.native = route?.decoder ? new NativeFirstFetcher(nativeDecodeLanes(route.decoder), wolvenKit, { strict: route.strict,
       ledger: new NativeAnswerFiles(cacheDir, route.decoder.identity), onFallback: (kind, resource, message, stack) => this.fellBack(kind, resource, message, stack) }) : null;
   }
   /** WolvenKit's identity (`WolvenKitFetcher.tool`): the key of its JSON cache and of the choice manifests. */

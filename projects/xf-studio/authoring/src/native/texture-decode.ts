@@ -17,6 +17,7 @@ import { DecodeSession, DEFAULT_LIMITS, type NativeLimits } from "./limits";
 import { classifyNativeFailure, type NativeFailureKind } from "./native-errors";
 import { DEFAULT_TEXTURE_LIMITS, mipRows, servedMip, textureLayout, type TextureLimits } from "./xbm-texture";
 import { DEFAULT_MASK_LIMITS, maskLayers, maskLayout, type MaskLimits } from "./mlmask";
+import type { PrioritisedNativeRequest } from "./native-priority";
 
 /**
  * Version of the texture output rules; part of the texture reader's identity in cache keys. Bump it whenever what a texture decodes to
@@ -27,7 +28,7 @@ export const NATIVE_TEXTURE_VERSION = 1;
 /** The reader's caps with room for a large texture's data buffer (decompressed bytes count against `maxDecodedBytes`). */
 export const TEXTURE_READ_LIMITS: NativeLimits = Object.freeze({ ...DEFAULT_LIMITS, maxDecodedBytes: 160 * 2 ** 20 });
 
-export interface NativeTextureRequest {
+export interface NativeTextureRequest extends PrioritisedNativeRequest {
   readonly archivePath: string;
   /** Depot hash, decimal. */
   readonly hash: string;
@@ -85,7 +86,7 @@ export async function decodeTextureFromPool(pool: NativeArchivePool, decompress:
  * decodes to changes (layer sizes, channels, PNG encoding).
  */
 export const NATIVE_MASK_VERSION = 1;
-export interface NativeMaskRequest {
+export interface NativeMaskRequest extends PrioritisedNativeRequest {
   readonly archivePath: string;
   /** Depot hash, decimal. */
   readonly hash: string;

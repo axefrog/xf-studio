@@ -15,8 +15,9 @@ import { readResourceJson } from "./resource-document";
 import { decodeGeometryFromPool, type NativeGeometryOutcome, type NativeGeometryRequest } from "./mesh-decode";
 import { decodeMaskFromPool, decodeTextureFromPool, type NativeMaskOutcome, type NativeMaskRequest, type NativeTextureOutcome, type NativeTextureRequest } from "./texture-decode";
 import { decodeAnimFromPool, type NativeAnimOutcome, type NativeAnimRequest } from "./anim-decode";
+import type { NativePriority, PrioritisedNativeRequest } from "./native-priority";
 
-export interface NativeDecodeRequest {
+export interface NativeDecodeRequest extends PrioritisedNativeRequest {
   /** The archive's path (the resolver's `MountedArchive.id`). */
   readonly archivePath: string;
   /** Depot hash, decimal. */
@@ -46,11 +47,6 @@ export interface NativeDecodeRequest {
   readonly maxDepth?: number;
   /** This request's time budget in a worker, when it is not the decoder's (a much larger resource than the resolver reads). */
   readonly timeoutMs?: number;
-  /**
-   * `background`: a worker decodes it only when no other request waits (the creator catalogue's hundreds of text reads never hold up
-   * a V's resolution, whose reads come one chain level at a time).
-   */
-  readonly priority?: "background";
 }
 
 export type NativeDecodeOutcome =
@@ -268,7 +264,8 @@ type Pending =
   | { kind: "anim"; request: NativeAnimRequest; resolve: (outcome: NativeAnimOutcome) => void };
 
 /**
- * Decodes in a worker, one resource at a time, each within `timeoutMs`; a `background` request waits until no other does. A resource over its time budget, or a worker that dies,
+ * Decodes in a worker, one resource at a time, each within `timeoutMs`; queued person work precedes shown/default FIFO work, then
+ * background work. The active request finishes first; priority adds no dependency/quiet-period waits. A resource over its time budget, or a worker that dies,
  * answers `over-budget` or `internal` and the worker is replaced before the next resource.
  *
  * Only the current worker is heard: every message, error and exit is checked against it, and an outcome must carry the id of the
@@ -284,9 +281,12 @@ type Pending =
 export class WorkerDecoder implements NativeDecoder {
   private current: { worker: DecodeWorker; ready: boolean; startTimer: ReturnType<typeof setTimeout> | null } | null = null;
   private readonly queue: Pending[] = [];
-  /** Requests marked `background`, decoded only while `queue` is empty. */
+  private readonly personQueue: Pending[] = [];
+  /** Requests marked `background`, decoded only while both foreground queues are empty. */
   private readonly backgroundQueue: Pending[] = [];
   private busy: { pending: Pending; id: number; sent: boolean; timer: ReturnType<typeof setTimeout> | null } | null = null;
+  /** Temporary PREV-196 probe: weak keys retain no completed requests and add no timer. */
+  private traceTimes?: WeakMap<Pending, { queued: number; sent?: number; behind: string }>;
   private nextId = 1;
   private closed = false;
   private startFailures = 0;
@@ -307,31 +307,51 @@ export class WorkerDecoder implements NativeDecoder {
     // A decoder closed while a route still holds it (the game's library changed, or the host let the game folder go) answers like one
     // that is down: the resource falls back and is read again later, never counted as a reader bug (NATIVE-28).
     if (this.closed) return Promise.resolve({ ok: false, kind: "unavailable", message: CLOSED });
-    return new Promise(resolve => { (request.priority === "background" ? this.backgroundQueue : this.queue).push({ kind: "decode", request, resolve }); this.pump(); });
+    return new Promise(resolve => this.enqueue({ kind: "decode", request, resolve }));
   }
 
   /** A texture's served PNG, queued like any request (its own `timeoutMs`, else the decoder's). */
   decodeTexture(request: NativeTextureRequest): Promise<NativeTextureOutcome> {
     if (this.closed) return Promise.resolve({ ok: false, kind: "unavailable", message: CLOSED });
-    return new Promise(resolve => { this.queue.push({ kind: "texture", request, resolve }); this.pump(); });
+    return new Promise(resolve => this.enqueue({ kind: "texture", request, resolve }));
   }
 
   /** A layer mask's layers, queued like any request (its own `timeoutMs`, else the decoder's). */
   decodeMask(request: NativeMaskRequest): Promise<NativeMaskOutcome> {
     if (this.closed) return Promise.resolve({ ok: false, kind: "unavailable", message: CLOSED });
-    return new Promise(resolve => { this.queue.push({ kind: "mask", request, resolve }); this.pump(); });
+    return new Promise(resolve => this.enqueue({ kind: "mask", request, resolve }));
   }
 
   /** A mesh's or morph target's GLB, queued like any request (its own `timeoutMs`, else the decoder's). */
   decodeGeometry(request: NativeGeometryRequest): Promise<NativeGeometryOutcome> {
     if (this.closed) return Promise.resolve({ ok: false, kind: "unavailable", message: CLOSED });
-    return new Promise(resolve => { this.queue.push({ kind: "geometry", request, resolve }); this.pump(); });
+    return new Promise(resolve => this.enqueue({ kind: "geometry", request, resolve }));
   }
 
   /** An animation request, queued like any request (`background` ones wait until no other does). */
   decodeAnim(request: NativeAnimRequest): Promise<NativeAnimOutcome> {
     if (this.closed) return Promise.resolve({ ok: false, kind: "unavailable", message: CLOSED });
-    return new Promise(resolve => { (request.priority === "background" ? this.backgroundQueue : this.queue).push({ kind: "anim", request, resolve }); this.pump(); });
+    return new Promise(resolve => this.enqueue({ kind: "anim", request, resolve }));
+  }
+
+  private traceLabel(pending: Pending): string {
+    return `${pending.kind}${pending.kind === "anim" ? `/${pending.request.op}` : ""}:${pending.request.hash}[${pending.request.priority ?? "default"}]`;
+  }
+  private enqueue(pending: Pending): void {
+    const priority = pending.request.priority;
+    if (process.env.XFS_TRACE_BLINK === "1") {
+      const ahead = [...(this.busy ? [this.traceLabel(this.busy.pending)] : []),
+        ...this.personQueue.slice(0, 3).map(p => this.traceLabel(p)),
+        ...(priority !== "person" ? this.queue.slice(0, 3).map(p => this.traceLabel(p)) : []),
+        ...(priority === "background" ? this.backgroundQueue.slice(0, 3).map(p => this.traceLabel(p)) : [])];
+      (this.traceTimes ??= new WeakMap()).set(pending, { queued: performance.now(), behind: ahead.join(",") || "idle" });
+    }
+    this.queueFor(priority).push(pending);
+    this.pump();
+  }
+
+  private queueFor(priority?: NativePriority): Pending[] {
+    return priority === "person" ? this.personQueue : priority === "background" ? this.backgroundQueue : this.queue;
   }
 
   private spawn(): void {
@@ -385,17 +405,17 @@ export class WorkerDecoder implements NativeDecoder {
   }
 
   private pump(): void {
-    if (this.busy || this.closed || !(this.queue.length || this.backgroundQueue.length)) return;
+    if (this.busy || this.closed || !(this.personQueue.length || this.queue.length || this.backgroundQueue.length)) return;
     if (!this.current) {
       if (Date.now() < this.unavailableUntil) {
         const lasting = this.unavailableUntil === Infinity;
-        for (const pending of [...this.queue.splice(0), ...this.backgroundQueue.splice(0)]) pending.resolve({ ok: false, kind: "unavailable", message: this.unavailableReason, ...(lasting ? { lasting } : {}) });
+        for (const pending of [...this.personQueue.splice(0), ...this.queue.splice(0), ...this.backgroundQueue.splice(0)]) pending.resolve({ ok: false, kind: "unavailable", message: this.unavailableReason, ...(lasting ? { lasting } : {}) });
         return;
       }
       this.spawn();
     }
     this.clearIdle();
-    this.busy = { pending: (this.queue.shift() ?? this.backgroundQueue.shift())!, id: this.nextId++, sent: false, timer: null };
+    this.busy = { pending: (this.personQueue.shift() ?? this.queue.shift() ?? this.backgroundQueue.shift())!, id: this.nextId++, sent: false, timer: null };
     this.send();
   }
 
@@ -408,7 +428,7 @@ export class WorkerDecoder implements NativeDecoder {
    * it releases the library and goes (NATIVE-42).
    */
   private idleLater(): void {
-    if (this.busy || this.closed || !this.current || this.queue.length || this.backgroundQueue.length) return;
+    if (this.busy || this.closed || !this.current || this.personQueue.length || this.queue.length || this.backgroundQueue.length) return;
     this.clearIdle();
     if (this.untrimmed) this.trimTimer = unref(setTimeout(() => {
       this.trimTimer = null;
@@ -450,6 +470,8 @@ export class WorkerDecoder implements NativeDecoder {
     this.untrimmed = true;
     busy.timer = setTimeout(() => this.timeout(worker, id), this.budget(busy.pending.request));
     const pending = busy.pending;
+    const trace = this.traceTimes?.get(pending);
+    if (trace) trace.sent = performance.now();
     worker.postMessage(pending.kind === "texture" ? { type: "texture", id, request: pending.request }
       : pending.kind === "mask" ? { type: "mask", id, request: pending.request }
       : pending.kind === "geometry" ? { type: "geometry", id, request: pending.request }
@@ -458,6 +480,14 @@ export class WorkerDecoder implements NativeDecoder {
 
   private finish(outcome: AnyOutcome): void {
     const busy = this.busy!;
+    const trace = this.traceTimes?.get(busy.pending);
+    if (trace) {
+      const now = performance.now(), sent = trace.sent ?? now;
+      if (now - trace.queued >= 50) console.info(`[PREV-196 native @${now.toFixed(1)} ms] ${this.traceLabel(busy.pending)} ` +
+        `wait=${(sent - trace.queued).toFixed(1)} run=${(now - sent).toFixed(1)} ms behind=${trace.behind} ` +
+        `result=${outcome.ok ? "root" in outcome ? outcome.root : "ok" : outcome.kind}`);
+      this.traceTimes?.delete(busy.pending);
+    }
     if (busy.timer) clearTimeout(busy.timer);
     this.busy = null;
     // The worker answers each message with an outcome of that message's kind; a failure has the same shape for both.
@@ -485,9 +515,10 @@ export class WorkerDecoder implements NativeDecoder {
 
   close(): void {
     this.closed = true;
+    this.traceTimes = undefined;
     this.clearIdle();
     this.release();
     if (this.busy) { if (this.busy.timer) clearTimeout(this.busy.timer); this.busy.pending.resolve({ ok: false, kind: "unavailable", message: CLOSED }); this.busy = null; }
-    for (const pending of [...this.queue.splice(0), ...this.backgroundQueue.splice(0)]) pending.resolve({ ok: false, kind: "unavailable", message: CLOSED });
+    for (const pending of [...this.personQueue.splice(0), ...this.queue.splice(0), ...this.backgroundQueue.splice(0)]) pending.resolve({ ok: false, kind: "unavailable", message: CLOSED });
   }
 }
