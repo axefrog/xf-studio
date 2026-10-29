@@ -114,6 +114,8 @@ export function applyGestureEdit(action: GestureEdit, models: LayerModelRegistry
     proposal.fields[fieldIndex] = { ...proposal.fields[fieldIndex], ...action.next };
   } else if (action.kind === "path.replacePoints") proposal.points = action.points;
   const validated = parseRecipe({ uv: "gltf-uv0-top-left", layers: [proposal] }, models).layers[0];
+  if (action.kind === "path.replacePoints" && action.selected !== undefined &&
+      (!Number.isInteger(action.selected) || action.selected < 0 || action.selected >= validated.points.length)) return false;
   if (JSON.stringify(validated) === JSON.stringify(layer)) return false;
   if (action.kind === "shape.replace") Object.assign(layer, validated);
   else if (action.kind === "point.replace") Object.assign(layer.points[pointIndex], validated.points[pointIndex]);

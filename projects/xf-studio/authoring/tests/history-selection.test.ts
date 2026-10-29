@@ -69,6 +69,37 @@ function squareWorkspace() {
   return workspace;
 }
 
+for (const selected of [99, 5, -1, 1.5]) test(`a path gesture rejects resulting selection ${selected} without changing content, selection or history`, () => {
+  const core = fixture(squareWorkspace()), { app, document, dispose } = core;
+  try {
+    const id = dragOutAndBack(core), before = structuredClone(document.recipe), history = document.history.data(), timeline = document.history.timeline();
+    const points = [...structuredClone(document.recipe.layers[0].points), { u: .2, v: .5, weight: .5 }];
+    expect(app.beginGesture("uv", id)).toBe(true);
+    const pending = document.history.data();
+    expect(app.applyGesture("uv", { kind: "path.replacePoints", points, selected })).toBe(false);
+    expect(document.recipe).toEqual(before);
+    expect(document.selected).toBe(1);
+    expect(document.history.data()).toEqual(pending);
+    app.endGesture("uv");
+    expect(document.recipe).toEqual(before);
+    expect(document.selected).toBe(1);
+    expect(document.history.data()).toEqual(history);
+    expect(document.history.timeline()).toEqual(timeline);
+  } finally { dispose(); }
+});
+
+test("a path gesture validates selection against the resulting contour rather than the old one", () => {
+  const { app, document, dispose } = fixture(squareWorkspace());
+  try {
+    const layer = document.recipe.layers[0], points = [...structuredClone(layer.points), { u: .2, v: .5, weight: .5 }];
+    expect(app.beginGesture("uv", layer.id)).toBe(true);
+    expect(app.applyGesture("uv", { kind: "path.replacePoints", points, selected: 4 })).toBe(true);
+    app.endGesture("uv");
+    expect(document.recipe.layers[0].points).toHaveLength(5);
+    expect(document.selected).toBe(4);
+  } finally { dispose(); }
+});
+
 test("UV double-click publishes insertion and selection together, and Undo/Redo restore both endpoints", () => {
   const keys = ["document", "window", "ResizeObserver"] as const;
   const previous = keys.map(key => Object.getOwnPropertyDescriptor(globalThis, key));
