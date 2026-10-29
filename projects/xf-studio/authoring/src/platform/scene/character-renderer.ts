@@ -1,13 +1,14 @@
 import * as THREE from "three";
 import { linkPacer } from "./link-pacing";
-import { gpuDrained, gpuGate } from "./gpu-gate";
+import { gpuDrained } from "./gpu-gate";
+import { acquireUploadBudget, UPLOAD_WAIT_FRAMES } from "./gpu-upload-budget";
 import { contextGeneration } from "./context-generation";
 import { markPhase } from "../../character/character-timing";
 import { copyMaterialShading, extendSkin, fullSkinDepthMaterial, releaseFullSkinDepth } from "../../materials/render/skin";
 import { EYE_AMBIENT_BOOST, EYE_AXIS_TURN, EYE_FLAT_ROUGHNESS, IRIS_MASK_ENCODING } from "../../materials/render/eye-material";
 import type { ProfileEncoding } from "../../materials/hair-colour-model";
 import { prepareTemplateGeometry, type AdapterContext, type ResolvedSkinSurface } from "../../materials/render/character-material-adapters";
-import { BODY_SHAPE_KEY, DetailPartPool, detailLedgerOf, loadCharacterDetails, uploadStep, uploadUnfinished, type CharacterDetailFetch, type LoadedCharacterComponent, type WarmedFiles,
+import { BODY_SHAPE_KEY, DetailPartPool, detailLedgerOf, loadCharacterDetails, uploadStep, uploadStepTexels, uploadUnfinished, type CharacterDetailFetch, type LoadedCharacterComponent, type WarmedFiles,
   type LoadedCharacterDetails } from "../../character/render/character-detail-loader";
 import { chunkOfMesh, type CharacterDetail, type DetailSlot } from "../../character/render-detail";
 import { coreAlbedoReader, coreRoughnessReader, createHeadSkinPlacement, skinSurfaceUnderlay, type BrowUnderlayEvidence, type HeadSkinPlacement } from "../../character/render/head-skin-placement";
@@ -213,10 +214,10 @@ export function createCharacterRenderer(input: {
     const onHead = skinItem && fresh.includes(skinItem) && skinPlacement.place(skinItem.meshes).mode === "core-head" ? skinItem : null;
     const own = (item: LoadedCharacterComponent) => item !== onHead;
     let started = performance.now();
+    const frame = async () => { gate?.checkpoint(); await preparation.frame(); started = performance.now(); };
     const pace = async () => {
       if (performance.now() - started < PREPARE_FRAME_MS) return;
-      await preparation.frame();
-      started = performance.now();
+      await frame();
     };
     /**
      * Texels this preparation sent the GPU (a bake counts as `DRAIN_TEXELS`): what a first use could wait behind. A preparation that sent
@@ -232,18 +233,23 @@ export function createCharacterRenderer(input: {
         while (needsWork(texture)) {
           if (signal.aborted) return;
           await pace();
-          while (!uploadGate().idle() && !signal.aborted) { await preparation.frame(); started = performance.now(); }
+          for (let waited = 0; needsWork(texture) && !signal.aborted && !uploadGate().canSend(uploadStepTexels(texture, renderer)); waited++) {
+            if (waited >= UPLOAD_WAIT_FRAMES) throw Error("The GPU did not complete the preceding texture uploads.");
+            await frame();
+          }
           if (signal.aborted) return;
+          // Another uploader can finish this shared map during the frame we waited for.
           if (upload(texture)) break;
         }
       }
+      gate?.checkpoint();
     };
     /**
      * Wait (a frame at a time) until the GPU has done what was sent so far: a synchronous call behind a queue of 4096² uploads waits for
      * all of them (a bake's first error check took 92 ms), a fence's status never waits.
      */
     const drained = async () => {
-      await gpuDrained(renderer, { frame: preparation.frame, frames: 120, signal });
+      await gpuDrained(renderer, { frame, frames: 120, signal });
       started = performance.now();
     };
     for (const item of fresh.filter(own)) for (const mesh of item.meshes) prepareMesh(item, mesh);
@@ -269,7 +275,7 @@ export function createCharacterRenderer(input: {
     // Each part's programs, about one per step, a frame let through whenever a step used up its share (a whole part in one call was 306 ms).
     const compiled: ReturnType<ReturnType<DetailPreparation["compile"]>["result"]>[] = [];
     // Only a few programs linking at once (link-pacing.ts): all of a V's at once took every core, and the page's thread with them.
-    const links = linkPacer({ parallel: renderer.extensions?.has("KHR_parallel_shader_compile") ?? false, frame: async () => { await preparation.frame(); started = performance.now(); } });
+    const links = linkPacer({ parallel: renderer.extensions?.has("KHR_parallel_shader_compile") ?? false, frame });
     for (const item of fresh) {
       const material = item === onHead ? item.meshes[0]!.material as THREE.MeshStandardMaterial : null;
       if (material) wearOnHead(material);
@@ -358,16 +364,17 @@ export function createCharacterRenderer(input: {
   /** Whether a map still needs uploading: never uploaded, or a large one part-way through its bands (`uploadStep`). */
   const needsWork = (texture: THREE.Texture) => !released.has(texture) && (needsUpload(texture) || uploadUnfinished(texture));
   /**
-   * The GPU process caught up with the last upload sent (gpu-gate.ts): the next is sent only then, so none waits inside the call. Its fence
-   * belongs to the context generation it was made in, and the renderer's disposal deletes the last one.
+   * One bounded upload window shared by every runtime on this renderer. Waiting for each band's fence serialises quiet-context latency;
+   * instead wait only when outstanding texels fill the window, and checkpoint a turn's uploads together.
    */
-  let gate: ReturnType<typeof gpuGate> | undefined, disposed = false;
-  const uploadGate = () => gate ??= gpuGate(renderer);
+  let gate: ReturnType<typeof acquireUploadBudget> | undefined, disposed = false;
+  const uploadGate = () => gate ??= acquireUploadBudget(renderer);
   /** One step of a map's upload (all of it, or one band of a large one); true once it needs no more. */
   const upload = (texture: THREE.Texture) => {
     if (!needsWork(texture)) return true;
+    const texels = uploadStepTexels(texture, renderer);
     const done = uploadStep(texture, renderer);
-    uploadGate().mark();
+    uploadGate().sent(texels);
     return done;
   };
   const watchRelease = (texture: THREE.Texture) => {
@@ -377,11 +384,23 @@ export function createCharacterRenderer(input: {
   function streamUploads() {
     if (uploading || !uploads.length || typeof requestAnimationFrame !== "function") return;
     uploading = true;
+    let waiting = 0;
     // Each turn just after a frame, in a task of its own (never inside the frame's own draw).
     const turn = () => {
       if (disposed) { uploads.length = 0; uploading = false; return; }
       const began = performance.now();
-      while (uploads.length && performance.now() - began < PREPARE_FRAME_MS && uploadGate().idle()) if (upload(uploads[0]!)) uploads.shift();
+      let progressed = false;
+      while (uploads.length && performance.now() - began < PREPARE_FRAME_MS) {
+        const texture = uploads[0]!;
+        if (!needsWork(texture)) { uploads.shift(); continue; }
+        if (!uploadGate().canSend(uploadStepTexels(texture, renderer))) break;
+        progressed = true;
+        if (upload(texture)) uploads.shift();
+      }
+      gate?.checkpoint();
+      waiting = progressed ? 0 : waiting + 1;
+      // Streaming is optional read-ahead. A stuck fence stops its polling; explicit preparation owns the eventual error/retry.
+      if (waiting >= UPLOAD_WAIT_FRAMES) uploads.length = 0;
       if (uploads.length) requestAnimationFrame(() => afterTask(turn)); else uploading = false;
     };
     requestAnimationFrame(() => afterTask(turn));

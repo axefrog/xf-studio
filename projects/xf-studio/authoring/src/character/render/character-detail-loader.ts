@@ -445,6 +445,20 @@ function bandsHold(texture: THREE.Texture, pending: Banded, renderer: THREE.WebG
   const stored = renderer.properties ? (renderer.properties.get(texture) as { __version?: number }).__version : texture.version;
   return inGeneration(renderer, pending.generation) && stored === texture.version && pending.bitmap.width > 0 && pending.bitmap.height > 0;
 }
+/** A usable decoded bitmap large enough for bands; the same decision is used for admission and the actual upload. */
+function bandSource(texture: THREE.Texture, renderer: THREE.WebGLRenderer) {
+  const bitmap = uploadSources.get(texture), largest = renderer.capabilities?.maxTextureSize ?? Infinity;
+  return bitmap && bitmap.width * bitmap.height >= BANDED_TEXELS && bitmap.width <= largest && bitmap.height <= largest
+    && typeof renderer.copyTextureToTexture === "function" ? bitmap : undefined;
+}
+/** Texels the next step sends, before it is admitted to the renderer's upload window. Storage-only steps cost one credit. */
+export function uploadStepTexels(texture: THREE.Texture, renderer: THREE.WebGLRenderer): number {
+  const pending = banded.get(texture);
+  if (pending && bandsHold(texture, pending, renderer)) return pending.bitmap.width * Math.min(BAND_ROWS, pending.rows - pending.next);
+  if (bandSource(texture, renderer)) return 1;
+  const image = texture.image as { width?: number; height?: number } | null;
+  return Math.max(1, (image?.width ?? 0) * (image?.height ?? 0));
+}
 /**
  * One step of `texture`'s first upload (profiles phase 4a-v-b), with `renderer`: the whole map at once (`uploadTexture`), or, for a large
  * map with a decoded bitmap, its storage first and then one band of rows per step (`copyTextureToTexture` from the bitmap; the last band
@@ -463,9 +477,7 @@ export function uploadStep(texture: THREE.Texture, renderer: THREE.WebGLRenderer
     let bitmap = uploadSources.get(texture);
     // A closed bitmap can't be uploaded from: its image is, as Three would.
     if (bitmap && !(bitmap.width > 0 && bitmap.height > 0)) { withdrawUploadSource(texture); bitmap = undefined; }
-    const largest = renderer.capabilities?.maxTextureSize ?? Infinity;
-    if (!bitmap || bitmap.width * bitmap.height < BANDED_TEXELS || bitmap.width > largest || bitmap.height > largest
-      || typeof renderer.copyTextureToTexture !== "function") {
+    if (!bitmap || !bandSource(texture, renderer)) {
       uploadTexture(texture, map => renderer.initTexture(map));
       return true;
     }

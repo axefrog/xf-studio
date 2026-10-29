@@ -3,8 +3,9 @@ import { contextGeneration, inGeneration } from "./context-generation";
 /**
  * Whether the GPU process has caught up with what the page sent before the last `mark` (a fence), asked without waiting (profiles phase
  * 4a-v-b). An upload sent while the GPU process is busy (building a shader at a draw, seconds at a time on ANGLE) waits inside the call
- * for room to pass its texels: a 1024² map's upload took 141 ms of the page's thread that way (G2). A caller that marks after each upload
- * and sends the next only once the gate is idle waits a frame instead. Without fences (WebGL 1, test stand-ins) it is always idle.
+ * for room to pass its texels: a 1024² map's upload took 141 ms of the page's thread that way (G2). This is a strict completion barrier for
+ * draws/bakes/first uses. Map uploads use gpu-upload-budget.ts instead: a quiet fence can report completion 200–290 ms late, so waiting
+ * after every band multiplies that latency. Without fences (WebGL 1, test stand-ins) it is always idle.
  *
  * The fence belongs to the context generation it was made in (context-generation.ts): once that generation ends the gate is idle and the
  * fence is forgotten (a lost context's objects went with it), and a status the context doesn't report (a fence it no longer knows) counts

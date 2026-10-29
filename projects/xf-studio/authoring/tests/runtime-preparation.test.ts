@@ -4,6 +4,7 @@ import { createLightingSetupStage } from "../src/preview/render/lighting-setup-s
 import type { StudioEnvironment } from "../src/preview/render/studio-environment";
 import { acrossContextLoss, prepareRuntime } from "../src/platform/scene/runtime-preparation";
 import { SceneResidency, type ResidencyWant } from "../src/preview/scene-residency";
+import { slowUploadRenderer, uploadMaps } from "./fixtures/slow-upload-renderer";
 
 /**
  * Preparing a scene runtime ahead (profiles phase 4a-v, experiments/043-scene-runtimes §11) without a GPU: what compiling ahead may and
@@ -228,6 +229,40 @@ async function fencedRenderer() {
 }
 const noLighting = { prepareSteps: () => ({ steps: [], programs: () => [], result: () => ({ ready: Promise.resolve(), textures: [], programs: () => [] }) }),
   prepareDisplay: () => ({ ready: Promise.resolve(), programs: () => [] }) };
+
+test("runtime maps advance several bands per frame with slow fences and stop at the outstanding texel limit (PREV-196)", async () => {
+  const { offerUploadSource } = await import("../src/character/render/character-detail-loader");
+  const { UPLOAD_TEXELS } = await import("../src/platform/scene/gpu-upload-budget");
+  const slow = slowUploadRenderer(), textures = uploadMaps();
+  for (const texture of textures) offerUploadSource(texture, { width: 4096, height: 4096, close() {} } as ImageBitmap);
+  try {
+    const done = await prepareRuntime({ renderer: slow.renderer, scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(),
+      lighting: noLighting, textures: () => textures, frame: slow.frame, now: slow.now, warmUp: () => false });
+    expect(done.uploads).toBe(3);
+    expect(slow.sends).toHaveLength(24);
+    expect(slow.peak()).toBeLessThanOrEqual(UPLOAD_TEXELS);
+    const first = slow.sends[0]!.frame;
+    expect(slow.sends.filter(sent => sent.frame === first).length).toBeGreaterThan(1);
+    expect(slow.sends.filter(sent => sent.frame > first && sent.frame < first + 15)).toEqual([]);
+    expect(slow.sends.at(-1)!.frame).toBeLessThan(90);
+  } finally { for (const texture of textures) texture.dispose(); }
+  expect(slow.fences.every(fence => fence.deleted)).toBe(true);
+});
+
+test("a spent upload window with a fence that never signals fails closed at its wait deadline and releases its fences (PREV-196)", async () => {
+  const { offerUploadSource } = await import("../src/character/render/character-detail-loader");
+  const { UPLOAD_TEXELS, UPLOAD_WAIT_FRAMES } = await import("../src/platform/scene/gpu-upload-budget");
+  const slow = slowUploadRenderer({ stuckAfterOpening: true }), textures = uploadMaps();
+  for (const texture of textures) offerUploadSource(texture, { width: 4096, height: 4096, close() {} } as ImageBitmap);
+  try {
+    await expect(prepareRuntime({ renderer: slow.renderer, scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(), lighting: noLighting,
+      textures: () => textures, frame: slow.frame, now: slow.now, warmUp: () => false })).rejects.toThrow("GPU did not complete");
+    expect(slow.peak()).toBeLessThanOrEqual(UPLOAD_TEXELS);
+    expect(slow.sends).toHaveLength(7);
+    expect(slow.frames()).toBe(15 + UPLOAD_WAIT_FRAMES);
+  } finally { for (const texture of textures) texture.dispose(); }
+  expect(slow.fences.every(fence => fence.deleted)).toBe(true);
+});
 
 test("every morph texture is made in the same rounds, not one geometry's fences after another's: the frames follow the rounds, not the sum of the steps", async () => {
   const { recording, fences, morphTextures } = await fencedRenderer();

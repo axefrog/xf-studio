@@ -171,6 +171,25 @@ const bitmapOf = (size: number) => {
   return bitmap;
 };
 
+test("upload admission counts the next band, its short tail, storage and fallback uploads (PREV-196)", async () => {
+  const THREE = await import("three");
+  const { offerUploadSource, uploadStep, uploadStepTexels } = await import("../src/character/render/character-detail-loader");
+  const { renderer } = await bandingRenderer();
+  const texture = new THREE.Texture({ width: 4096, height: 1100 });
+  offerUploadSource(texture, { width: 4096, height: 1100, close() {} } as ImageBitmap);
+  expect(uploadStepTexels(texture, renderer)).toBe(1);
+  uploadStep(texture, renderer);
+  for (let i = 0; i < 2; i++) { expect(uploadStepTexels(texture, renderer)).toBe(4096 * 512); uploadStep(texture, renderer); }
+  expect(uploadStepTexels(texture, renderer)).toBe(4096 * 76);
+  expect(uploadStep(texture, renderer)).toBe(true);
+  const whole = new THREE.Texture({ width: 1024, height: 1024 });
+  expect(uploadStepTexels(whole, renderer)).toBe(1024 * 1024);
+  const large = new THREE.Texture({ width: 8192, height: 8192 });
+  offerUploadSource(large, bitmapOf(8192) as unknown as ImageBitmap);
+  expect(uploadStepTexels(large, (await bandingRenderer({ maxTextureSize: 4096 })).renderer)).toBe(8192 * 8192);
+  large.dispose(); texture.dispose(); whole.dispose();
+});
+
 test("a banded upload a lost context interrupted starts again after the restore, from its bitmap, and is never marked done early (4a-v-b review 3)", async () => {
   const THREE = await import("three");
   const { offerUploadSource, uploadStep, uploadUnfinished } = await import("../src/character/render/character-detail-loader");

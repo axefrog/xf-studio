@@ -5,6 +5,7 @@ import type { HeadRig } from "../src/platform/scene/head-rig";
 import type { LoadedCharacterComponent, LoadedCharacterDetails } from "../src/character/render/character-detail-loader";
 import type { CharacterSlot, SupersededPart } from "../src/platform/api/scene";
 import { setBodyCastersOnly } from "../src/platform/scene/shadow-casters";
+import { slowUploadRenderer, uploadMaps } from "./fixtures/slow-upload-renderer";
 
 // The platform's character renderer, driven as the scene host drives it (PREV-98): which of the V's parts show, how the skin goes on
 // the head in both placements, what the scene port's character view and skin notices say, and what a feature superseding a whole slot
@@ -373,6 +374,27 @@ test("the upload gate's last fence is deleted when the renderer goes (4a-v-b rev
   expect(fences.filter(fence => !fence.deleted)).toHaveLength(1);
   character.dispose();
   expect(fences.every(fence => fence.deleted)).toBe(true);
+});
+
+test("detail preparation fills a bounded window instead of waiting fifteen frames after every upload band (PREV-196)", async () => {
+  const { offerUploadSource } = await import("../src/character/render/character-detail-loader");
+  const { UPLOAD_TEXELS } = await import("../src/platform/scene/gpu-upload-budget");
+  const slow = slowUploadRenderer(), textures = uploadMaps();
+  for (const texture of textures) offerUploadSource(texture, { width: 4096, height: 4096, close() {} } as ImageBitmap);
+  const character = createCharacterRenderer({ scene: new THREE.Scene(), renderer: slow.renderer, rig: headRig(), superseded: () => [] });
+  try {
+    await character.prepareDetails(v("slow fences", [component("hair", "hair", [skinned(quad(), "hair")], { textures })]), {
+      frame: slow.frame, compile: () => ({ steps: [], result: () => ({ ready: Promise.resolve(), textures: [], programs: () => [] }) }),
+    });
+    expect(slow.sends).toHaveLength(24);
+    expect(slow.peak()).toBeLessThanOrEqual(UPLOAD_TEXELS);
+    expect(slow.sends.filter(sent => sent.frame === slow.sends[0]!.frame).length).toBeGreaterThan(1);
+    // The first window is spent before the fence signals: no band in its fifteen-frame wait.
+    const first = slow.sends[0]!.frame;
+    expect(slow.sends.filter(sent => sent.frame > first && sent.frame < first + 15)).toEqual([]);
+    expect(slow.sends.at(-1)!.frame).toBeLessThan(90); // Per-band barriers would take at least 345 frames for these 24 bands.
+  } finally { character.dispose(); for (const texture of textures) texture.dispose(); }
+  expect(slow.fences.every(fence => fence.deleted)).toBe(true);
 });
 
 test("a face option's hair strands (the beard's cards) draw with the hair's order and cast like hair; its decals keep the face order (render gap plans §6)", () => {

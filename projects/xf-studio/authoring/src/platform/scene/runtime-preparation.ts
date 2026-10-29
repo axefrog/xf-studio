@@ -1,10 +1,11 @@
 import * as THREE from "three";
 import type { LinkedProgram } from "../../materials/render/linked-programs";
-import { uploadStep, uploadUnfinished } from "../../character/render/character-detail-loader";
+import { uploadStep, uploadStepTexels, uploadUnfinished } from "../../character/render/character-detail-loader";
 import { PREPARE_FRAME_MS } from "./character-renderer";
 import { isDrawable } from "./drawables";
 import { linkPacer } from "./link-pacing";
 import { gpuDrained, gpuGate } from "./gpu-gate";
+import { acquireUploadBudget, UPLOAD_WAIT_FRAMES } from "./gpu-upload-budget";
 import { markPhase } from "../../character/character-timing";
 import { morphGeometry, morphTextureSteps } from "./morph-textures";
 
@@ -88,8 +89,9 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
   const { renderer, scene, camera, lighting, signal } = ports;
   const now = ports.now ?? (() => performance.now()), budget = ports.budget ?? PREPARE_FRAME_MS;
   let started = now(), frames = 0;
+  let maps: ReturnType<typeof acquireUploadBudget> | undefined;
   const check = () => { if (signal?.aborted) throw signal.reason ?? new DOMException("The preparation was stopped.", "AbortError"); };
-  const frame = async () => { await ports.frame(); frames++; started = now(); check(); };
+  const frame = async () => { maps?.checkpoint(); await ports.frame(); frames++; started = now(); check(); };
   /** Wait for the next frame once this step has had its share of the page's thread. */
   const pace = async () => { if (now() - started >= budget) await frame(); };
   const report = (stage: RuntimePreparationStage, fraction: number, waiting: RuntimePreparationReport["waiting"] = null) =>
@@ -158,7 +160,9 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
   const steps = morphs.map(geometry => morphTextureSteps(renderer, geometry, { now, budget })).filter(made => made !== undefined);
   report("textures", 0);
   let uploads = 0;
-  // Each upload sent only once the GPU process caught up with the last (gpu-gate.ts): none waits inside the call. Its last fence goes with it.
+  // Maps share the renderer's bounded window with streaming/explicit detail preparation. Morph rounds retain their own true barrier:
+  // their Float32 array uploads have different costs, and CPU-only fills may proceed while the GPU catches up.
+  if (textures.length) maps = acquireUploadBudget(renderer);
   const gate = gpuGate(renderer);
   const total = textures.length + steps.length;
   try {
@@ -167,19 +171,30 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
       let counted = false;
       while (needsUpload(texture)) {
         await pace();
-        while (!gate.idle()) await frame();
+        for (let waited = 0; needsUpload(texture) && !maps!.canSend(uploadStepTexels(texture, renderer)); waited++) {
+          if (waited >= UPLOAD_WAIT_FRAMES) throw Error("The GPU did not complete the preceding texture uploads.");
+          await frame();
+        }
+        check();
+        if (!needsUpload(texture)) break;
         if (!counted) { uploads++; counted = true; }
+        const texels = uploadStepTexels(texture, renderer);
         const done = uploadStep(texture, renderer);
-        gate.mark();
+        maps!.sent(texels);
         if (done) break;
       }
       report("textures", (index + 1) / total);
     }
+    maps?.checkpoint();
     // The morph textures, all of them together a frame at a time: each frame fills what its share allows (memory only, never waiting on the
     // GPU) and sends uploads only when the GPU process caught up with the last frame's, then marks one fence for them all. One geometry after
     // another, each step behind its own fence, took 0.7–1.0 s for the head and seven small parts (experiment 044 §16).
+    let mapWait = 0;
     for (const live = [...steps]; live.length;) {
-      const open = gate.idle();
+      const mapsOpen = !maps || maps.idle();
+      if (!mapsOpen && mapWait++ >= UPLOAD_WAIT_FRAMES) throw Error("The GPU did not complete the preceding texture uploads.");
+      if (mapsOpen) mapWait = 0;
+      const open = mapsOpen && gate.idle();
       let sent = false;
       for (let worked = true; worked && live.length && now() - started < budget;) {
         worked = false;
@@ -194,7 +209,12 @@ export async function prepareRuntime(ports: RuntimePreparationPorts): Promise<Ru
       if (sent) gate.mark();
       await frame();
     }
-  } finally { for (const made of steps) made.dispose(); gate.dispose(); }
+    // The next phase draws: finish this upload window before a synchronous consumer can queue behind its remaining texels.
+    for (let waited = 0; maps && !maps.idle(); waited++) {
+      if (waited >= UPLOAD_WAIT_FRAMES) throw Error("The GPU did not complete the preceding texture uploads.");
+      await frame();
+    }
+  } finally { for (const made of steps) made.dispose(); gate.dispose(); maps?.dispose(); maps = undefined; }
   report("textures", 1);
   markPhase("run:textures-done");
   for (const step of ports.work?.() ?? []) { await frame(); step(); }
