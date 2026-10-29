@@ -58,17 +58,33 @@ export type PreviewCoreStatus = {
 };
 export type PreviewCoreResult = { directory: string; manifest: PreviewCoreManifest; reused: boolean };
 /** A hash vouches only for this generation, never merely for a path or its length. No file handles are retained. */
-export type PreviewCoreGeneration = readonly { path: string; identity: string }[];
+export type PreviewCoreGeneration = readonly { path: string; identity: string;
+  /** Unreliable stat metadata never vouches for bytes: every subsequent validation hashes this file again. */
+  sha256?: string }[];
 type VerifiedCore = PreviewCoreResult & { generation: PreviewCoreGeneration };
 const fileIdentity = (file: BigIntStats) => {
   if (!file.isFile()) throw Error("A preview core file is unavailable.");
   return [file.dev, file.ino, file.size, file.mtimeNs, file.ctimeNs, file.birthtimeNs].join(":");
 };
-const fileGeneration = (path: string) => ({ path, identity: fileIdentity(statSync(path, { bigint: true })) });
+/**
+ * Missing/zero IDs and change times, or coarse timestamps (FAT and reduced-precision stat providers), cannot identify an edit.
+ * Require both write/change stamps to demonstrate finer-than-millisecond precision. An accidentally aligned stamp loses only reuse.
+ */
+function reliableMetadata(file: BigIntStats): boolean {
+  const positive = (value: unknown): value is bigint => typeof value === "bigint" && value > 0n;
+  return positive(file.dev) && positive(file.ino) && typeof file.size === "bigint" && file.size >= 0n
+    && positive(file.birthtimeNs) && positive(file.mtimeNs) && positive(file.ctimeNs)
+    && file.mtimeNs % 1_000_000n !== 0n && file.ctimeNs % 1_000_000n !== 0n;
+}
+const fileGeneration = (path: string): PreviewCoreGeneration[number] => {
+  const file = statSync(path, { bigint: true }), identity = fileIdentity(file);
+  return reliableMetadata(file) ? { path, identity } : { path, identity, sha256: fileSha256(path) };
+};
 const VERIFICATION_FILE = "preview-verified.json";
 const VERIFICATION_SCHEMA = "xfs/preview-core-verified-1";
 /** Private receipt of a complete byte check. Compare with the exact expected files, never paths supplied by the receipt. */
 function verifiedGeneration(cache: PreviewCoreCache, name: string, generation: PreviewCoreGeneration): boolean {
+  if (generation.some(file => file.sha256 !== undefined)) return false;
   try {
     const kept = cache.readJson(join(cache.entry(name), VERIFICATION_FILE)) as { schema?: unknown; generation?: unknown };
     return kept?.schema === VERIFICATION_SCHEMA && JSON.stringify(kept.generation) === JSON.stringify(generation)
@@ -77,13 +93,18 @@ function verifiedGeneration(cache: PreviewCoreCache, name: string, generation: P
 }
 function rememberVerification(cache: PreviewCoreCache, name: string, generation: PreviewCoreGeneration): void {
   try {
-    if (previewCoreGenerationCurrent(generation))
+    if (generation.every(file => file.sha256 === undefined) && previewCoreGenerationCurrent(generation))
       writeFileAtomic(join(cache.entry(name), VERIFICATION_FILE), JSON.stringify({ schema: VERIFICATION_SCHEMA, generation }));
   } catch { /* Advisory: a missing receipt only costs another full verification. */ }
 }
-/** Bounded metadata checks on this core's known files, including files verified earlier in a multi-file read. */
+/** Check known files, including earlier reads. Reliable generations use metadata; unsupported metadata always costs a full hash. */
 export function previewCoreGenerationCurrent(generation: PreviewCoreGeneration): boolean {
-  try { return generation.every(file => fileGeneration(file.path).identity === file.identity); } catch { return false; }
+  try {
+    return generation.every(file => {
+      const current = fileGeneration(file.path);
+      return current.identity === file.identity && current.sha256 === file.sha256;
+    });
+  } catch { return false; }
 }
 export type PreviewCoreStep = "reading" | "checking" | "assembling" | "maps" | "verifying";
 export const PREVIEW_CORE_STEPS: readonly { step: PreviewCoreStep; label: string }[] = [

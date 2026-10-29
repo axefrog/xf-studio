@@ -1,5 +1,7 @@
 import { expect, spyOn, test } from "bun:test";
 import { mkdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import * as metadata from "node:fs";
+import type { BigIntStats, PathLike, StatOptions } from "node:fs";
 import * as files from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -37,6 +39,79 @@ function cachedCore() {
 }
 const assetRequest = (tag?: string) => new Request("http://127.0.0.1/assets/head.glb", { headers: tag ? { "If-None-Match": tag } : {} });
 const corrupt = (path: string) => { const data = readFileSync(path); data[0]! ^= 1; writeFileSync(path, data); };
+
+const unreliableKinds = ["coarse", "milliseconds", "zero-change", "missing-change", "zero-inode", "missing-inode", "zero-device", "missing-nanoseconds"] as const;
+/** A filesystem whose tuple survives a same-size edit. Keep real file reads, hashes, host and HTTP validation. */
+function unreliableCoreMetadata(root: string, kind: typeof unreliableKinds[number]) {
+  const actualStat = metadata.statSync, actualOpen = files.open, kept = new Map<string, BigIntStats>();
+  const projected = (path: string, value: BigIntStats): BigIntStats => {
+    if (!path.startsWith(root)) return value;
+    const previous = kept.get(path);
+    if (previous) return previous;
+    const fixed: BigIntStats = Object.assign(Object.create(Object.getPrototypeOf(value)), value);
+    if (kind === "coarse" || kind === "milliseconds") {
+      const quantum = kind === "coarse" ? 1_000_000_000n : 1_000_000n;
+      fixed.mtimeNs = value.mtimeNs / quantum * quantum;
+      fixed.ctimeNs = value.ctimeNs / quantum * quantum;
+      fixed.birthtimeNs = value.birthtimeNs / quantum * quantum;
+    }
+    if (kind === "zero-change") fixed.ctimeNs = 0n;
+    if (kind === "missing-change") Reflect.deleteProperty(fixed, "ctimeNs");
+    if (kind === "zero-inode") fixed.ino = 0n;
+    if (kind === "missing-inode") Reflect.deleteProperty(fixed, "ino");
+    if (kind === "zero-device") fixed.dev = 0n;
+    if (kind === "missing-nanoseconds") for (const field of ["mtimeNs", "ctimeNs", "birthtimeNs"]) Reflect.deleteProperty(fixed, field);
+    kept.set(path, fixed);
+    return fixed;
+  };
+  const stats = spyOn(metadata, "statSync").mockImplementation(((path: PathLike, options?: StatOptions) => {
+    if (options?.bigint) return projected(String(path), actualStat(path, { ...options, bigint: true })!);
+    return actualStat(path, options);
+  }) as typeof metadata.statSync);
+  const reads = spyOn(files, "open").mockImplementation(async (path, flags, mode) => {
+    const file = await actualOpen(path, flags, mode), getStat = file.stat.bind(file);
+    file.stat = (async (options?: StatOptions) => options?.bigint
+      ? projected(String(path), await getStat({ bigint: true })) : getStat(options)) as typeof file.stat;
+    return file;
+  });
+  return { reads, restore: () => { stats.mockRestore(); reads.mockRestore(); } };
+}
+
+test.each(unreliableKinds)("unreliable core metadata (%s) rehashes across restart and refuses stale memo/304 after a restored-mtime edit", async kind => {
+  const f = cachedCore(), fake = unreliableCoreMetadata(f.root, kind);
+  try {
+    expect((await f.host.readSnapshot()).phase).toBe("ready");
+    expect(metadata.existsSync(f.receipt)).toBe(false);
+    fake.reads.mockClear();
+    const restarted = f.restart();
+    expect((await restarted.readSnapshot()).phase).toBe("ready");
+    expect(fake.reads.mock.calls.length).toBeGreaterThan(0);
+    const asset = await restarted.asset("head.glb");
+    expect(asset).not.toBeNull();
+    expect((await servePreviewCoreAsset(restarted, "head.glb", assetRequest(asset!.etag))).status).toBe(304);
+    const previous = statSync(f.path);
+    corrupt(f.path); utimesSync(f.path, previous.atime, previous.mtime);
+    expect(asset!.current()).toBe(false); // The HTTP boundary must not rely on the degenerate tuple either.
+    expect((await servePreviewCoreAsset(restarted, "head.glb", assetRequest(asset!.etag))).status).toBe(404);
+    expect((await f.restart().readSnapshot()).phase).not.toBe("ready");
+  } finally { fake.restore(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("an existing legacy receipt cannot vouch for edited bytes on coarse metadata", async () => {
+  const f = cachedCore(), fake = unreliableCoreMetadata(f.root, "coarse");
+  try {
+    const checked = core.previewCoreReadiness(join(f.root, "cache"), join(f.root, "game"));
+    expect(checked.state).toBe("ready");
+    if (checked.state !== "ready") throw Error("The synthetic core must verify before the edit.");
+    // The prior release wrote the tuple alone, without testing its precision. The status file is not part of the receipt.
+    writeFileSync(f.receipt, JSON.stringify({ schema: "xfs/preview-core-verified-1",
+      generation: checked.generation.slice(1).map(({ path, identity }) => ({ path, identity })) }));
+    const previous = statSync(f.path);
+    corrupt(f.path); utimesSync(f.path, previous.atime, previous.mtime);
+    expect((await f.restart().readSnapshot()).phase).not.toBe("ready");
+    expect(fake.reads.mock.calls.length).toBeGreaterThan(0);
+  } finally { fake.restore(); rmSync(f.root, { recursive: true, force: true }); }
+});
 
 test("a restarted real core host reuses full verification only for unchanged file generations", async () => {
   const f = cachedCore(), read = spyOn(files, "open");
