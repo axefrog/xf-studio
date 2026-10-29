@@ -57,11 +57,13 @@ test("slice 2: synthetic and second plain-data parts share one look history, inc
     f.document.subscribe(change => { if (change === "part") observed.push(f.document.export()); });
     expect(scope.undo()).toBe(true);
     expect(f.marker.part).toBeUndefined();
-    expect(f.layers.editor).toEqual({ selected: "first" });
+    // The content edit changed second -> first, so Undo restores its before-selection.
+    expect(f.layers.editor).toEqual({ selected: "second" });
     expect((f.layers.part as SyntheticPart).layers).toHaveLength(2);
     expect(observed).toHaveLength(1);
     expect(observed[0].features[MARKER]).toBeUndefined();
     expect(scope.redo()).toBe(true);
+    expect(f.layers.editor).toEqual({ selected: "first" });
     expect(f.marker.part).toEqual({ count: 3 });
     expect((f.layers.part as SyntheticPart).layers[0].value).toBe(7);
     expect(observed).toHaveLength(2);
@@ -70,7 +72,8 @@ test("slice 2: synthetic and second plain-data parts share one look history, inc
     expect(f.marker.part).toBeUndefined();
     expect(scope.jumpTo(last)).toBe(true);
     const persisted = f.document.export(), restored = fixture(persisted);
-    try { expect(restored.document.history.undo()).toBe(true); expect(restored.marker.part).toBeUndefined(); }
+    try { expect(restored.document.history.undo()).toBe(true); expect(restored.marker.part).toBeUndefined();
+      expect(restored.layers.editor).toEqual({ selected: "second" }); }
     finally { restored.life.abort(); }
     const transaction = scope.begin([SYNTHETIC_ID, MARKER], CONTROL_TRANSACTION);
     f.marker.set({ count: 10 }, {});
@@ -87,15 +90,19 @@ test("slice 2: eye-makeup document adapter retains part/history and selection pa
     const initial = document.export();
     document.checkpoint();
     document.recipe = { ...document.recipe, layers: [...document.recipe.layers].reverse() };
+    const afterEdit = document.export();
     document.active = 0; document.selected = 1;
     const selectedId = document.recipe.layers[0].id;
     expect(document.history.undo()).toBe(true);
     expect(document.recipe).toEqual(initial.recipe);
-    expect(document.recipe.layers[document.active].id).toBe(selectedId);
-    expect(document.selected).toBe(1);
+    // Reversal changed the layer under the active index; later navigation is not part of that edit.
+    expect(document.recipe.layers[document.active].id).toBe(initial.recipe.layers[initial.active].id);
+    expect(document.selected).toBe(2);
     expect(resets).toEqual([selectedId]);
     expect(document.history.redo()).toBe(true);
-    expect(document.active).toBe(0);
+    expect(document.recipe).toEqual(afterEdit.recipe);
+    expect(document.recipe.layers[document.active].id).toBe(afterEdit.recipe.layers[afterEdit.active].id);
+    expect(document.selected).toBe(2);
     const restored = document.export(); document.restore(restored);
     expect(document.export()).toEqual(restored);
     expect(document.history.canRedo()).toBe(false);

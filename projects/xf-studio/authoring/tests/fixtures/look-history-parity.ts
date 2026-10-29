@@ -5,7 +5,8 @@
  * the collection command boundary and the standard stored form (`encodeWorkspaceAt` level 0).
  *
  * `tests/golden/look-history-parity.json` was captured with this observer from the code before the
- * look history (`0885ba6`, by `capture-look-history-golden.ts`); the look history must match it.
+ * look history (`0885ba6`, by `capture-look-history-golden.ts`). The parity test retains those session
+ * hashes as a baseline and checks the deliberate selection-restoration change separately.
  * Step IDs are opaque, so they are compared by first appearance; times are session clocks and are
  * compared only for presence.
  */
@@ -16,15 +17,16 @@ import { createTrustedAuthoringCore } from "./makeup-core";
 import { encodeWorkspaceAt } from "../../src/app/workspace/workspace-budget";
 import type { WorkspaceState } from "../../src/app/workspace/makeup-workspace";
 import { digest, restore } from "./workspace-observable";
+import type { HistoryService } from "../../src/platform/core/history-service";
 
 import { namedCore, type NamedTrustedCore } from "./named-targets";
 type Core = NamedTrustedCore;
 
 /** A trusted core over a restored workspace, with its collection boundary wired as the app wires it. */
-export function studio(state: WorkspaceState) {
+export function studio(state: WorkspaceState, history?: HistoryService) {
   let n = 0;
   const core = namedCore(createTrustedAuthoringCore(state, { resetStack: () => {}, selectedCollection: () => "draft",
-    newId: () => `step4-${++n}` }, STUDIO_COMPOSITION));
+    newId: () => `step4-${++n}`, ...(history ? { history } : {}) }, STUDIO_COMPOSITION));
   const actions = state.collections ? new CollectionActions(STUDIO_DOCUMENTS, state.collections, () => core.document.export(),
     editor => core.document.restore({ ...editor, fieldSelection: editor.fieldSelection ?? {} })) : undefined;
   return { core, actions };
@@ -66,13 +68,15 @@ export function moment(core: Core, ids: Ids) {
  * The whole history of the current look: every Undo to the oldest kept state, every Redo back, a
  * jump to the start and a jump back to the last step, each with what it shows.
  */
-export function walk(core: Core) {
+export type WalkObservation = { states: ReturnType<typeof moment>[]; jumps: { ok: boolean; after: ReturnType<typeof moment> }[] };
+export function walk(core: Core, observe?: (walk: WalkObservation) => void) {
   const ids = new Ids(), { app } = core, seen = [moment(core, ids)];
   while (app.capability({ kind: "history.undo" }).available) { app.dispatch({ kind: "history.undo" }); seen.push(moment(core, ids)); }
   while (app.capability({ kind: "history.redo" }).available) { app.dispatch({ kind: "history.redo" }); seen.push(moment(core, ids)); }
   const last = app.historyTimeline().steps.at(-1)?.id;
   const jump = (entryId: string) => ({ ok: app.dispatch({ kind: "history.jumpTo", entryId }).ok, after: moment(core, ids) });
   const jumps = [jump(app.historyTimeline().startId), ...(last ? [jump(last)] : [])];
+  observe?.({ states: seen, jumps });
   return { states: digest(seen), count: seen.length, first: seen[0].timeline, jumps: digest(jumps) };
 }
 
@@ -110,6 +114,7 @@ export type SessionDriver = {
   core: Core;
   presets?: { selected(): string; add(): void; select(id: string): void; remove(id: string): void; restore(): void };
   reload(): { writable: boolean; core: Core } | Promise<{ writable: boolean; core: Core }>;
+  observeWalk?(walk: WalkObservation): void;
 };
 
 /**
@@ -117,11 +122,11 @@ export type SessionDriver = {
  * and cancelled), a gesture (committed and cancelled), Undo, Redo and history jumps, a Redo discarded
  * by an edit, preset switches with Undo across a preset add and remove, and a reload of the stored form.
  */
-export function session(stored: unknown) {
+export function session(stored: unknown, history?: () => HistoryService, observeWalk?: (walk: WalkObservation) => void) {
   const loaded = restore(stored);
   if (!loaded.writable) throw Error(loaded.error);
-  const { core, actions } = studio(loaded.state);
-  return script({ core, ...(actions ? { presets: {
+  const { core, actions } = studio(loaded.state, history?.());
+  return script({ core, observeWalk, ...(actions ? { presets: {
     selected: () => actions.summary().selected!, add: () => actions.dispatch({ kind: "preset.edit", command: { kind: "add" } }),
     select: id => actions.dispatch({ kind: "preset.select", id }), remove: id => actions.dispatch({ kind: "preset.edit", command: { kind: "remove", id } }),
     restore: () => actions.dispatch({ kind: "preset.edit", command: { kind: "restore" } }) } } : {}),
@@ -130,7 +135,7 @@ export function session(stored: unknown) {
     reload: () => {
       const captured: WorkspaceState = { ...loaded.state, ...core.document.export(), collections: actions?.snapshot() ?? loaded.state.collections };
       const reloaded = restore(encodeWorkspaceAt(captured, 0, STUDIO_DOCUMENTS).encoded);
-      return { writable: reloaded.writable, core: studio(reloaded.state).core };
+      return { writable: reloaded.writable, core: studio(reloaded.state, history?.()).core };
     } }) as ReturnType<typeof finish>;
 }
 
@@ -201,11 +206,12 @@ export function script(driver: SessionDriver) {
     presets.select(home); record("home again");
   }
   const reloaded = driver.reload();
-  return reloaded instanceof Promise ? reloaded.then(again => finish(log, again)) : finish(log, reloaded);
+  return reloaded instanceof Promise ? reloaded.then(again => finish(log, again, driver.observeWalk)) : finish(log, reloaded, driver.observeWalk);
 }
-function finish(log: { step: string; result?: unknown; moment: ReturnType<typeof moment> }[], again: { writable: boolean; core: Core }) {
+function finish(log: { step: string; result?: unknown; moment: ReturnType<typeof moment> }[], again: { writable: boolean; core: Core },
+  observeWalk?: (walk: WalkObservation) => void) {
   const reloadIds = new Ids();
   return { log: log.map(entry => ({ step: entry.step, result: entry.result === undefined ? null : entry.result,
     moment: entry.moment })),
-    reload: { writable: again.writable, moment: moment(again.core, reloadIds), walk: walk(again.core) } };
+    reload: { writable: again.writable, moment: moment(again.core, reloadIds), walk: walk(again.core, observeWalk) } };
 }

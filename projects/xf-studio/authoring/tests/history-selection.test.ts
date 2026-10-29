@@ -10,7 +10,7 @@ import { defaultUVView, uvRegion, uvToPixel } from "../src/legacy/eye-makeup/uv-
 import type { StudioAction } from "../src/app/studio-application";
 
 function fixture(workspace = freshWorkspace()) {
-  const core = namedCore(createTrustedAuthoringCore(workspace, {}, STUDIO_COMPOSITION));
+  const core = namedCore(createTrustedAuthoringCore(workspace, { selectedCollection: () => "local" }, STUDIO_COMPOSITION));
   const dispatch = (action: Parameters<typeof core.app.dispatch>[0]) => expect(core.app.dispatch(action).ok).toBe(true);
   return { ...core, dispatch, selected: () => core.document.recipe.layers[core.document.active]?.id };
 }

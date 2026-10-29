@@ -46,7 +46,12 @@ test("slice 6: the registered editor publishes actions, selection and stack chan
     expect(f.document.history).toBe(scope);
     expect(scope.undo()).toBe(true);
     expect(f.events.at(-1)?.effect.kind).toBe("restore");
+    // Undo restores the point selected before Add layer, rather than resetting the old layer to point 0.
+    expect(f.editor.eyeMakeup.state().editor.selected).toBe(1);
+    expect(f.events.map(event => event.effect.kind)).toEqual(["selection", "scheduled", "structure", "restore"]);
+    expect(scope.redo()).toBe(true);
     expect(f.editor.eyeMakeup.state().editor.selected).toBe(0);
+    expect(f.events.map(event => event.effect.kind)).toEqual(["selection", "scheduled", "structure", "restore", "restore"]);
   } finally { f.life.abort(); }
 });
 

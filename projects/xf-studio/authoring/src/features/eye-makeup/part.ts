@@ -67,7 +67,9 @@ export const eyeMakeupEditor: EditorCodec<EyeMakeupEditor, Recipe> = Object.free
   },
   serialize: (editor: EyeMakeupEditor) => ({ active: editor.active, selected: editor.selected,
     ...(editor.fieldSelection ? { fieldSelection: structuredClone(editor.fieldSelection) } : {}) }),
-  selection: (editor: EyeMakeupEditor, recipe: Recipe) => ({ selected: editor.selected,
+  // History captures a valid endpoint even when a compatibility caller leaves the live index out of range.
+  selection: (editor: EyeMakeupEditor, recipe: Recipe) => ({ selected: Math.max(0, Math.min(Number.isInteger(editor.selected) ? editor.selected : 0,
+    (recipe.layers[editor.active]?.points.length ?? 0) - 1)),
     layerId: recipe.layers[editor.active]?.id,
     ...(editor.fieldSelection ? { fieldSelection: structuredClone(editor.fieldSelection) } : {}) }),
 });

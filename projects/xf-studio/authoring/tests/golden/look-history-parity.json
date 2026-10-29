@@ -7,8 +7,12 @@
    "text": "358726c6dc994c421c1ba5fdb1f568ff3c599c2e3551539b9610d6be24b1a8af",
    "histories": "6a211c175f6769fefba437a30802279a480158fe4c4337434307e7115f8c02c8"
   },
-  "session": "071fed9dcc624d47dd178af3c0ecf068b93a49997f4e548efa5fc3b5c7c8a0c2",
-  "sessionFromStored": "071fed9dcc624d47dd178af3c0ecf068b93a49997f4e548efa5fc3b5c7c8a0c2"
+  "session": "f6b0ec40a7ae71189dbe848670c63d40c6e28f3528c2a80644c800c85ea65338",
+  "sessionFromStored": "f6b0ec40a7ae71189dbe848670c63d40c6e28f3528c2a80644c800c85ea65338",
+  "selectionBaseline": {
+   "session": "071fed9dcc624d47dd178af3c0ecf068b93a49997f4e548efa5fc3b5c7c8a0c2",
+   "sessionFromStored": "071fed9dcc624d47dd178af3c0ecf068b93a49997f4e548efa5fc3b5c7c8a0c2"
+  }
  },
  "loose": {
   "histories": "a8c472f6064a1a896fe663f4b2109c12b04aa6aad629b51a113f69a2f44f9aa0",
@@ -17,8 +21,12 @@
    "text": "44f759b5a25e8dbbabf9ab2f1e682db3fc9f05f610022ae84110d6bba2fadf36",
    "histories": "a8c472f6064a1a896fe663f4b2109c12b04aa6aad629b51a113f69a2f44f9aa0"
   },
-  "session": "35c665d2e497f88a65f4740c167b8dbe48aee6dc365d28cae8ddb1e6722ad5b2",
-  "sessionFromStored": "35c665d2e497f88a65f4740c167b8dbe48aee6dc365d28cae8ddb1e6722ad5b2"
+  "session": "88f38751b8c6badd01d83a7a80c30c00c71681ddf434ce171e821550a87a414a",
+  "sessionFromStored": "88f38751b8c6badd01d83a7a80c30c00c71681ddf434ce171e821550a87a414a",
+  "selectionBaseline": {
+   "session": "35c665d2e497f88a65f4740c167b8dbe48aee6dc365d28cae8ddb1e6722ad5b2",
+   "sessionFromStored": "35c665d2e497f88a65f4740c167b8dbe48aee6dc365d28cae8ddb1e6722ad5b2"
+  }
  },
  "large": {
   "histories": "a83cecf94060c00afada1a177a569feaf3d06e7a851b1f8956039b5f5a0dbec6",
@@ -27,8 +35,12 @@
    "text": "a4885a701c9b73ff62829ae10a864059d06bb0c4c2393eafc304f8bba6b2f971",
    "histories": "7af0d42da5b785f5bedb1261010823bcd5f54b1fce24e137d531ecf4c416e561"
   },
-  "session": "349519955de901263ff8bf83c6a487d3ca81e2786a9d05bf12e6957943e8a11f",
-  "sessionFromStored": "349519955de901263ff8bf83c6a487d3ca81e2786a9d05bf12e6957943e8a11f"
+  "session": "38ea8870961c38754b9e353f0c20f77da1f6f1d7b91a7683e4e2f75e13d70000",
+  "sessionFromStored": "38ea8870961c38754b9e353f0c20f77da1f6f1d7b91a7683e4e2f75e13d70000",
+  "selectionBaseline": {
+   "session": "349519955de901263ff8bf83c6a487d3ca81e2786a9d05bf12e6957943e8a11f",
+   "sessionFromStored": "349519955de901263ff8bf83c6a487d3ca81e2786a9d05bf12e6957943e8a11f"
+  }
  },
  "damaged": {
   "histories": "c7d6a14e495f4ebc4b37c5a732043f327d3e5a085b358974aaa856ea7abf6e14",
@@ -37,8 +49,12 @@
    "text": "358726c6dc994c421c1ba5fdb1f568ff3c599c2e3551539b9610d6be24b1a8af",
    "histories": "6a211c175f6769fefba437a30802279a480158fe4c4337434307e7115f8c02c8"
   },
-  "session": "071fed9dcc624d47dd178af3c0ecf068b93a49997f4e548efa5fc3b5c7c8a0c2",
-  "sessionFromStored": "071fed9dcc624d47dd178af3c0ecf068b93a49997f4e548efa5fc3b5c7c8a0c2"
+  "session": "f6b0ec40a7ae71189dbe848670c63d40c6e28f3528c2a80644c800c85ea65338",
+  "sessionFromStored": "f6b0ec40a7ae71189dbe848670c63d40c6e28f3528c2a80644c800c85ea65338",
+  "selectionBaseline": {
+   "session": "071fed9dcc624d47dd178af3c0ecf068b93a49997f4e548efa5fc3b5c7c8a0c2",
+   "sessionFromStored": "071fed9dcc624d47dd178af3c0ecf068b93a49997f4e548efa5fc3b5c7c8a0c2"
+  }
  },
  "preferences": {
   "histories": "c7d6a14e495f4ebc4b37c5a732043f327d3e5a085b358974aaa856ea7abf6e14",
@@ -47,7 +63,12 @@
    "text": "cb03516eee44b7fee72a8ae06ec498052eb8506e28927297e7eb861a3fecf9a5",
    "histories": "6a211c175f6769fefba437a30802279a480158fe4c4337434307e7115f8c02c8"
   },
-  "session": "071fed9dcc624d47dd178af3c0ecf068b93a49997f4e548efa5fc3b5c7c8a0c2",
-  "sessionFromStored": "071fed9dcc624d47dd178af3c0ecf068b93a49997f4e548efa5fc3b5c7c8a0c2"
- }
+  "session": "f6b0ec40a7ae71189dbe848670c63d40c6e28f3528c2a80644c800c85ea65338",
+  "sessionFromStored": "f6b0ec40a7ae71189dbe848670c63d40c6e28f3528c2a80644c800c85ea65338",
+  "selectionBaseline": {
+   "session": "071fed9dcc624d47dd178af3c0ecf068b93a49997f4e548efa5fc3b5c7c8a0c2",
+   "sessionFromStored": "071fed9dcc624d47dd178af3c0ecf068b93a49997f4e548efa5fc3b5c7c8a0c2"
+  }
+ },
+ "selectionRestoration": "Session hashes updated for recorded Undo/Redo selection endpoints only; selectionBaseline retains the original hashes. The parity test reproduces those hashes with legacy replay and checks every decoded difference, including reload walks, before accepting the new hashes."
 }

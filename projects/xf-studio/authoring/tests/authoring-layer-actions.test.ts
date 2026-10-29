@@ -63,6 +63,8 @@ test("rename, move and Undo preserve the selected point while a reset clamps it"
   // Undo brings back the six-point layer, whose last point the selection clamps to.
   c.document.history.undo();
   expect(c.document.selected).toBe(5);
+  c.document.history.redo();
+  expect(c.document.selected).toBe(11);
 });
 
 test("a new layer's ID comes from the host's ID source, so the applied action replays exactly", () => {
