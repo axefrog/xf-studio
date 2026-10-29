@@ -75,10 +75,13 @@ function owner(bodies: Record<string, "female" | "male">, failBuild: number[] = 
     loseContext() { for (const listener of contextListeners) listener("lost"); } };
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 5));
+/** A fetch stand-in with the global's full shape (Bun's `fetch` type also carries `preconnect`). */
+const mockFetch = (impl: (url: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => Promise<Response>) =>
+  spyOn(globalThis, "fetch").mockImplementation(Object.assign(impl, { preconnect: fetch.preconnect }));
 
 test("startup requests the active V before core setup, then the head adopts the same service and asks only once", async () => {
   const requests: unknown[] = [];
-  const send = spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+  const send = mockFetch(async (_url, init) => {
     requests.push(JSON.parse(init!.body as string));
     return Response.json({ key: "a".repeat(32), phase: "failed", message: "fixture", recordSchema: CHARACTER_DETAIL_SCHEMA, record: null });
   });
@@ -94,7 +97,7 @@ test("startup requests the active V before core setup, then the head adopts the 
 
 test("releasing a startup request before setup aborts its transport and constructs no head", async () => {
   let requestSignal: AbortSignal | undefined;
-  const send = spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+  const send = mockFetch(async (_url, init) => {
     requestSignal = init?.signal as AbortSignal;
     return new Promise<Response>((_resolve, reject) => requestSignal!.addEventListener("abort", () => reject(requestSignal!.reason), { once: true }));
   });
@@ -108,7 +111,7 @@ test("releasing a startup request before setup aborts its transport and construc
 
 test("a changed authoritative V replaces the early request before a head can adopt it", async () => {
   const bodies: string[] = [];
-  const send = spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+  const send = mockFetch(async (_url, init) => {
     bodies.push(JSON.parse(init!.body as string).bodyGender);
     return Response.json({ key: "a".repeat(32), phase: "failed", message: "fixture", recordSchema: CHARACTER_DETAIL_SCHEMA, record: null });
   });
