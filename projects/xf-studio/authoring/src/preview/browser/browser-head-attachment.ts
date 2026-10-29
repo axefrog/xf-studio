@@ -20,7 +20,7 @@
  * through releases what was made, newest first (PREV-20). The V's context is not this head's: it outlives every head (its owner hands it
  * over, browser-scene-heads.ts).
  */
-import { createBrowserCharacterDetailDevice } from "../../character/browser/browser-character-detail-device";
+import { characterRequester, createBrowserCharacterDetailDevice } from "../../character/browser/browser-character-detail-device";
 import { CharacterDetailActions } from "../../character/character-detail-actions";
 import type { CharacterWarmStart } from "../../character/browser/character-warm-start";
 import type { CharacterContextActions } from "../../character/character-context-actions";
@@ -48,14 +48,15 @@ type SceneDetailPreparation = Parameters<NonNullable<Parameters<ViewportDevice["
 type Scene = Awaited<ReturnType<ViewportDevice["buildHead"]>>;
 
 /** The real detail service can request/read its V before setup permits construction of the head. It gains no display capability early. */
-export function startHeadDetails(request: CharacterRequest | undefined, warmStart?: Pick<CharacterWarmStart, "remember" | "files">) {
+export function startHeadDetails(request: CharacterRequest | undefined, warmStart?: Pick<CharacterWarmStart, "remember" | "files">,
+  requester = characterRequester()) {
   const scene = Promise.withResolvers<Scene>(), preparation = Promise.withResolvers<SceneDetailPreparation>();
   void scene.promise.catch(() => {}); void preparation.promise.catch(() => {});
-  const actions = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene.promise, undefined, warmStart, preparation.promise));
+  const actions = new CharacterDetailActions(createBrowserCharacterDetailDevice(scene.promise, undefined, warmStart, preparation.promise, requester));
   const initial = request ? { key: JSON.stringify(request), promise: actions.setCharacter(request) } : undefined;
   let disposed = false;
   return {
-    actions, initial, ready: preparation.resolve,
+    actions, initial, requester, ready: preparation.resolve,
     connect(built: Promise<Scene>) { void built.then(scene.resolve, scene.reject); void built.then(preparation.resolve, preparation.reject); },
     dispose() {
       if (disposed) return;
@@ -121,6 +122,8 @@ export type HeadAttachmentPorts = {
   warmStart?: Pick<CharacterWarmStart, "remember" | "files">;
   /** Startup's already-requested V, adopted only when the authoritative context still matches. */
   initialDetails?: ReturnType<typeof startHeadDetails>;
+  /** Retain the host want's owner even when another character supersedes startup's service before adoption. */
+  requester?: string;
 };
 
 export type AttachedHead = {
@@ -216,7 +219,7 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     const initialRequest = request.bodyGender === body ? request : undefined;
     const matches = !!ports.initialDetails && ports.initialDetails.initial?.key === JSON.stringify(initialRequest);
     if (!matches) ports.initialDetails?.dispose();
-    const details = matches ? ports.initialDetails! : startHeadDetails(initialRequest, ports.warmStart);
+    const details = matches ? ports.initialDetails! : startHeadDetails(initialRequest, ports.warmStart, ports.initialDetails?.requester ?? ports.requester);
     releases.push(() => details.dispose());
     const sceneReady = ports.viewport.buildHead(body, signal, details.ready);
     details.connect(sceneReady);
@@ -224,7 +227,10 @@ export async function buildBrowserHead(ports: HeadAttachmentPorts, signal: Abort
     const stopDetails = () => characterDetails.dispose();
     signal.addEventListener("abort", stopDetails, { once: true });
     releases.push(() => { signal.removeEventListener("abort", stopDetails); stopDetails(); });
-    let initialDetails = details.initial;
+    // Setup now permits a head. A failed speculative request may have seen the old, incomplete setup; retry it once here.
+    // Successful/in-flight work is adopted unchanged, and ordinary failures after adoption still require an explicit retry.
+    let initialDetails = matches && details.initial && details.actions.failed()
+      ? { ...details.initial, promise: details.actions.retry() } : details.initial;
     const scene = await sceneReady;
     releases.push(() => ports.viewport.disposeHead(scene));
     signal.throwIfAborted();

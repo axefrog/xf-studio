@@ -38,7 +38,7 @@ function wanted<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
  */
 export const CHARACTER_ENDPOINT = "/api/preview-character";
 /** This page's name for the host (character-detail-server.ts `X-XFS-Page`): a page supersedes only its own earlier V (PIPE-103). */
-const pageName = () => [...crypto.getRandomValues(new Uint8Array(16))].map(byte => byte.toString(16).padStart(2, "0")).join("");
+export const characterRequester = () => [...crypto.getRandomValues(new Uint8Array(16))].map(byte => byte.toString(16).padStart(2, "0")).join("");
 
 function hostState(value: unknown): HostCharacterState {
   const state = value as HostCharacterState & { recordSchema?: unknown };
@@ -62,9 +62,8 @@ const answerState = (value: unknown) => hostState(value);
  * files it read ahead.
  */
 export function createBrowserCharacterDetailDevice(source: Scene | Promise<Scene>, fetcher: CharacterDetailFetch = (url, init) => fetch(url, init),
-  warm?: Pick<CharacterWarmStart, "remember" | "files">, preparation?: Promise<Pick<Scene, "details" | "prepareDetails">>): CharacterDetailPort {
-  /** This page's name, sent with each request. */
-  const page = pageName();
+  warm?: Pick<CharacterWarmStart, "remember" | "files">, preparation?: Promise<Pick<Scene, "details" | "prepareDetails">>,
+  page = characterRequester()): CharacterDetailPort {
   /** The details the scene shows now (this device put them there), whose unchanged parts the next load reuses. */
   let shown: LoadedCharacterDetails | null = null;
   /**

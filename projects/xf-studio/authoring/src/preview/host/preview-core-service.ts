@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync, type BigIntStats } from "node:fs";
 import { join } from "node:path";
 import { open, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
@@ -57,6 +57,18 @@ export type PreviewCoreStatus = {
   gameRoot: string; contentFingerprint: string; cacheName: string | null; updatedAt: string;
 };
 export type PreviewCoreResult = { directory: string; manifest: PreviewCoreManifest; reused: boolean };
+/** A hash vouches only for this generation, never merely for a path or its length. No file handles are retained. */
+export type PreviewCoreGeneration = readonly { path: string; identity: string }[];
+type VerifiedCore = PreviewCoreResult & { generation: PreviewCoreGeneration };
+const fileIdentity = (file: BigIntStats) => {
+  if (!file.isFile()) throw Error("A preview core file is unavailable.");
+  return [file.dev, file.ino, file.size, file.mtimeNs, file.ctimeNs, file.birthtimeNs].join(":");
+};
+const fileGeneration = (path: string) => ({ path, identity: fileIdentity(statSync(path, { bigint: true })) });
+/** Bounded metadata checks on this core's known files, including files verified earlier in a multi-file read. */
+export function previewCoreGenerationCurrent(generation: PreviewCoreGeneration): boolean {
+  try { return generation.every(file => fileGeneration(file.path).identity === file.identity); } catch { return false; }
+}
 export type PreviewCoreStep = "reading" | "checking" | "assembling" | "maps" | "verifying";
 export const PREVIEW_CORE_STEPS: readonly { step: PreviewCoreStep; label: string }[] = [
   { step: "reading", label: "Reading the head, eyes, eye shapes and skin textures from your game files" },
@@ -99,6 +111,7 @@ export class PreviewCoreCache extends DerivedCache {
     const status = this.readStatusDocument() as PreviewCoreStatus | null;
     return status?.schema === PREVIEW_CORE_STATUS_SCHEMA ? status : null;
   }
+  statusGeneration() { return fileGeneration(this.statusFile); }
 }
 
 
@@ -156,23 +169,27 @@ function previewCoreEntry(cache: PreviewCoreCache, name: string, key: string | n
 
 /** Synchronous validation for derivation/CLI callers. HTTP reads use the same rules with asynchronous file verification below. */
 export function loadPreviewCoreEntry(cache: PreviewCoreCache, name: string, key: string | null,
-  recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate?: EyePlateRecipe): PreviewCoreResult | null {
-  const found = previewCoreEntry(cache, name, key, recipe, plate);
-  if (!found) return null;
+  recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate?: EyePlateRecipe): VerifiedCore | null {
   try {
+    const manifest = fileGeneration(join(cache.entry(name), PREVIEW_CORE_MANIFEST_FILE));
+    const found = previewCoreEntry(cache, name, key, recipe, plate);
+    if (!found) return null;
+    const generation = [manifest, ...found.manifest.files.map(entry => fileGeneration(join(found.directory, entry.name)))];
     for (const entry of found.manifest.files) {
       const file = join(found.directory, entry.name);
       if (!existsSync(file) || statSync(file).size !== entry.bytes || fileSha256(file) !== entry.sha256) return null;
     }
-    return found;
+    return previewCoreGenerationCurrent(generation) ? { ...found, generation } : null;
   } catch { return null; }
 }
 
 /** Verify every byte, yielding through file I/O in bounded chunks instead of hashing the whole core in one host turn. */
-async function checkedCoreEntry(cache: PreviewCoreCache, name: string, recipe: PreviewCoreRecipe, plate?: EyePlateRecipe, signal?: AbortSignal): Promise<PreviewCoreResult | null> {
-  const found = previewCoreEntry(cache, name, null, recipe, plate);
-  if (!found) return null;
+async function checkedCoreEntry(cache: PreviewCoreCache, name: string, recipe: PreviewCoreRecipe, plate?: EyePlateRecipe, signal?: AbortSignal): Promise<VerifiedCore | null> {
   try {
+    const manifest = fileGeneration(join(cache.entry(name), PREVIEW_CORE_MANIFEST_FILE));
+    const found = previewCoreEntry(cache, name, null, recipe, plate);
+    if (!found) return null;
+    const generation = [manifest, ...found.manifest.files.map(entry => fileGeneration(join(found.directory, entry.name)))];
     const buffer = Buffer.alloc(256 * 1024);
     for (const entry of found.manifest.files) {
       signal?.throwIfAborted();
@@ -181,6 +198,9 @@ async function checkedCoreEntry(cache: PreviewCoreCache, name: string, recipe: P
       const file = await open(path, "r"), digest = createHash("sha256");
       let bytes = 0;
       try {
+        // Check the descriptor as well as the path: a rename/replacement between stat and open is another generation.
+        const identity = generation.find(file => file.path === path)!.identity;
+        if (fileIdentity(await file.stat({ bigint: true })) !== identity) return null;
         for (;;) {
           signal?.throwIfAborted();
           const read = await file.read(buffer, 0, buffer.length, null);
@@ -188,10 +208,11 @@ async function checkedCoreEntry(cache: PreviewCoreCache, name: string, recipe: P
           bytes += read.bytesRead; digest.update(buffer.subarray(0, read.bytesRead));
           if (bytes > entry.bytes) return null;
         }
+        if (fileIdentity(await file.stat({ bigint: true })) !== identity) return null;
       } finally { await file.close(); }
       if (bytes !== entry.bytes || digest.digest("hex") !== entry.sha256) return null;
     }
-    return found;
+    return previewCoreGenerationCurrent(generation) ? { ...found, generation } : null;
   } catch { return null; }
 }
 
@@ -361,7 +382,7 @@ export async function ensurePreviewCore(options: EnsurePreviewCoreOptions): Prom
 }
 
 export type PreviewCoreReadiness =
-  | { state: "ready"; directory: string; manifest: PreviewCoreManifest }
+  | { state: "ready"; directory: string; manifest: PreviewCoreManifest; generation: PreviewCoreGeneration }
   | { state: "none" }
   | { state: "blocked"; code: string; message: string };
 /**
@@ -372,13 +393,15 @@ export type PreviewCoreReadiness =
 export function previewCoreReadiness(cacheRoot: string | null, gameRoot: string | null,
   recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate?: EyePlateRecipe): PreviewCoreReadiness {
   if (!cacheRoot || !gameRoot) return { state: "none" };
-  let cache: PreviewCoreCache, status: PreviewCoreStatus | null;
-  try { cache = new PreviewCoreCache(cacheRoot, recipe, !!plate); status = cache.readStatus(); } catch { return { state: "none" }; }
+  let cache: PreviewCoreCache, status: PreviewCoreStatus | null, statusFile: PreviewCoreGeneration[number];
+  try { cache = new PreviewCoreCache(cacheRoot, recipe, !!plate); statusFile = cache.statusGeneration(); status = cache.readStatus(); } catch { return { state: "none" }; }
   if (!status || status.recipeId !== recipe.id || status.recipeRevision !== recipe.revision || status.deriverVersion !== PREVIEW_CORE_DERIVER_VERSION ||
       !samePath(status.gameRoot, gameRoot) || status.contentFingerprint !== contentFingerprint(gameRoot, ARCHIVE_DIRECTORY)) return { state: "none" };
   if (status.state === "ready" && status.cacheName) {
     const entry = loadPreviewCoreEntry(cache, status.cacheName, null, recipe, plate);
-    return entry ? { state: "ready", directory: entry.directory, manifest: entry.manifest } : { state: "none" };
+    const generation = entry && [statusFile, ...entry.generation];
+    return entry && generation && previewCoreGenerationCurrent(generation)
+      ? { state: "ready", directory: entry.directory, manifest: entry.manifest, generation } : { state: "none" };
   }
   if (status.state === "missing" || status.state === "unsupported") return { state: "blocked", code: status.code ?? status.state, message: status.message };
   return { state: "none" };
@@ -389,15 +412,17 @@ export async function previewCoreReadinessAsync(cacheRoot: string | null, gameRo
   recipe: PreviewCoreRecipe = PREVIEW_CORE_RECIPE, plate?: EyePlateRecipe, signal?: AbortSignal): Promise<PreviewCoreReadiness> {
   signal?.throwIfAborted();
   if (!cacheRoot || !gameRoot) return { state: "none" };
-  let cache: PreviewCoreCache, status: PreviewCoreStatus | null;
-  try { cache = new PreviewCoreCache(cacheRoot, recipe, !!plate); status = cache.readStatus(); } catch { return { state: "none" }; }
+  let cache: PreviewCoreCache, status: PreviewCoreStatus | null, statusFile: PreviewCoreGeneration[number];
+  try { cache = new PreviewCoreCache(cacheRoot, recipe, !!plate); statusFile = cache.statusGeneration(); status = cache.readStatus(); } catch { return { state: "none" }; }
   if (!status || status.recipeId !== recipe.id || status.recipeRevision !== recipe.revision || status.deriverVersion !== PREVIEW_CORE_DERIVER_VERSION ||
       !samePath(status.gameRoot, gameRoot) || status.contentFingerprint !== contentFingerprint(gameRoot, ARCHIVE_DIRECTORY)) return { state: "none" };
   if (status.state === "ready" && status.cacheName) {
     const entry = await checkedCoreEntry(cache, status.cacheName, recipe, plate, signal);
     signal?.throwIfAborted();
     if (status.contentFingerprint !== contentFingerprint(gameRoot, ARCHIVE_DIRECTORY)) return { state: "none" };
-    return entry ? { state: "ready", directory: entry.directory, manifest: entry.manifest } : { state: "none" };
+    const generation = entry && [statusFile, ...entry.generation];
+    return entry && generation && previewCoreGenerationCurrent(generation)
+      ? { state: "ready", directory: entry.directory, manifest: entry.manifest, generation } : { state: "none" };
   }
   if (status.state === "missing" || status.state === "unsupported") return { state: "blocked", code: status.code ?? status.state, message: status.message };
   return { state: "none" };

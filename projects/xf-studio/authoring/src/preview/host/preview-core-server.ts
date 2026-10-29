@@ -14,6 +14,8 @@ export async function servePreviewCoreAsset(host: Pick<PreviewCoreHost, "asset">
     const [root, path] = await Promise.all([realpath(dirname(asset.path)), realpath(asset.path)]);
     if (!isBelow(path, root) || !(await stat(path)).isFile()) return new Response("Not found", { status: 404 });
   } catch { return new Response("Not found", { status: 404 }); }
+  // The asynchronous existence/containment checks above are not evidence that the bytes still belong to the verified generation.
+  if (!asset.current()) return new Response("Not found", { status: 404 });
   const headers = { "ETag": asset.etag, "Cache-Control": "private, no-cache", "X-Content-Type-Options": "nosniff", "Content-Type": file.type };
   if (request.headers.get("If-None-Match")?.split(",").some(tag => tag.trim().replace(/^W\//, "") === asset.etag || tag.trim() === "*"))
     return new Response(null, { status: 304, headers });

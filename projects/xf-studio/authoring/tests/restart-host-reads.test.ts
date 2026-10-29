@@ -1,11 +1,92 @@
 import { expect, spyOn, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import * as files from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { savesFolderProbe, SAVES_FOLDER_DISPLAY } from "../src/saves/host/saves-host-sources";
 import { servePreviewCoreAsset } from "../src/preview/host/preview-core-server";
 import { tempDir } from "./temp-dir";
 import { PreviewCoreHost } from "../src/preview/host/preview-core-host";
 import * as core from "../src/preview/host/preview-core-service";
+import { contentFingerprint } from "../src/host/derived-cache";
+import { PREVIEW_CORE_DERIVER_VERSION, PREVIEW_CORE_FILES, PREVIEW_CORE_RECIPE, previewCoreRecipeSha256 } from "../src/preview/preview-core-recipe";
+
+/** Synthetic cached bytes with the production recipe/manifest identity; validation and HTTP use the real host. */
+function cachedCore() {
+  const root = tempDir("xfs-core-generation-"), game = join(root, "game");
+  mkdirSync(join(game, "archive", "pc", "content"), { recursive: true });
+  const cache = new core.PreviewCoreCache(join(root, "cache"), PREVIEW_CORE_RECIPE, false), work = cache.createWork();
+  mkdirSync(join(work, core.PREVIEW_CORE_ASSET_DIRECTORY));
+  const manifest = { schema: core.PREVIEW_CORE_MANIFEST_SCHEMA, recipeId: PREVIEW_CORE_RECIPE.id,
+    recipeRevision: PREVIEW_CORE_RECIPE.revision, deriverVersion: PREVIEW_CORE_DERIVER_VERSION,
+    recipeSha256: previewCoreRecipeSha256(PREVIEW_CORE_RECIPE), cacheKey: "synthetic",
+    files: PREVIEW_CORE_FILES.map(name => {
+      const data = Buffer.from(`synthetic core ${name}`);
+      writeFileSync(join(work, core.PREVIEW_CORE_ASSET_DIRECTORY, name), data);
+      return { name, bytes: data.length, sha256: createHash("sha256").update(data).digest("hex") };
+    }) };
+  cache.writeJson(join(work, core.PREVIEW_CORE_MANIFEST_FILE), manifest);
+  const entry = cache.publish(work, "synthetic");
+  cache.writeStatus({ recipeId: PREVIEW_CORE_RECIPE.id, recipeRevision: PREVIEW_CORE_RECIPE.revision,
+    deriverVersion: PREVIEW_CORE_DERIVER_VERSION, state: "ready", code: null, message: "Ready", gameRoot: game,
+    contentFingerprint: contentFingerprint(game, "archive/pc/content"), cacheName: "synthetic" });
+  const host = new PreviewCoreHost({ cacheRoot: cache.root, settings: () => ({ gameRoot: game, wolvenKitCli: null }), now: () => 0 });
+  const path = join(entry, core.PREVIEW_CORE_ASSET_DIRECTORY, "head.glb");
+  return { root, host, path, asset: (name: string) => join(entry, core.PREVIEW_CORE_ASSET_DIRECTORY, name) };
+}
+const assetRequest = (tag?: string) => new Request("http://127.0.0.1/assets/head.glb", { headers: tag ? { "If-None-Match": tag } : {} });
+const corrupt = (path: string) => { const data = readFileSync(path); data[0]! ^= 1; writeFileSync(path, data); };
+
+test.each(["overwrite", "replace"] as const)("real core host refuses an old ETag after same-size %s inside the readiness memo", async change => {
+  const f = cachedCore();
+  try {
+    const first = await servePreviewCoreAsset(f.host, "head.glb", assetRequest());
+    expect(first.status).toBe(200); await first.arrayBuffer();
+    const tag = first.headers.get("ETag")!;
+    expect((await servePreviewCoreAsset(f.host, "head.glb", assetRequest(tag))).status).toBe(304);
+    const previous = statSync(f.path);
+    if (change === "overwrite") corrupt(f.path);
+    else {
+      const replacement = `${f.path}.replacement`;
+      writeFileSync(replacement, readFileSync(f.path)); corrupt(replacement);
+      rmSync(f.path); renameSync(replacement, f.path);
+    }
+    utimesSync(f.path, previous.atime, previous.mtime); // Length and mtime alone cannot validate this generation.
+    expect((await servePreviewCoreAsset(f.host, "head.glb", assetRequest(tag))).status).toBe(404);
+    expect(f.host.ready()).toBe(false);
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("real core host rejects changes to bytes already hashed before verification publishes ready", async () => {
+  const f = cachedCore(), open = files.open;
+  let changed = false;
+  const read = spyOn(files, "open").mockImplementation(async (path, flags, mode) => {
+    const file = await open(path, flags, mode);
+    if (!changed && String(path) === f.asset(PREVIEW_CORE_FILES[1]!)) { changed = true; corrupt(f.path); }
+    return file;
+  });
+  try {
+    expect((await f.host.readSnapshot()).phase).not.toBe("ready");
+    expect(changed).toBe(true); expect(await f.host.asset("head.glb")).toBeNull();
+  } finally { read.mockRestore(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test("real core host checks the verified generation again at the HTTP boundary, before returning 304", async () => {
+  const f = cachedCore();
+  const verified = await f.host.asset("head.glb");
+  expect(verified).not.toBeNull();
+  const asset = f.host.asset.bind(f.host);
+  let changed = false;
+  const reads = spyOn(f.host, "asset").mockImplementation(async (...args) => {
+    const result = await asset(...args);
+    if (!changed) { changed = true; corrupt(f.path); }
+    return result;
+  });
+  try {
+    expect((await servePreviewCoreAsset(f.host, "head.glb", assetRequest(verified!.etag))).status).toBe(404);
+    expect(changed).toBe(true);
+  } finally { reads.mockRestore(); rmSync(f.root, { recursive: true, force: true }); }
+});
 
 test("core HTTP checks single-flight; one cancelled reader cannot stop another, and the last cancellation abandons verification", async () => {
   const root = tempDir("xfs-core-check-"), game = join(root, "game");
@@ -50,11 +131,40 @@ test("settings prewarms and shares one bounded Saved Games registry read, then r
   now = 5000; await probe.detected(); expect(calls).toBe(2);
 });
 
+test("a verification replaced by settings still aborts when its last reader leaves, without deleting its replacement", async () => {
+  const root = tempDir("xfs-core-replaced-"), games = [join(root, "a"), join(root, "b")];
+  for (const game of games) mkdirSync(join(game, "archive", "pc", "content"), { recursive: true });
+  let gameRoot = games[0]!;
+  const reads: { signal: AbortSignal; result: ReturnType<typeof Promise.withResolvers<core.PreviewCoreReadiness>> }[] = [];
+  const check = spyOn(core, "previewCoreReadinessAsync").mockImplementation(async (_cache, _game, _recipe, _plate, signal) => {
+    const result = Promise.withResolvers<core.PreviewCoreReadiness>(); reads.push({ signal: signal!, result });
+    signal!.addEventListener("abort", () => result.reject(signal!.reason), { once: true });
+    return result.promise;
+  });
+  const host = new PreviewCoreHost({ cacheRoot: root, settings: () => ({ gameRoot, wolvenKitCli: null }) });
+  const a = new AbortController(), b = new AbortController();
+  const first = host.readSnapshot("female", a.signal);
+  gameRoot = games[1]!;
+  const replacement = host.readSnapshot("female", b.signal);
+  try {
+    expect(reads).toHaveLength(2);
+    a.abort(); await expect(first).rejects.toHaveProperty("name", "AbortError");
+    expect(reads[0]!.signal.aborted).toBe(true); expect(reads[1]!.signal.aborted).toBe(false);
+    const joined = host.readSnapshot("female");
+    expect(reads).toHaveLength(2); // Cancelling the old owner did not remove the new check.
+    reads[1]!.result.resolve({ state: "none" });
+    expect((await replacement).phase).toBe("needs-setup"); await joined;
+  } finally {
+    a.abort(); b.abort(); for (const read of reads) read.result.resolve({ state: "none" });
+    check.mockRestore(); rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("a warm browser revalidates the head by content identity without retransferring its bytes, and stale/missing assets are refused", async () => {
   const root = tempDir("xfs-core-http-"), path = join(root, "head.glb");
   writeFileSync(path, "private head bytes");
   let valid = true, calls = 0;
-  const host = { asset: async (_name: string) => { calls++; return valid ? { path, etag: '"content-one"' } : null; } };
+  const host = { asset: async (_name: string) => { calls++; return valid ? { path, etag: '"content-one"', current: () => valid } : null; } };
   const request = (tag?: string, method = "GET") => new Request("http://127.0.0.1/assets/head.glb", { method, headers: tag ? { "If-None-Match": tag } : {} });
   try {
     const first = await servePreviewCoreAsset(host, "head.glb", request());

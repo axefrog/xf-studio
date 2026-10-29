@@ -1,7 +1,8 @@
 import { layeredPreviewWiring, type LayeredSurfaceWiring } from "../src/preview/browser/layered-preview-wiring";
 import { expect, spyOn, test } from "bun:test";
 import { CharacterDetailActions } from "../src/character/character-detail-actions";
-import { buildBrowserHead } from "../src/preview/browser/browser-head-attachment";
+import { buildBrowserHead, startHeadDetails } from "../src/preview/browser/browser-head-attachment";
+import * as detailDevice from "../src/character/browser/browser-character-detail-device";
 import { MAIN_VIEW } from "../src/platform/api/view-graph";
 import type { CameraState } from "../src/app/workspace/makeup-workspace";
 import { contextOf, harness } from "./fixtures/fake-heads";
@@ -16,6 +17,32 @@ import { createMakeupStack, EYE_RASTER_REGION, freshWorkspace } from "./fixtures
 // bindings, service attachments, subscriptions, camera listeners, surface editors or leftover canvases.
 
 const nothingAttached = { savedV: undefined, preview: undefined, motion: undefined, characterDetails: undefined };
+
+test("a failed speculative V retries at the validated setup handoff, places once and deduplicates identical requests", async () => {
+  let configured = false, requests = 0, placements = 0;
+  const port = spyOn(detailDevice, "createBrowserCharacterDetailDevice").mockImplementation(() => ({
+    request: async () => { requests++; return { key: "a", phase: configured ? "ready" : "failed", message: "Choose a game folder.",
+      progress: null, record: configured ? "prepared.json" : null }; },
+    poll: async () => { throw Error("No polling needed."); }, clear() {}, wait: async () => {},
+    show: async () => { placements++; return { slots: [] }; },
+  }));
+  const h = harness();
+  const request = h.ports.character.context.detailRequest();
+  const primed = startHeadDetails(request);
+  let head: Awaited<ReturnType<typeof buildBrowserHead>> | undefined;
+  try {
+    await primed.initial!.promise;
+    expect(primed.actions.failed()).toBe(true); expect(requests).toBe(1);
+    configured = true;
+    head = await buildBrowserHead({ ...h.ports, initialDetails: primed });
+    await head.prepare(new AbortController().signal, () => {});
+    expect(head.characterDetails).toBe(primed.actions);
+    expect(head.characterDetails.snapshot().phase).toBe("ready");
+    expect([requests, placements]).toEqual([2, 1]);
+    await head.characterDetails.setCharacter(request!);
+    expect([requests, placements]).toEqual([2, 1]);
+  } finally { head?.dispose(); primed.dispose(); port.mockRestore(); }
+});
 
 test("the V is asked for before the core head's motion settles, then preparation joins that request", async () => {
   const entered = Promise.withResolvers<void>(), motion = Promise.withResolvers<void>();

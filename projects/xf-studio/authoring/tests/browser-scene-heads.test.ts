@@ -81,16 +81,20 @@ const mockFetch = (impl: (url: Parameters<typeof fetch>[0], init?: Parameters<ty
 
 test("startup requests the active V before core setup, then the head adopts the same service and asks only once", async () => {
   const requests: unknown[] = [];
+  const response = Promise.withResolvers<Response>();
   const send = mockFetch(async (_url, init) => {
     requests.push(JSON.parse(init!.body as string));
-    return Response.json({ key: "a".repeat(32), phase: "failed", message: "fixture", recordSchema: CHARACTER_DETAIL_SCHEMA, record: null });
+    return response.promise;
   });
   const o = owner({ v1: "female" });
   try {
     o.heads.prime(); o.heads.prime();
     expect(requests).toHaveLength(1);
     expect(o.h.builds).toBe(0); expect(o.h.drawn).toHaveLength(0);
-    await o.heads.load();
+    const loaded = o.heads.load();
+    await settle(); // The in-flight service has been adopted; it must not be restarted.
+    response.resolve(Response.json({ key: "a".repeat(32), phase: "failed", message: "fixture", recordSchema: CHARACTER_DETAIL_SCHEMA, record: null }));
+    await loaded;
     expect(requests).toHaveLength(1); expect(o.heads.shown()).toBeDefined();
   } finally { o.heads.dispose(); send.mockRestore(); }
 });
@@ -110,9 +114,10 @@ test("releasing a startup request before setup aborts its transport and construc
 });
 
 test("a changed authoritative V replaces the early request before a head can adopt it", async () => {
-  const bodies: string[] = [];
+  const bodies: string[] = [], pages: string[] = [];
   const send = mockFetch(async (_url, init) => {
     bodies.push(JSON.parse(init!.body as string).bodyGender);
+    pages.push(new Headers(init!.headers).get("X-XFS-Page")!);
     return Response.json({ key: "a".repeat(32), phase: "failed", message: "fixture", recordSchema: CHARACTER_DETAIL_SCHEMA, record: null });
   });
   const o = owner({ v1: "female" });
@@ -121,8 +126,30 @@ test("a changed authoritative V replaces the early request before a head can ado
     o.heads.context("v1").dispatch({ kind: "character.useDefault", bodyGender: "male" });
     await settle();
     expect(bodies).toEqual(["female", "male"]); expect(o.h.builds).toBe(0);
+    expect(pages[0]).toMatch(/^[a-f0-9]{32}$/); expect(pages[1]).toBe(pages[0]);
     await o.heads.load();
-    expect(o.heads.shown()?.body).toBe("male"); expect(bodies).toEqual(["female", "male"]);
+    // This fixture's speculative response failed; the validated handoff retries it once, with the same host want.
+    expect(o.heads.shown()?.body).toBe("male"); expect(bodies).toEqual(["female", "male", "male"]);
+    expect(new Set(pages).size).toBe(1);
+  } finally { o.heads.dispose(); send.mockRestore(); }
+});
+
+test("a different character taking over at startup handoff retains the superseded host requester", async () => {
+  const pages: string[] = [], bodies: string[] = [];
+  const send = mockFetch(async (_url, init) => {
+    pages.push(new Headers(init!.headers).get("X-XFS-Page")!);
+    bodies.push(JSON.parse(init!.body as string).bodyGender);
+    return Response.json({ key: "a".repeat(32), phase: "failed", message: "fixture", recordSchema: CHARACTER_DETAIL_SCHEMA, record: null });
+  });
+  const o = owner({ v1: "female", v2: "male" });
+  try {
+    o.heads.prime();
+    // The authoritative destination changes before another prime runs; construction cannot adopt the old character's service.
+    o.scene.subject = "v2";
+    await o.heads.load();
+    expect(o.heads.shown()?.body).toBe("male");
+    expect(bodies).toEqual(["female", "male"]);
+    expect(pages[0]).toMatch(/^[a-f0-9]{32}$/); expect(pages[1]).toBe(pages[0]);
   } finally { o.heads.dispose(); send.mockRestore(); }
 });
 

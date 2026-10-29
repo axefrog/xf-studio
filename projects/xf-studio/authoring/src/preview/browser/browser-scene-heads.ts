@@ -53,7 +53,7 @@ export type SceneHeadWant = ResidencyWant & { readonly view: string; readonly ch
 
 export type SceneHeadsPorts = {
   /** What every head is built with (its scene ports, the graph, the layered surfaces, the application's attachments). */
-  head: Omit<HeadAttachmentPorts, "character" | "prepareCore" | "notice" | "view" | "initialDetails">;
+  head: Omit<HeadAttachmentPorts, "character" | "prepareCore" | "notice" | "view" | "initialDetails" | "requester">;
   /**
    * The views and their scenes (one view is drawn at a time until phase 4b): the view drawn first (undefined: none), until `show(view)` names
    * another; the scene a view shows; whether a scene still exists (a view shows it); the V a scene shows, and making one for a scene that has
@@ -110,6 +110,8 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
   const contexts = new Map<string, { context: CharacterContextActions; release: () => void; previews: SuspendablePreviews | undefined }>();
   let started = false, disposed = false, scheduled = false;
   let initial: { character: string; details: ReturnType<typeof startHeadDetails> } | undefined;
+  // Superseding a speculative V must replace the same host want, even after a transport has already been aborted.
+  let initialRequester: string | undefined;
   /** The view drawn now (undefined: none): the one the scenes port names first, then the one `show(view)` drew last. */
   let drawnView: string | undefined = ports.scenes.view();
   const drawn = () => drawnView;
@@ -136,6 +138,7 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
       const primed = initial; initial = undefined;
       if (primed && primed.character !== want.character) primed.details.dispose();
       const head = await buildBrowserHead({ ...ports.head, view: () => destination(want),
+        requester: primed?.details.requester,
         initialDetails: primed?.character === want.character ? primed.details : undefined,
         character: { body: want.body, ...saveOf(want.character), context: contextOf(want.character) },
         prepareCore: (body, buildSignal) => ports.prepareCore(body, (message, fraction) => {
@@ -314,7 +317,9 @@ export function createBrowserSceneHeads(ports: SceneHeadsPorts) {
     const request = context.detailRequest();
     if (initial?.character === want.character && initial.details.initial?.key === JSON.stringify(request)) return;
     initial?.details.dispose();
-    initial = { character: want.character, details: startHeadDetails(request, ports.head.warmStart) };
+    const details = startHeadDetails(request, ports.head.warmStart, initialRequester);
+    initialRequester = details.requester;
+    initial = { character: want.character, details };
   }
 
   return {
