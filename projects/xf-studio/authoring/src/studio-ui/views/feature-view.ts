@@ -188,6 +188,8 @@ export type FeatureViewBinding = {
   readonly summary?: (ctx: never) => ViewSummary;
   /** The module's readiness badge in a view (eye makeup: its layer textures). */
   readonly readiness?: (ctx: never) => ViewBadge | undefined;
+  /** Optional status-bar text, in composition order. No contribution leaves the shell's slot empty. */
+  readonly status?: (frame: Frame) => ViewBadge | undefined;
 };
 
 /**
@@ -200,9 +202,11 @@ export function featureView<V extends ViewContribution,
   commands?: (ctx: FeatureViewContext<FacadeOf<V["owner"]>>) => FeatureCommand<FacadeAction<FacadeOf<V["owner"]>>>[];
   summary?: (ctx: FeatureViewContext<FacadeOf<V["owner"]>>) => ViewSummary;
   readiness?: (ctx: FeatureViewContext<FacadeOf<V["owner"]>>) => ViewBadge | undefined;
+  status?: (frame: Frame) => ViewBadge | undefined;
 }): FeatureViewBinding & { readonly owner: V["owner"]; readonly panels: P } {
   return Object.freeze({ owner: view.owner, panels: parts.panels, ...(parts.commands ? { commands: parts.commands } : {}),
-    ...(parts.summary ? { summary: parts.summary } : {}), ...(parts.readiness ? { readiness: parts.readiness } : {}) });
+    ...(parts.summary ? { summary: parts.summary } : {}), ...(parts.readiness ? { readiness: parts.readiness } : {}),
+    ...(parts.status ? { status: parts.status } : {}) });
 }
 
 /**

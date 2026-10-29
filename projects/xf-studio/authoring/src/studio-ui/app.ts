@@ -33,11 +33,10 @@ import { previewSetupCard } from "./preview-setup-card";
 import { mountGuidance, type GuidanceController } from "./guidance/controller";
 import type { ViewComposition, ViewContext, ViewPaneFactory } from "./views/panels";
 import { featureCommands, featureViewContext, moduleViewContext } from "./views/feature-context";
-import type { FeatureViewContext, ModuleViewContext } from "./views/feature-view";
+import type { FeatureViewBinding, FeatureViewContext, ModuleViewContext } from "./views/feature-view";
 import { Frame, StudioRuntime, type Port } from "./runtime";
 import { desktopAppEntry, openDesktopApp, openDesktopAppSheet } from "./guidance/desktop-app-sheet";
 import { openReportDialog } from "./diagnostics/report-dialog";
-import { readinessText } from "./readiness-text";
 import { SETTINGS_PANEL, type SettingsPart, type SettingsSection } from "./settings-sections";
 import { bindViewState, PreferenceViewState } from "./view-state";
 import { flushScrollMemories } from "./scroll-anchor";
@@ -291,7 +290,7 @@ export function mountStudio(port: Port, root: HTMLElement, views: ViewCompositio
   } };
   guidance = mountGuidance(rt, { openHelp, signal });
   const header = shellHeader(rt, theme, view, () => openHelp());
-  const status = statusBar(rt);
+  const status = statusBar(rt, views.features);
   const leaseNotice = workspaceNotice(rt);
   const setupCard = previewSetupCard(rt);
   const main = h("main", { class: "workspace", id: "layout-dock", "aria-label": "Workspace panels" }, dock.element);
@@ -740,7 +739,7 @@ export function statusActivity(frame: Frame, last: { message: string; tone: stri
 
 /** Panels whose controls only read or open things (Help, Activity): a read-only window keeps them all (t-read-only-window). */
 const READ_SAFE_PANELS = new Set<string>(["help", "activity"]);
-function statusBar(rt: StudioRuntime) {
+function statusBar(rt: StudioRuntime, features: readonly FeatureViewBinding[]) {
   // Restoring's first seconds (t-recovering) take this fixed line, not the workspace notice: nothing moves when they come and go.
   const restoring = h("div", { class: "status-item", "data-tone": "restoring", role: "status", hidden: true });
   const restoringProgress = progressBar({ label: RESTORING, className: "status-restoring-progress" });
@@ -769,10 +768,12 @@ function statusBar(rt: StudioRuntime) {
       setText(activity, shown.text); activity.dataset.tone = shown.tone; activity.hidden = shown.hidden;
       const preview = frame.preview;
       setText(gesture, preview.gesture ? "Gesture in progress · Esc cancels" : preview.control ? "Adjusting · Esc restores" : "");
-      const readiness = readinessText(frame);
-      ready.dataset.phase = readiness.phase;
-      setText(ready, readiness.label);
-      ready.title = frame.readiness.error ?? frame.viewport.head.error ?? readiness.detail;
+      const readiness = features.map(feature => feature.status?.(frame)).find(Boolean);
+      ready.hidden = !readiness;
+      if (readiness) ready.dataset.phase = readiness.phase;
+      else delete ready.dataset.phase;
+      setText(ready, readiness?.label ?? "");
+      ready.title = readiness?.detail ?? "";
     },
   };
 }

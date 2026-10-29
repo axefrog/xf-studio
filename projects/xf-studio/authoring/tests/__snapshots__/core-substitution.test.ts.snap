@@ -1,0 +1,98 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`synthetic integration enumerates only its feature folder and test composition, with no production importer 1`] = `
+[
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "src/app/alpha-availability.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "src/app/browser/document-outbox-device.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "src/app/browser/outbox-storage.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "src/app/browser/workspace-lease-device.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "src/compose/document-kinds.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "src/compose/startup-composition.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "src/compose/studio-startup.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "src/platform/core/document.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "src/platform/core/registry.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "src/preview/preview-preparation.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "src/setup/wolvenkit-setup.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "src/studio-ui/views/contribution.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "tests/features/synthetic-layers/index.ts",
+  },
+  {
+    "from": "tests/compose/synthetic-startup.ts",
+    "to": "tests/features/synthetic-layers/view.ts",
+  },
+  {
+    "from": "tests/core-substitution-browser.test.ts",
+    "to": "tests/compose/synthetic-startup.ts",
+  },
+  {
+    "from": "tests/core-substitution.test.ts",
+    "to": "tests/compose/synthetic-startup.ts",
+  },
+  {
+    "from": "tests/core-substitution.test.ts",
+    "to": "tests/features/synthetic-layers/index.ts",
+  },
+  {
+    "from": "tests/features/synthetic-layers/index.ts",
+    "to": "src/app/feature-files.ts",
+  },
+  {
+    "from": "tests/features/synthetic-layers/index.ts",
+    "to": "src/platform/api/index.ts",
+  },
+  {
+    "from": "tests/features/synthetic-layers/view.ts",
+    "to": "src/studio-ui/controls.ts",
+  },
+  {
+    "from": "tests/features/synthetic-layers/view.ts",
+    "to": "src/studio-ui/dom.ts",
+  },
+  {
+    "from": "tests/features/synthetic-layers/view.ts",
+    "to": "src/studio-ui/views/feature-view.ts",
+  },
+  {
+    "from": "tests/features/synthetic-layers/view.ts",
+    "to": "tests/features/synthetic-layers/index.ts",
+  },
+]
+`;

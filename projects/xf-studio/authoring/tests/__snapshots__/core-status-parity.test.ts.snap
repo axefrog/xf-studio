@@ -1,0 +1,5102 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`normal status-bar structure, strings and tooltip precedence match 6cfdbb86 1`] = `
+[
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "ready",
+          ],
+          [
+            "title",
+            "The UV map is up to date. The 3D view isn't shown yet.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map 256 · ready",
+        "title": "The UV map is up to date. The 3D view isn't shown yet.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "ready",
+          ],
+          [
+            "title",
+            "Every shown layer has its latest texture in the 3D view.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "3D view 256 · ready",
+        "title": "Every shown layer has its latest texture in the 3D view.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "ready",
+          ],
+          [
+            "title",
+            "The UV map is up to date. The 3D view isn't shown yet.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map 512 · ready",
+        "title": "The UV map is up to date. The 3D view isn't shown yet.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "ready",
+          ],
+          [
+            "title",
+            "Every shown layer has its latest texture in the 3D view.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "3D view 512 · ready",
+        "title": "Every shown layer has its latest texture in the 3D view.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "ready",
+          ],
+          [
+            "title",
+            "The UV map is up to date. The 3D view isn't shown yet.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map 1K · ready",
+        "title": "The UV map is up to date. The 3D view isn't shown yet.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "ready",
+          ],
+          [
+            "title",
+            "Every shown layer has its latest texture in the 3D view.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "3D view 1K · ready",
+        "title": "Every shown layer has its latest texture in the 3D view.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "ready",
+          ],
+          [
+            "title",
+            "The UV map is up to date. The 3D view isn't shown yet.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map 2K · ready",
+        "title": "The UV map is up to date. The 3D view isn't shown yet.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "ready",
+          ],
+          [
+            "title",
+            "Every shown layer has its latest texture in the 3D view.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "3D view 2K · ready",
+        "title": "Every shown layer has its latest texture in the 3D view.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "updating",
+          ],
+          [
+            "title",
+            "2 textures still to make. Until then, layers show their last finished texture.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map 256 · updating",
+        "title": "2 textures still to make. Until then, layers show their last finished texture.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "updating",
+          ],
+          [
+            "title",
+            "2 textures still to make. Until then, layers show their last finished texture.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "3D view 256 · updating",
+        "title": "2 textures still to make. Until then, layers show their last finished texture.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "updating",
+          ],
+          [
+            "title",
+            "2 textures still to make. Until then, layers show their last finished texture.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map 512 · updating",
+        "title": "2 textures still to make. Until then, layers show their last finished texture.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "updating",
+          ],
+          [
+            "title",
+            "2 textures still to make. Until then, layers show their last finished texture.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "3D view 512 · updating",
+        "title": "2 textures still to make. Until then, layers show their last finished texture.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "updating",
+          ],
+          [
+            "title",
+            "2 textures still to make. Until then, layers show their last finished texture.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map 1K · updating",
+        "title": "2 textures still to make. Until then, layers show their last finished texture.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "updating",
+          ],
+          [
+            "title",
+            "2 textures still to make. Until then, layers show their last finished texture.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "3D view 1K · updating",
+        "title": "2 textures still to make. Until then, layers show their last finished texture.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "updating",
+          ],
+          [
+            "title",
+            "2 textures still to make. Until then, layers show their last finished texture.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map 2K · updating",
+        "title": "2 textures still to make. Until then, layers show their last finished texture.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "updating",
+          ],
+          [
+            "title",
+            "2 textures still to make. Until then, layers show their last finished texture.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "3D view 2K · updating",
+        "title": "2 textures still to make. Until then, layers show their last finished texture.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "error",
+          ],
+          [
+            "title",
+            "The makeup textures couldn't be made. Use Try again in Preview quality.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map couldn't update",
+        "title": "The makeup textures couldn't be made. Use Try again in Preview quality.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "error",
+          ],
+          [
+            "title",
+            "The makeup textures couldn't be made. Use Try again in Preview quality.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "3D view couldn't update",
+        "title": "The makeup textures couldn't be made. Use Try again in Preview quality.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "error",
+          ],
+          [
+            "title",
+            "The makeup textures couldn't be made. Use Try again in Preview quality.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map couldn't update",
+        "title": "The makeup textures couldn't be made. Use Try again in Preview quality.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "error",
+          ],
+          [
+            "title",
+            "The makeup textures couldn't be made. Use Try again in Preview quality.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "3D view couldn't update",
+        "title": "The makeup textures couldn't be made. Use Try again in Preview quality.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "error",
+          ],
+          [
+            "title",
+            "The makeup textures couldn't be made. Use Try again in Preview quality.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map couldn't update",
+        "title": "The makeup textures couldn't be made. Use Try again in Preview quality.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "error",
+          ],
+          [
+            "title",
+            "The makeup textures couldn't be made. Use Try again in Preview quality.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "3D view couldn't update",
+        "title": "The makeup textures couldn't be made. Use Try again in Preview quality.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "error",
+          ],
+          [
+            "title",
+            "The makeup textures couldn't be made. Use Try again in Preview quality.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map couldn't update",
+        "title": "The makeup textures couldn't be made. Use Try again in Preview quality.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "error",
+          ],
+          [
+            "title",
+            "The makeup textures couldn't be made. Use Try again in Preview quality.",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "3D view couldn't update",
+        "title": "The makeup textures couldn't be made. Use Try again in Preview quality.",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "error",
+          ],
+          [
+            "title",
+            "Texture failure",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map couldn't update",
+        "title": "Texture failure",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+  {
+    "attributes": [
+      [
+        "class",
+        "status-bar",
+      ],
+      [
+        "aria-label",
+        "Status",
+      ],
+    ],
+    "children": [
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "restoring",
+          ],
+          [
+            "role",
+            "status",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [
+          {
+            "attributes": [],
+            "children": [],
+            "hidden": false,
+            "tag": "span",
+            "text": "",
+            "title": "",
+          },
+          {
+            "attributes": [
+              [
+                "class",
+                "progress status-restoring-progress indeterminate",
+              ],
+              [
+                "role",
+                "progressbar",
+              ],
+              [
+                "aria-label",
+                "Restoring",
+              ],
+              [
+                "aria-valuemin",
+                "0",
+              ],
+              [
+                "aria-valuemax",
+                "100",
+              ],
+            ],
+            "children": [
+              {
+                "attributes": [
+                  [
+                    "class",
+                    "progress-fill",
+                  ],
+                ],
+                "children": [],
+                "hidden": false,
+                "tag": "span",
+                "text": "",
+                "title": "",
+              },
+            ],
+            "hidden": false,
+            "tag": "div",
+            "text": undefined,
+            "title": "",
+          },
+        ],
+        "hidden": true,
+        "tag": "div",
+        "text": undefined,
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item",
+          ],
+          [
+            "data-tone",
+            "saved",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+          [
+            "title",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item status-message",
+          ],
+          [
+            "type",
+            "button",
+          ],
+          [
+            "title",
+            "Open the activity log",
+          ],
+          [
+            "data-tone",
+            "info",
+          ],
+          [
+            "hidden",
+            "",
+          ],
+        ],
+        "children": [],
+        "hidden": true,
+        "tag": "button",
+        "text": "",
+        "title": "Open the activity log",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "grow",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item muted",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "",
+        "title": "",
+      },
+      {
+        "attributes": [
+          [
+            "class",
+            "status-item ready-badge",
+          ],
+          [
+            "data-phase",
+            "error",
+          ],
+          [
+            "title",
+            "Head failure",
+          ],
+        ],
+        "children": [],
+        "hidden": false,
+        "tag": "span",
+        "text": "UV map couldn't update",
+        "title": "Head failure",
+      },
+    ],
+    "hidden": false,
+    "tag": "footer",
+    "text": undefined,
+    "title": "",
+  },
+]
+`;
