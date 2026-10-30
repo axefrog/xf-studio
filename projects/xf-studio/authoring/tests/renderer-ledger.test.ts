@@ -11,6 +11,66 @@ import { beginContextGeneration, endContextGeneration } from "../src/platform/sc
 import { CHARACTER_DETAIL_SCHEMA, type CharacterDetail, type RenderTexture } from "../src/character/render-detail";
 
 const key = textureLedgerKey({ file: "a.png", isGamma: true }, "colour" as never, "clamp" as never);
+
+test("settled details release request options, prior details and abort reasons while remaining usable", async () => {
+  async function settled() {
+    const controller = new AbortController();
+    const empty = { ...record(), components: [] };
+    const context = () => ({ overMakeup: false, profileEncoding: "srgb-decoded" as const });
+    const prior = await loadCharacterDetails(empty, { anisotropy: 1, context });
+    const options = { anisotropy: 1, context, signal: controller.signal, reuse: prior };
+    const loaded = await loadCharacterDetails(empty, options);
+    const reason = { name: "AbortError", buffer: new Uint8Array(64 * 1024) };
+    controller.abort(reason);
+    loaded.adopt();
+    prior.dispose();
+    return { loaded, refs: [new WeakRef(options), new WeakRef(prior), new WeakRef(controller.signal), new WeakRef(reason), new WeakRef(reason.buffer.buffer)] };
+  }
+  const { loaded, refs } = await settled();
+  // WeakRefs are kept alive through the current job; collect only after a fresh task, with a finite retry deadline.
+  let remaining = refs.length;
+  for (let attempt = 0; attempt < 20 && remaining; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 0));
+    Bun.gc(true);
+    remaining = refs.filter(ref => ref.deref() !== undefined).length;
+  }
+  expect(remaining).toBe(0);
+  expect(loaded.disposed).toBe(false);
+  loaded.dispose();
+  expect(loaded.disposed).toBe(true);
+});
+
+test("adopted real parts keep their resources without retaining previous load owners", async () => {
+  await decoding(async () => {
+    async function adopted() {
+      const pool = new DetailPartPool(), controller = new AbortController();
+      const firstOptions = { ...options(pool), signal: controller.signal };
+      const first = await loadCharacterDetails(record(), firstOptions);
+      const nextOptions = { ...options(pool), reuse: first };
+      const next = await loadCharacterDetails(record(), nextOptions);
+      next.adopt(); first.dispose(new Set(next.components));
+      const reason = { name: "AbortError", closedRuntime: new Uint8Array(64 * 1024) };
+      controller.abort(reason);
+      return { pool, next, refs: [new WeakRef(firstOptions), new WeakRef(nextOptions), new WeakRef(first),
+        new WeakRef(controller.signal), new WeakRef(reason), new WeakRef(reason.closedRuntime.buffer)] };
+    }
+    const { pool, next, refs } = await adopted();
+    let remaining = refs.length;
+    for (let attempt = 0; attempt < 20 && remaining; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      Bun.gc(true);
+      remaining = refs.filter(ref => ref.deref() !== undefined).length;
+    }
+    expect(remaining).toBe(0);
+    expect(next.reused).toBe(1);
+    expect(next.components[0]!.meshes[0]!.geometry.getAttribute("position").count).toBe(3);
+    expect(pool.live.size).toBe(1);
+    expect(pool.ledger.textures.size).toBe(1);
+    next.dispose(); pool.dispose();
+    expect(pool.live.size).toBe(0);
+    expect(pool.ledger.textures.size).toBe(0);
+  });
+});
 /** A map in the ledger held by `parts` parts, as a load makes it. */
 function shared(ledger: DetailLedger, parts: number) {
   const texture = new THREE.Texture(), disposed = { count: 0 };

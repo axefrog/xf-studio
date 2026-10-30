@@ -737,25 +737,12 @@ export function partKeyFor(record: CharacterDetail): (component: RenderComponent
 }
 
 /**
- * Load a record's components. With `reuse` (the details the scene shows now), a component whose content is unchanged is taken over as
- * it is (its objects, materials, bake and textures), so a tried piercing style loads only the piercings; a part that reads the skin under
- * it is reused only while the skin is unchanged. Ownership of reused parts moves to the new details when the scene swaps them in
- * (`adopt`); until then disposing the new details (a superseded load) leaves them with `reuse`.
+ * Resource ownership outlives a load; its request context must not. Creating these methods inside loadCharacterDetails kept
+ * options.reuse, request signals (including abort-reason stacks), raw file promises and parsed intermediates alive through every
+ * returned getter/dispose closure. In particular a surviving V's reuse chain could retain an already closed scene's build.
  */
-export async function loadCharacterDetails(record: CharacterDetail, options: CharacterDetailLoadOptions): Promise<LoadedCharacterDetails> {
-  const fetcher = options.fetcher ?? fetch;
-  const pool = options.pool ?? null;
-  let previous = options.reuse && !options.reuse.disposed ? options.reuse : null;
-  const ledger = pool?.ledger ?? (previous && ledgers.get(previous)) ?? new DetailLedger();
-  // Shown parts may survive a restore through Three's image upload, but new loads use this generation's ledger only.
-  if (previous && ledgers.get(previous) !== ledger) previous = null;
-  const signals = [options.signal, pool?.signal, ledger.generation].filter((value): value is AbortSignal => !!value);
-  const signal = signals.length ? AbortSignal.any(signals) : undefined;
-  let bytesUsed = 0, verticesUsed = 0, texelsUsed = 0;
-  const components: LoadedCharacterComponent[] = [];
-  /** Components taken over from `reuse`: not this load's to release until the scene adopts it. */
-  const borrowed = new Set<LoadedCharacterComponent>();
-  const released = new Set<LoadedCharacterComponent>();
+function detailLifetime(pool: DetailPartPool | null, ledger: DetailLedger) {
+  const components: LoadedCharacterComponent[] = [], borrowed = new Set<LoadedCharacterComponent>(), released = new Set<LoadedCharacterComponent>();
   let disposed = false;
   const releaseAll = (keep?: ReadonlySet<LoadedCharacterComponent>) => {
     const leaving = components.filter(item => !borrowed.has(item) && !keep?.has(item) && !released.has(item));
@@ -763,14 +750,76 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     const kept = geometriesOf(staying.map(item => item.root));
     for (const item of leaving) {
       released.add(item);
-      // Kept for later when there is a pool: a part the next change may bring back is not loaded again.
       const key = partKeys.get(item);
       if (pool && key !== undefined) pool.keep(key, item);
       else { releaseDetailObject(item.root, kept); ledger.release(ledger.parts.get(item)); }
     }
   };
+  return {
+    components, borrowed, releaseAll,
+    finish(data: Omit<LoadedCharacterDetails, "components" | "reused" | "disposed" | "adopt" | "dispose">): LoadedCharacterDetails {
+      const loaded: LoadedCharacterDetails = { ...data, components, reused: borrowed.size,
+        get disposed() { return disposed; },
+        // Only components transfer; the prior details and their request context are never retained.
+        adopt() { borrowed.clear(); },
+        dispose(keep) {
+          if (disposed) return;
+          disposed = true;
+          pool?.live.delete(loaded);
+          releaseAll(keep);
+        },
+      };
+      ledgers.set(loaded, ledger);
+      pool?.live.add(loaded);
+      return loaded;
+    },
+  };
+}
+
+/** Adapters may retain their texture resolver; it owns this part's inputs, never the async loader's options or reuse chain. */
+function chunkTextureResolver(material: RenderComponent["materials"][number], images: ReadonlyMap<string, HTMLImageElement>,
+  ledger: DetailLedger, part: PartResources, anisotropy: number) {
+  return (parameter: string | RenderTexture, use: TextureUse, wrap: TextureWrap) => {
+    const source = typeof parameter === "string" ? material.textures[parameter] : parameter;
+    if (!source) return undefined;
+    const key = textureLedgerKey(source, use, wrap);
+    let entry = ledger.textures.get(key);
+    if (!entry) {
+      const texture = new THREE.Texture(images.get(source.file));
+      texture.flipY = false;
+      // Adapters choose colour or data; only a colour input honours the resource's own isGamma flag.
+      texture.colorSpace = textureColourSpace(use, source.isGamma);
+      texture.wrapS = texture.wrapT = wrap === "repeat" ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
+      texture.anisotropy = anisotropy;
+      texture.name = source.depotPath;
+      texture.needsUpdate = true;
+      const bitmap = ledger.bitmaps.get(source.file);
+      if (bitmap && bitmap.width > 0 && bitmap.height > 0) offerUploadSource(texture, bitmap);
+      entry = { texture, refs: 0, file: source.file };
+      ledger.textures.set(key, entry);
+    }
+    if (!part.textureKeys.includes(key)) { part.textureKeys.push(key); entry.refs++; }
+    return entry.texture;
+  };
+}
+
+/**
+ * Load a record's components. With `reuse` (the details the scene shows now), a component whose content is unchanged is taken over as
+ * it is (its objects, materials, bake and textures), so a tried piercing style loads only the piercings; a part that reads the skin under
+ * it is reused only while the skin is unchanged. Ownership of reused parts moves to the new details when the scene swaps them in
+ * (`adopt`); until then disposing the new details (a superseded load) leaves them with `reuse`.
+ */
+export async function loadCharacterDetails(record: CharacterDetail, { fetcher = fetch, anisotropy, signal: requestSignal, reuse,
+  pool = null, context, built, warmed = null }: CharacterDetailLoadOptions): Promise<LoadedCharacterDetails> {
+  let previous = reuse && !reuse.disposed ? reuse : null;
+  const ledger = pool?.ledger ?? (previous && ledgers.get(previous)) ?? new DetailLedger();
+  // Shown parts may survive a restore through Three's image upload, but new loads use this generation's ledger only.
+  if (previous && ledgers.get(previous) !== ledger) previous = null;
+  const signals = [requestSignal, pool?.signal, ledger.generation].filter((value): value is AbortSignal => !!value);
+  let signal = signals.length ? AbortSignal.any(signals) : undefined;
+  let bytesUsed = 0, verticesUsed = 0, texelsUsed = 0;
+  const lifetime = detailLifetime(pool, ledger), { components, borrowed, releaseAll } = lifetime;
   const aborted = () => { if (signal?.aborted) throw new DOMException("Loading the details was cancelled.", "AbortError"); };
-  const warmed = options.warmed ?? null;
   const spend = (bytes: number) => {
     bytesUsed += bytes;
     if (bytesUsed > MAX_BYTES) throw Error("The prepared details are larger than the preview allows.");
@@ -915,7 +964,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
       }
       spendTexels(component);
       const skinUnder = skinFor(component.slot);
-      const adapterContext: AdapterContext = { slot: component.slot, ...options.context(component.slot), ...(skinUnder ? { skin: skinUnder } : {}),
+      const adapterContext: AdapterContext = { slot: component.slot, ...context(component.slot), ...(skinUnder ? { skin: skinUnder } : {}),
         ...(component.slot === "body" ? { skins: [...bodySkins] } : {}) };
       const part: PartResources = { materials: [], owned: [], textureKeys: [] };
       // Two components may share a name (two face choices drawing one mesh); a failure releases this one's root only.
@@ -958,28 +1007,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
           const rigidLimit = component.slot === "body" || component.slot === "clothing" ? "rigid-body-part" : "rigid-part";
           if (rigidNames.has(object.name) && !partLimits.includes(rigidLimit)) partLimits.push(rigidLimit);
           object.frustumCulled = false;
-          const chunkTextures = (parameter: string | RenderTexture, use: TextureUse, wrap: TextureWrap) => {
-            const source = typeof parameter === "string" ? material.textures[parameter] : parameter;
-            if (!source) return undefined;
-            const key = textureLedgerKey(source, use, wrap);
-            let entry = ledger.textures.get(key);
-            if (!entry) {
-              const texture = new THREE.Texture(loadedImages.get(source.file));
-              texture.flipY = false;
-              // Adapters choose colour or data; only a colour input honours the resource's own isGamma flag.
-              texture.colorSpace = textureColourSpace(use, source.isGamma);
-              texture.wrapS = texture.wrapT = wrap === "repeat" ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
-              texture.anisotropy = options.anisotropy;
-              texture.name = source.depotPath;
-              texture.needsUpdate = true;
-              const bitmap = ledger.bitmaps.get(source.file);
-              if (bitmap && bitmap.width > 0 && bitmap.height > 0) offerUploadSource(texture, bitmap);
-              entry = { texture, refs: 0, file: source.file };
-              ledger.textures.set(key, entry);
-            }
-            if (!part.textureKeys.includes(key)) { part.textureKeys.push(key); entry.refs++; }
-            return entry.texture;
-          };
+          const chunkTextures = chunkTextureResolver(material, loadedImages, ledger, part, anisotropy);
           const adapted = adapter.create(material, chunkTextures, object, adapterContext);
           part.materials.push(adapted.material);
           part.owned.push(...adapted.owned);
@@ -1027,7 +1055,7 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
         ledger.parts.set(item, part);
         partKeys.set(item, key);
         components.push(item);
-        options.built?.(item);
+        built?.(item);
         for (const limit of partLimits) addLimit(component.slot, limit);
         if (skin) keepSkin(component, skin, meshes);
       } catch (error) {
@@ -1074,23 +1102,18 @@ export async function loadCharacterDetails(record: CharacterDetail, options: Cha
     }
     // A slot with at least one loaded component is shown; report a problem only when nothing of it loaded.
     const shown = new Set(components.map(item => item.component.slot));
-    const loaded: LoadedCharacterDetails = { record, components, problems: problems.filter((problem, index) => !shown.has(problem.slot) &&
+    const loaded = lifetime.finish({ record, problems: problems.filter((problem, index) => !shown.has(problem.slot) &&
       problems.findIndex(other => other.slot === problem.slot) === index), limits: limits.filter(limit => shown.has(limit.slot)), notes, rigs,
-      reused: borrowed.size,
-      get disposed() { return disposed; },
-      // The scene shows these details now: the parts taken over from the shown details are this load's to release from here on
-      // (their resources are already in the shared ledger).
-      adopt() { borrowed.clear(); },
-      dispose(keep) {
-        if (disposed) return;
-        disposed = true;
-        pool?.live.delete(loaded);
-        releaseAll(keep);
-      } };
-    ledgers.set(loaded, ledger);
-    pool?.live.add(loaded);
+    });
     aborted();
     return loaded;
   } catch (error) { releaseAll(); throw error; }
-  finally { releaseImages(); }
+  finally {
+    releaseImages();
+    // These belong to this request, not to adopted parts or an adapter's retained callbacks. In particular an abort reason can
+    // carry an engine error stack with another scene's build closure, so retaining old request signals is not harmless metadata.
+    bytesOf.clear(); parsed.clear(); lendable.clear();
+    previous = null; reuse = null; warmed = null;
+    signal = undefined; requestSignal = undefined; signals.length = 0;
+  }
 }
