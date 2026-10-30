@@ -300,8 +300,11 @@ export class StudioApplication {
   }
   /** A bound application facade. Editing machinery stays owned once; only named destination/device services differ. */
   private bindServices(services: Services): Services {
-    return { ...services, starters: services.starters?.bind?.((look, id) => lookScope(look) === services.document.scopeId
-      ? ("recipe" in services.document ? services.document.recipe.layers.find(layer => layer.id === id) : undefined) : undefined) ?? services.starters };
+    // A starter needs only its document. Capturing services here chains every previous attach (and its retired scene devices)
+    // through the next bound StarterActions, even after those runtimes have released their GPU resources.
+    const document = services.document;
+    return { ...services, starters: services.starters?.bind?.((look, id) => lookScope(look) === document.scopeId
+      ? ("recipe" in document ? document.recipe.layers.find(layer => layer.id === id) : undefined) : undefined) ?? services.starters };
   }
   fork(overrides: Partial<Services>, editing?: StudioApplication): StudioApplication {
     const services = { ...this.services, ...overrides };

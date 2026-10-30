@@ -469,6 +469,31 @@ const pointsOf = (layer: Layer) => layer.points.map(point => [point.u, point.v])
 const shapePoints = (id: string) => pointsOf(layerWithShape(newLayerTemplate(), starter(id).shape));
 
 describe("in the application", () => {
+  test("replacing attached services releases retired runtime buffers while starter actions stay usable", async () => {
+    const { studio } = await studioWithStarters({ looks: [{ name: "Look", recipe: starterRecipe() }] });
+    async function replace() {
+      const refs: WeakRef<object>[] = [];
+      for (let cycle = 0; cycle < 3; cycle++) {
+        const runtime = { buffer: new ArrayBuffer(64 * 1024) };
+        // Model a window service backed by a runtime; no rendering or game data is needed to test the service binding's ownership.
+        studio.core.app.attach({ newId: () => `runtime-${runtime.buffer.byteLength}` });
+        refs.push(new WeakRef(runtime), new WeakRef(runtime.buffer));
+        studio.core.app.attach({ newId: undefined });
+      }
+      return refs;
+    }
+    const refs = await replace();
+    let remaining = refs.length;
+    for (let attempt = 0; attempt < 20 && remaining; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      Bun.gc(true);
+      remaining = refs.filter(ref => ref.deref() !== undefined).length;
+    }
+    expect(remaining).toBe(0);
+    const look = studio.lookEditor.ref()!, layerId = studio.document.recipe.layers[0]!.id;
+    expect(studio.core.app.capability({ kind: "starters.save", look, layerId, name: "Still bound" }).available).toBe(true);
+  });
+
   test("a captured Save refuses a switched look with the same layer ID, and a removed layer", async () => {
     const a = starterRecipe(), b = starterRecipe();
     b.layers[0]!.points[0]!.u += .01;
