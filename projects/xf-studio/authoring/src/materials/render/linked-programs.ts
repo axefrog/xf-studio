@@ -31,7 +31,7 @@ export function traceProgramPreparation(renderer: THREE.WebGLRenderer, object: T
       for (const item of material ? Array.isArray(material) ? material : [material] : []) {
         type Program = { id: number; cacheKey: string };
         const state = renderer.properties.get(item) as { programs?: Map<string, Program>; currentProgram?: Program };
-        receive({ at: performance.now(), pass, object: child.name, material: item.name, materialId: item.id, type: item.type,
+        receive({ at: performance.now(), pass, object: child.name, material: item.name, materialId: (item as { id?: number }).id ?? -1, type: item.type,
           programs: [...state.programs?.values() ?? []].map(program => ({ id: program.id, cacheKey: program.cacheKey, current: program === state.currentProgram })) });
       }
     });
