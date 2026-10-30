@@ -257,7 +257,8 @@ export class StudioApplication {
   private disposed = false;
   /** `registry` is the composition's action registry, injected by the composition roots (CORE-29). */
   constructor(services: Services, registry: Registry<AnyOwner>, edits?: EditingState) {
-    if (services.signal?.aborted) throw Error("This editing context was released.");
+    const signal = services.signal;
+    if (signal?.aborted) throw Error("This editing context was released.");
     this.edits = edits ?? { ended: new Set() };
     this.services = services; this.services = this.bindServices(services); this.routes = registry; this.handlers = this.bindHandlers();
     this.asyncHandlers = this.bindAsyncHandlers();
@@ -275,7 +276,7 @@ export class StudioApplication {
       bound = [...Object.keys(this.handlers), ...Object.keys(this.asyncHandlers), ...this.featureHandlers.keys()].sort();
     if (owners.join() !== bound.join())
       throw Error(`Registered owners (${owners.join(", ")}) do not match the application's handlers (${bound.join(", ")}).`);
-    if (services.signal?.aborted) throw Error("This editing context was released.");
+    if (signal?.aborted) throw Error("This editing context was released.");
     // A gesture or control run belongs to the content it began on: it settles (commits) before the document shows other content, another
     // look's or the same look's replaced from elsewhere, and is over. A gesture ends with its session; a control run's later edits are
     // refused until the control begins again (`ended`).
@@ -287,8 +288,8 @@ export class StudioApplication {
     });
     this.subscribeSources();
     const abort = () => this.dispose();
-    services.signal?.addEventListener("abort", abort, { once: true });
-    this.abortOff = () => services.signal?.removeEventListener("abort", abort);
+    signal?.addEventListener("abort", abort, { once: true });
+    this.abortOff = () => signal?.removeEventListener("abort", abort);
   }
   /** The injected registry, including the current experiment registrations when the presentation binds them. */
   actionRegistry() { return this.routes; }
@@ -335,8 +336,9 @@ export class StudioApplication {
     this.unsubs = [s.document.subscribe(() => this.notify()), s.history.subscribe(() => this.notify())];
     this.seenContent = s.collection?.contentVersion();
     // Save progress, busy flags and list refreshes must not invalidate an open menu (audit A-14).
-    if (s.collection) this.unsubs.push(s.collection.subscribe(() => {
-      const content = s.collection!.contentVersion();
+    const collection = s.collection;
+    if (collection) this.unsubs.push(collection.subscribe(() => {
+      const content = collection.contentVersion();
       if (content !== this.seenContent) { this.seenContent = content; this.collectionRevision++; }
       this.notify();
     }));

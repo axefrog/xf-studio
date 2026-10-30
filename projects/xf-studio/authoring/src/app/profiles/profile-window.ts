@@ -159,13 +159,13 @@ export function substitutionContext(state: ProfileSessions, services: Pick<Profi
 }
 
 /** `scene.setLook` and `scene.setSubject` over the session's scenes, checking that a look or V still exists (profiles design §3.6). */
-export function sceneCommands(state: ProfileSessions, services: Pick<ProfileServices, "characters" | "collections">): SceneCommands {
+export function sceneCommands(state: ProfileSessions, { characters, collections }: Pick<ProfileServices, "characters" | "collections">): SceneCommands {
   return new SceneCommands({ scene: id => state.knownScene(id), setLook: (scene, look) => state.setLook(scene, look), setSubject: (scene, subject) => state.setSubject(scene, subject) },
-    { look: ref => services.collections.look(ref)?.state === "live", subject: subjectAvailable(services) });
+    { look: ref => collections.look(ref)?.state === "live", subject: subjectAvailable({ characters }) });
 }
 /** Whether a subject can be shown: one of a kind this build has, whose document exists (not deleted). */
-const subjectAvailable = (services: Pick<ProfileServices, "characters">) => (ref: SubjectRef) =>
-  ref.kind === CHARACTER_KIND && !!services.characters.document(ref.id);
+const subjectAvailable = ({ characters }: Pick<ProfileServices, "characters">) => (ref: SubjectRef) =>
+  ref.kind === CHARACTER_KIND && !!characters.document(ref.id);
 
 /**
  * The window's input-layer resolution (app/profiles/targets.ts) over its session, view graph, focus and owners: what each panel, key

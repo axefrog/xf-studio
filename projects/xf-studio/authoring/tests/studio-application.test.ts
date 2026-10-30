@@ -10,6 +10,7 @@ import { ACTION_DESCRIPTORS, type ActionDescriptor } from "../src/app/studio-act
 import { STUDIO_COMPOSITION, STUDIO_DOCUMENTS } from "../src/compose/studio-registry";
 import { freshWorkspace } from "./fixtures/eye-region";
 import { createViewServices } from "../src/app/view-actions";
+import { makeupContext } from "../src/app/authoring/makeup-context";
 
 import { namedCore } from "./fixtures/named-targets";
 import { vHistory } from "./fixtures/character-steps";
@@ -18,6 +19,58 @@ function fixture() {
   const core = namedCore(createTrustedAuthoringCore(workspace, { resetStack: () => {}, selectedCollection: () => "draft" }, STUDIO_COMPOSITION));
   return { workspace, document: core.document, app: core.app, core };
 }
+
+test("a surviving fork releases inherited runtime services after replacement and still follows its owner signal", async () => {
+  const { app, document, core } = fixture(), life = new AbortController();
+  async function inheritThenReplace() {
+    const runtime = { buffer: new ArrayBuffer(64 * 1024) };
+    app.attach({ newId: () => `runtime-${runtime.buffer.byteLength}` });
+    const fork = app.fork({ signal: life.signal });
+    app.attach({ newId: undefined });
+    return { fork, refs: [new WeakRef(runtime), new WeakRef(runtime.buffer)] };
+  }
+  const { fork, refs } = await inheritThenReplace();
+  try {
+    let remaining = refs.length;
+    for (let attempt = 0; attempt < 20 && remaining; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      Bun.gc(true);
+      remaining = refs.filter(ref => ref.deref() !== undefined).length;
+    }
+    expect(remaining).toBe(0);
+    const action = { kind: "layer.setEnabled" as const, id: document.recipe.layers[0]!.id, enabled: false, look: core.targets.named().look! };
+    expect(fork.dispatch(action).ok).toBe(true);
+    let notifications = 0;
+    fork.subscribe(() => notifications++);
+    life.abort();
+    expect(fork.dispatch({ ...action, enabled: true })).toMatchObject({ ok: false, code: "missing_target" });
+    app.attach({ newId: undefined });
+    expect(notifications).toBe(0);
+  } finally { life.abort(); app.dispose(); }
+});
+
+test("a retained makeup context holds its document owners without retaining unrelated runtime services", async () => {
+  const { app, core, document } = fixture();
+  async function contextOnHead() {
+    const runtime = { buffer: new ArrayBuffer(64 * 1024) };
+    const services = { document, history: core.history, ...core.projectionServices, newId: () => `runtime-${runtime.buffer.byteLength}` };
+    return { context: makeupContext(services), refs: [new WeakRef(services), new WeakRef(runtime), new WeakRef(runtime.buffer)] };
+  }
+  const { context, refs } = await contextOnHead();
+  try {
+    let remaining = refs.length;
+    for (let attempt = 0; attempt < 20 && remaining; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      Bun.gc(true);
+      remaining = refs.filter(ref => ref.deref() !== undefined).length;
+    }
+    expect(remaining).toBe(0);
+    const id = document.recipe.layers[0]!.id;
+    expect(context.target({ kind: "layer", id })?.available).toBe(true);
+    expect(app.dispatch({ kind: "layer.edit", command: { kind: "remove", id } }).ok).toBe(true);
+    expect(context.target({ kind: "layer", id })).toMatchObject({ available: false, code: "missing_target" });
+  } finally { app.dispose(); }
+});
 
 test("module descriptors are detached and frozen once, and refreshed when their registration changes", () => {
   const { app, workspace } = fixture();

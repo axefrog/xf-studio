@@ -58,8 +58,8 @@ export function makeupContextCandidates(hit: StudioContextHit, recipe: Recipe): 
   return [];
 }
 
-export function makeupContext(s: StudioApplicationServices): FeatureContext {
-  const state = () => s.eyeMakeup!.state(), recipe = () => state().part;
+export function makeupContext({ eyeMakeup, document, collection }: Pick<StudioApplicationServices, "eyeMakeup" | "document" | "collection">): FeatureContext {
+  const state = () => eyeMakeup!.state(), recipe = () => state().part;
   const missing = (reason: string) => ({ available: false as const, code: "missing_target" as const, reason });
   const target: FeatureContext["target"] = hit => {
     const layers = recipe().layers;
@@ -69,7 +69,7 @@ export function makeupContext(s: StudioApplicationServices): FeatureContext {
   };
   return {
     handles: hit => hit.kind !== "collection" && hit.kind !== "preset",
-    revision: () => "geometryVersion" in s.document ? s.document.geometryVersion.revision : s.document.version,
+    revision: () => "geometryVersion" in document ? document.geometryVersion.revision : document.version,
     target,
     validate(hit) {
       if (hit.kind !== "tangent") return;
@@ -114,7 +114,7 @@ export function makeupContext(s: StudioApplicationServices): FeatureContext {
     detail(hit) { return "layerId" in hit ? recipe().layers.find(layer => layer.id === hit.layerId)?.name : undefined; },
     selected() { const value = state(), layer = value.part.layers[value.editor.active]; return layer ? {
       hit: { kind: "point", layerId: layer.id, index: value.editor.selected }, label: `Selected point ${value.editor.selected + 1}`, detail: layer.name } : undefined; },
-    inputFacts() { const value = state(), layer = value.part.layers[value.editor.active], owner = s.collection?.selectedPreset(); return {
-      hasTarget: !!layer, enabled: !!layer?.enabled, locked: !(owner?.loaded && !owner.id) && !!s.document.locked }; },
+    inputFacts() { const value = state(), layer = value.part.layers[value.editor.active], owner = collection?.selectedPreset(); return {
+      hasTarget: !!layer, enabled: !!layer?.enabled, locked: !(owner?.loaded && !owner.id) && !!document.locked }; },
   };
 }
