@@ -33,7 +33,7 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
   - first-run preparation;
   - Build's verifier and first plate cut (PIPE-130).
 
-  Progress: a cold tab on another V went from 9.5 s to 0.8–1.0 s (26 Oct). Next, in order: the restart to V (PREV-196), then a cold-frame stall of up to 3 s on a tab's first frame. That stall is flaky on `main` too, with no shader links and no long page tasks, so it needs a GPU or driver trace. *26 Oct*
+  Progress: a cold tab on another V went from 9.5 s to 0.8–1.0 s (26 Oct). The warm restart to V (PREV-196) went from 9.9–10.6 s to 2.22–2.46 s (30 Oct); the last lever is direct BCn texture upload, waiting on the maintainer's decision. Next, in order: PREV-196's remaining gap, then a cold-frame stall of up to 3 s on a tab's first frame. That stall is flaky on `main` too, with no shader links and no long page tasks, so it needs a GPU or driver trace. *26 Oct*
 - **Finish verdicts in game:** Glitter and Shimmer reworked offline, waiting for in-game sessions ([finishes](glitter-material.md)). Parked until a session: the coordinator adds the finish checks to the next prepared game session's checklist. *26 Oct*
 - **Make the Save Explorer worth having** (21 Oct). Today it's an early-access curiosity that lets you look inside a save, read-only ([save editor design](../save/save-editor-design.md)). When this comes up, an agent studies it and reports back:
   - what players and modders would actually use it for;
@@ -45,8 +45,6 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 
 ### Polish lane (before 1.0)
 - **In-game styling for the bridge surfaces: the spec has landed, and the build is with XF · Runtime bridge.** The style guide's section "In-game surfaces" holds the token table (`studio-ui/style-guide/in-game-theme.ts`, imported by `tools/overlay/theme.ts`), the type roles, the components, the pulse and settle motion, and the reduced-motion rule for the overlay panel, the CET window and line, and the ink panel. The bridge builds it, including replacing the ink answers' fast red/yellow flash with a hold and ease. The UI track reviews the in-game captures. *22 Oct; spec 26 Oct*
-- **Polish batch 3 leftovers** (polish-3 merged 24 Oct, `54b109bb`):
-  - The V captures (UI-190) and a read-only capture showing the Character and Settings panels; check the Opacity slider there. They need a real V, so the coordinator takes them.
 - **The rest of [Small bugs and friction](#small-bugs-and-friction):** WebView2 security. *21 Oct*
 
 ### Next tracks (ranked)
