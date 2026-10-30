@@ -1,6 +1,6 @@
 # PREV-196: warm restart preparation
 
-Steps 1-4 are merged; step 4 is **main `44995386`**, MERGE-reviewed with the complete host-owned-cache integrity chain, full suite **5,024/0** and GPU **124/0**. The whole V appears at **2.22-2.46 s warm**, versus the original **9.9-10.6 s**; the latest same-load A/B baseline is **2.55-2.76 s**. Step 5's cropped bands were byte-identical in the browser but slower, and are reverted at `4e18a8e0`. Step 6's bounded texture worker freed about 380 ms of page-thread work but didn't bring the frame forward, and is reverted. The trace findings and ranked next steps are retained below. Page read-ahead and BCn stay shelved/evaluation-only; every integrity check stays. **<2 s remains open.**
+Steps 1-4 are merged; step 4 is **main `44995386`**, MERGE-reviewed with the complete host-owned-cache integrity chain, full suite **5,024/0** and GPU **124/0**. The whole V appears at **2.22-2.46 s warm**, versus the original **9.9-10.6 s**; later same-load A/Bs give **2.43-2.79 s**. Step 5's cropped bands were byte-identical in the browser but slower, and are reverted at `4e18a8e0`. Step 6's bounded texture worker freed about 380 ms of page-thread work but didn't bring the frame forward, and is reverted. **Step 7 is an uncommitted candidate on `55487e96`: failure-only shader logs, one-pass light-token substitution and an opt-in exact-key inventory.** Targeted CPU proofs pass; browser timing/parity and independent review belong to the coordinator. No program or pass is removed. Page read-ahead and BCn stay shelved/evaluation-only; every integrity check stays. **<2 s remains open.**
 
 ## Measurements
 
@@ -304,6 +304,8 @@ The exact extension names and block/subimage restrictions are in [S3TC](https://
 
 **R&D retained independently of the candidate:** the coordinator's main `44995386` warm-run-2 trace (438,078 events; frame 2818 ms) attributes a large part of the formerly opaque `(program)` bucket to native ImageBitmap completion on the page's thread, not shader compilation. [The knowledge page](../../knowledge/webgl-program-linking.md#coordinator-trace-the-pages-native-texture-work-prev-196-step-6) records the reconciled main-thread partition, callers, GPU-service/ANGLE worker evidence, phase marks and limits. Native bitmap completion is 375 ms excluding GC; sampled texture submission is 337 ms including 70 ms token waits. Final completion costs only 0.07 ms in this run. The historical 405 ms `(program)` is a different profile; the equivalent trace window has 578 ms, including 246 bitmap completion and 184 fetch/Mojo callbacks. No fabricated attribution of the older 405 ms is made.
 
+Original ranking before step 6's A/B (the worker was subsequently dropped; step 7 takes the shader investigation):
+
 | Rank | Next step | Estimated warm saving from the current baseline | Risk/fidelity |
 |---|---|---|---|
 | 1 | Bounded worker constructs full/reduced PNG bitmaps and transfers them back | 200-350 ms | Preserve decode options/pixels and G2; prove lifetime, memory and transfer behaviour. Selected for step 6. |
@@ -324,6 +326,75 @@ These are estimates, not additive measured savings. The latest same-load main A/
 
 **Expected saving and measurement:** 200-350 ms warm is a hypothesis from 375 ms page bitmap completion, less worker scheduling/transfer overhead and reduced native PNG concurrency. SHA-256, CPU underlay reads, `texSubImage2D` copies/token waits and shader preparation remain. Compare the candidate against `44995386` under the same load and record answer/record/loaded, uploads/maps-drained/baked/programs/linked/drained, prepared/frame plus page CPU time. A lower `(program)` bucket alone is not a successful result: require a lower whole-V frame time and unchanged resource/pixel proofs. The direct BCn evaluation above remains separate.
 
+## Step 7: shader preparation without changing the programs
+
+**Baseline [coordinator offline trace; source]:** the main warm restart's baked → programs span is **271 ms**, with **73 labelled links**, GPU-main occupancy **173 ms**, and ANGLE workers **407 ms summed across threads**. Drained → prepared is **52 ms**, including **22 ms synchronous waits**. The page profile attributes about **20-33 ms** to `replaceLightNums` and **24-44 ms** to `getProgramInfoLog`; these are different observations/buckets and are not additive guaranteed savings. A warm Chrome profile caches driver builds, but a new WebGL context still creates/links program objects and initializes their locations.
+
+### Code inventory and why one V is many programs
+
+`lighting-setup-stage.ts::prepareSteps` compiles every drawable's forward material, three scatter variants where eligible, contact depth for casters, then the shadow variants. `character-renderer.ts::prepareDetails` uses the core head wearing the resolved skin for core-head placement, rather than compiling the unused resolved skin chunk. Materials and meshes share renderer-wide programs by exact key already; a material count or a compile-call count is not a link count.
+
+This is the **source-derived catalogue**, not an invented assignment of the trace's 73 links. The trace has no exact Three keys/material-instance mapping; use the hook below for that installation's actual list. `F` below is each material's full-skin-prefixed custom key where applicable; pipe characters shown in keys are literal separators.
+
+| Material family / pass | Key identity and reason |
+|---|---|
+| Resolved head/body skin, forward | `standard`; custom suffix `full-skin-<sets>-<offset>\|xfs-skin-2`. Geometry morph layout, side, maps, lights/shadows and target state also enter the full key. |
+| Eyes / wetness shell, forward | `standard`; `F` ends in `xfs-eye-2`, `xfs-eye-2-gradient` or `xfs-eye-shell-1`. The gradient define and wetness/transparency remain distinct; the transparent two-sided shell can require separate front/back programs. |
+| Face details / brows, forward | Their actual standard/physical adapter key, e.g. `xfs-face-decal-3\|<kind>\|<underlay>\|<skin-light>` plus skin layout. Coverage, decal blend and underlay features cannot be erased by matching material names. |
+| Strands, lashes / cap, forward | Physical/standard adapter key, including `xfs-strand-coverage-3`, `xfs-hair-lighting-4` and/or `xfs-hair-<kind>-9` as installed. Geometry, alpha coverage and one-/two-sided drawing remain relevant. |
+| Layered eyes/body/clothing/piercings, metal and glass, forward | `xfs_layered_packed`, `xfs-metal-base-2[-masked]`, `xfs-glass-onesided-1\|<defines>`, or the actual adapter's key, with skin layout. These are resolver/material families, not per-mod paths. |
+| Skin/decal scatter S0, S1, S2 | Forward shader/key plus `\|xfs-scatter-input-2\|skin` or `\|decal`; defines `XFS_SCATTER_INPUT`, plus `XFS_SCATTER_S1` or `XFS_SCATTER_S2` for their targets. Each writes a different value; keep all three single-output draws (G2). |
+| Scatter occluder in S0, S1, S2 | `F\|xfs-scatter-input-2\|occluder`, with `XFS_SCATTER_OCCLUDER` and `XFS_OCCLUDER_CUTOFF`. **Already one program across all three targets**, proved on real Three over recording GL. Original material features still distinguish different occluders. |
+| Contact caster depth | `depth`; custom `full-skin-depth-<sets>-solid` or `-strand`, otherwise stock fallback. Skin/body/clothing cast; alpha-covered hair/face strands cast too; glass does not. Contact reads the mesh's live custom depth state. |
+| Shadow depth under forward and contact materials | The same depth key family with Three's copied map, alpha-test, side, clipping and displacement fields. The contact prepass also renders shadow maps; its live depth material changes side across redraws (PREV-208). Preparation covers both side states, restoring fields afterwards. These calls often reuse keys; deleting one without draw evidence risks a first-frame link. |
+| Outside the 271 ms details interval | Layer bakes precede `details:baked`. Runtime/display preparation additionally covers the background, scatter blur and the selected display transform, feature surfaces and editor guides. They are not automatically 73 additional programs or candidates for removal. |
+
+Three r186's **full non-raw key** is comma-joined: shader ID (or custom vertex/fragment IDs), every define name/value, precision, output colour space, environment layout, map UV selectors, combine/fog/point sizing, morph counts, every light/shadow/probe count, shadow type, tone mapping, clipping counts, depth packing, two feature-bit masks, renderer output colour space, then the custom key. RawShaderMaterial skips the parameter/bitmask/output block. `WebGLPrograms.getProgramCacheKeyParameters` includes light counts even for unlit/depth programs. That is a possible overpartition across lighting setups, not proof of duplicates within this V. Custom hooks can also use light tokens in otherwise unlit materials. No global light-count or material-feature normalization is justified yet.
+
+### Changes and proofs
+
+1. **Failure-only diagnostics, in the existing `patches/three@0.186.0.patch`.** With `debug.checkShaderErrors` enabled, first use checks `LINK_STATUS` before requesting logs. Success skips all three log reads; failure executes Three's original diagnostics, default error text/source context or custom `onShaderError`, and retains shader deletion and location initialization. Disabled checking retains its original behavior. Successful driver warnings/diagnostic objects are intentionally no longer collected; failed-link error reporting is retained. At 73 successful programs this removes **219 info-log API calls**, not 219 proven IPC waits. Status and location queries remain synchronous and stay after existing completion protection. Failed links take one additional status read before the original path.
+2. **One-pass light-token substitution, in the same patch.** The original function scans each expanded vertex and fragment string 13 times; one combined regex now replaces exactly those names. The longer `NUM_SPOT_LIGHT_SHADOWS_WITH_MAPS` precedes its prefix. Tests compare all tokens, embedded/prefix/suffix cases and 64 count vectors, then actual assembled skin/scatter/depth/physical programs and cache keys byte for byte. No source cache, eviction policy or ShaderChunk invalidation machinery is added. Three already avoids assembly on an exact program-cache hit; different variants still rebuild common source/chunks, which remains a later profiling target.
+3. **Opt-in inventory, in `materials/render/linked-programs.ts` and `preview/render/lighting-setup-stage.ts`.** A supplied `globalThis.__xfsProgramPreparation` function receives CPU-side names, material IDs, pass labels, program IDs and full Three cache keys immediately after each compile submission. No GL query, shader source, timer, new resource owner or default retained log. Without the function it returns immediately. Consumer exceptions cannot alter preparation. Program lists are the material's retained variants; `current` identifies its last selected program, not every historical key's current use.
+
+`tests/program-preparation.test.ts` reconstructs and loads the exact dependency patch in automatically removed **worktree-local** test folders, without changing the shared dependency junction. It exercises baseline and patched real Three renderers over recording GL: zero successful logs, exact broken-shader message/diagnostics, custom callbacks, disabled checking, one-time locations/deletion, byte-identical source/keys, existing occluder sharing/distinct skin targets, and pass inventory without GL reads. The recording fixture now accepts a renderer constructor; its default is unchanged. No full suite, browser, GPU, tree walker or typecheck ran here.
+
+**Targeted validation: 46 passed, 0 failed, 491 assertions**, across `program-preparation`, `shader-assembly`, `runtime-preparation`, `link-pacing` and `character-renderer`, together as one guarded Bun process (4 GB limit, **0.4 GB peak**, 0.51 s Bun time). G2 upload window/admission, strict completion/revision refresh, context generations, cancellation and the two-to-six-link pacer are unchanged.
+
+### Coordinator inventory and browser measurement
+
+Refresh the normal patched Three dependency/install and rebuild before browser measurement; this sandbox intentionally leaves `node_modules` untouched. Confirm its `build/three.module.js` contains `XF Studio: successful links` and `one scan`. The unit loader proves the committed patch, not that an existing installed bundle has refreshed.
+
+In a separate diagnostic run on the isolated warm-profile `?verify=1` page, install this through CDP `Page.addScriptToEvaluateOnNewDocument` **before navigating/reloading**:
+
+```js
+globalThis.__xfsProgramPreparationRows = [];
+globalThis.__xfsProgramPreparationDropped = 0;
+globalThis.__xfsProgramPreparation = row => {
+  if (__xfsProgramPreparationRows.length < 2048) __xfsProgramPreparationRows.push(row);
+  else __xfsProgramPreparationDropped++;
+};
+```
+
+After `xfs:character:frame`, evaluate the following with `Runtime.evaluate` (`returnByValue: true`). It returns the exact program/key list and all material/pass associations; current versus retained is explicit. Filter `at` to the `details:baked` → `details:programs` marks for the trace's details phase. A nonzero dropped count makes the inventory incomplete. Program IDs, not names, are the renderer-wide identity; a key listed repeatedly is reuse, not another link. For two-sided transparent material preparation, the last-selected side is `current` and the other side is retained; the first occurrence still inventories both keys.
+
+```js
+(() => {
+  const rows = __xfsProgramPreparationRows, programs = new Map();
+  for (const row of rows) for (const p of row.programs) {
+    const entry = programs.get(p.id) ?? { id: p.id, cacheKey: p.cacheKey, uses: [] };
+    entry.uses.push({ at: row.at, object: row.object, material: row.material,
+      materialId: row.materialId, type: row.type, pass: row.pass, current: p.current });
+    programs.set(p.id, entry);
+  }
+  return { dropped: __xfsProgramPreparationDropped, rows, programs: [...programs.values()] };
+})()
+```
+
+Save the JSON privately, then delete the three globals, remove the CDP init-script registration, and reload before timing. No polling loop or extra context is required. Compare baseline/candidate uninstrumented warm runs with the same profile/V/camera/load. Record baked/programs/linked/drained/prepared/frame and `getProgramInfoLog`, `getShaderInfoLog`, `replaceLightNums` CPU attribution. Compare fixed-camera paused-motion pixels, a later style change, a second runtime, cancellation/restoration and normal resource/GPU proofs. Run one deliberately broken synthetic shader on a separate probe context to confirm the same plain error report. No maintainer game session is needed for this browser-only change.
+
+**Expected saving [hypothesis]:** failure-only logs **0-35 ms**, source substitution **0-20 ms**; their net sum and whole-frame effect are unmeasured. A status query may still absorb a wait previously attributed to a log, and regex callback overhead may offset fewer scans. No link-count reduction or removal of the 173 ms GPU-main/407 ms aggregate worker work is claimed. **The 73-link material/key attribution, measured visual parity, installed patch refresh, review and warm A/B remain coordinator work.** If the inventory identifies byte-identical unused-feature partitions, evaluate those individually; do not remove passes, normalize lights globally, defer mandatory locations into the first frame or widen link concurrency to chase the budget. BCn remains a separate decision.
+
 ## Validation and handoff
 
 **Current step 6 validation: 127/0 distinct targeted tests across twelve files**, one Bun process at a time under the **4 GB guard** (observed peak 0.6 GB). New files: texture-decode-worker **14**, texture-decode-lifetime **5**; warm-start-lifetime **11** includes page/worker takeover cancellation. Existing renderer-ledger **13**, character-preload **13**, character-renderer **16**, gpu-upload-work **19**, runtime-preparation **11**, character-detail-context **11**, browser-viewport-device **8**, browser-build **3** and scene-build-abort **3** also pass. Coverage includes actual ArrayBuffer detachment, two-map/byte/queue bounds, cancellation without disrupting another consumer, generation/unknown/late replies, failed transfers, worker failure/deadline/disposal, reduced-copy options, last-reader ownership and integrity refusal before decode. The first combined run exposed the viewport fixture leaving absent frame globals as undefined; its cleanup is corrected and the combined run passes. These use CPU fakes; no browser/GPU/typecheck/build/heavy gate or tree walker ran. The first worker-test run was stopped after a Bun promise matcher waited before the test's abort; the test now attaches a rejection observer, aborts, then asserts the settled reason. No child remains running.
@@ -332,9 +403,9 @@ These are estimates, not additive measured savings. The latest same-load main A/
 
 **After shelving (coordinator):** the typecheck is clean, and 154/0 targeted tests pass for what's kept (kept-answer-overlap, restart-host-reads, preview-core*, character-detail*). **Before shelving: 53/0 targeted tests across seven files**, one Bun process at a time under the **4 GB guard**, peak **0.5 GB**: core-startup-read-ahead **9**, restart-host-reads **11**, preview-core **15**, character-detail-context **11**, scene-build-abort **3**, idle-source-lifetime **2**, browser-viewport-device **2**. The new warm-host test failed before the receipt change (six bulk file opens on a restarted host) and passes with zero. Changed-generation/stale-304/mid-check mutation and last-reader cancellation proofs still pass; missing/damaged receipts rehash and recover. New ordering/lifetime proofs cover pre-WebGL requests, late cancellation, single-consumption file reads, shared geometry with one/all readers cancelled, fresh catalogue polls, early scene failure and transfer to the rig lifetime. Scene context tests use recording fakes, not a browser/GPU run. The shared-kept-verification commit's earlier **15/0** targeted proof is retained in `803352df`.
 
-`git diff --check` passes. No tree walker, link/private-path/footprint/audit script, browser/GPU/typecheck/desktop/full/latency gate ran. Changes are uncommitted; the existing coordinator-owned shelved patch stays outside the repository, and no new task scratch/payload is retained. Combined review and full gates belong to the coordinator.
+**Step-7 wrap-up:** source/doc diff whitespace checks pass. Ordinary `git diff --check` flags only required unified-diff context markers inside the dependency patch (blank context lines and space-before-tab context); no source whitespace issue is reported. No tree walker, link/private-path/footprint/audit script, browser/GPU/typecheck/desktop/full/latency gate ran. Changes are uncommitted, shared dependencies are untouched, and the worktree-local test scratch folders were removed. Combined review, installed-patch refresh and full gates belong to the coordinator.
 
-**Next measurement:** compare main `44995386` against the worker candidate with the same warm profile/load; latest A/B main **2.55-2.76 s** (earlier lighter-load **2.22-2.46 s**). Run `verify-texture-worker.js` and existing browser/GPU/resource proofs. Record worker startup/construction/transfer overhead as well as page CPU occupancy, whole-V frame, loaded/uploads/maps-drained/program/link/drained marks; do not count a moved cost as a saving. The final drain was about zero in the coordinator trace. Review/typecheck/full/browser/GPU gates belong to the coordinator; BCn remains evaluation-only.
+**Next measurement:** the step-7 patched dependency and exact-key inventory above, followed by uninstrumented same-load warm A/B and visual/resource proofs. The worker is dropped. The final drain was about zero in the coordinator trace. Review/typecheck/full/browser/GPU gates belong to the coordinator; BCn remains evaluation-only.
 
 ## Step 1 evidence retained
 

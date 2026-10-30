@@ -17,6 +17,27 @@ export function linkedPrograms(renderer: THREE.WebGLRenderer, materials: Iterabl
   return [...programs];
 }
 
+/** Optional CPU-only inventory for a coordinator's isolated preparation probe. No GL queries, shader text or retained resources. */
+export type ProgramPreparationEntry = {
+  at: number; pass: string; object: string; material: string; materialId: number; type: string;
+  programs: { id: number; cacheKey: string; current: boolean }[];
+};
+export function traceProgramPreparation(renderer: THREE.WebGLRenderer, object: THREE.Object3D, pass: string): void {
+  const receive = (globalThis as typeof globalThis & { __xfsProgramPreparation?: (entry: ProgramPreparationEntry) => void }).__xfsProgramPreparation;
+  if (typeof receive !== "function") return;
+  try {
+    object.traverse(child => {
+      const material = (child as THREE.Mesh).material;
+      for (const item of material ? Array.isArray(material) ? material : [material] : []) {
+        type Program = { id: number; cacheKey: string };
+        const state = renderer.properties.get(item) as { programs?: Map<string, Program>; currentProgram?: Program };
+        receive({ at: performance.now(), pass, object: child.name, material: item.name, materialId: item.id, type: item.type,
+          programs: [...state.programs?.values() ?? []].map(program => ({ id: program.id, cacheKey: program.cacheKey, current: program === state.currentProgram })) });
+      }
+    });
+  } catch { /* A diagnostic consumer cannot change preparation or its failure reporting. */ }
+}
+
 /** Programs whose release frees their shaders too (`releaseShadersWithPrograms`). */
 const shaderOwners = new WeakSet<object>();
 /**

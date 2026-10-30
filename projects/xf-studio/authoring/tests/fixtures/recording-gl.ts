@@ -15,7 +15,7 @@ const EXTENSIONS = ["EXT_color_buffer_float", "EXT_color_buffer_half_float", "OE
 
 import type { RecordedAttachment, RecordedShader } from "./single-output";
 
-export function recordingRenderer() {
+export function recordingRenderer(Renderer: typeof THREE.WebGLRenderer = THREE.WebGLRenderer) {
   const sources: string[] = [], shaders: RecordedShader[] = [], attachments: RecordedAttachment[] = [], drawBuffers: number[][] = [];
   const volumes: { call: string; width: number; height: number; layer: number; depth: number }[] = [];
   const constants: Record<string, number> = { ...GL };
@@ -52,7 +52,7 @@ export function recordingRenderer() {
     return () => null;
   } });
   const canvas = { addEventListener() {}, removeEventListener() {}, width: 64, height: 64, style: {}, getContext: () => gl } as unknown as HTMLCanvasElement;
-  const renderer = new THREE.WebGLRenderer({ canvas, context: gl as unknown as WebGL2RenderingContext });
+  const renderer = new Renderer({ canvas, context: gl as unknown as WebGL2RenderingContext });
   renderer.shadowMap.enabled = true;
   // The lights the V is drawn with: shadow-casting key and fill (the creator rig's kind), and the room's ambient.
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(15, 1, 0.01, 10);

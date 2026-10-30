@@ -15,7 +15,7 @@ import { createStudioEnvironment, type StudioEnvironment } from "./studio-enviro
 import { DEFAULT_STUDIO_STAGE } from "../studio-lighting";
 import { resolveLightingSource, studioStageSetup, type LightingSetup, type LightingSource, type SetupLight } from "../lighting-setups";
 import { applyRendererState, SCENE_RENDERER_STATE, type RendererState } from "../../platform/scene/renderer-state";
-import { linkedPrograms, releaseShadersWithPrograms, type LinkedProgram } from "../../materials/render/linked-programs";
+import { linkedPrograms, releaseShadersWithPrograms, traceProgramPreparation, type LinkedProgram } from "../../materials/render/linked-programs";
 import { isDrawable } from "../../platform/scene/drawables";
 
 /** What the lighting device reports (read-only; the presentation turns it into plain text). `preset` is the shown setup's display. */
@@ -333,10 +333,13 @@ export function createLightingSetupStage(options: {
     });
     const materialsOf = (drawable: THREE.Object3D) => { const material = (drawable as THREE.Mesh).material; return Array.isArray(material) ? material : [material]; };
     /** Compile `mesh` as drawn with `material` (a pass's own material swapped in for the compile only). */
-    const compileAs = (mesh: THREE.Mesh, material: THREE.Material) => {
+    const compileAs = (mesh: THREE.Mesh, material: THREE.Material, pass: string) => {
       const own = mesh.material;
       mesh.material = material;
-      try { pending.push(renderer.compileAsync(mesh, camera, scene)); materials.add(material); }
+      try {
+        pending.push(renderer.compileAsync(mesh, camera, scene)); materials.add(material);
+        traceProgramPreparation(renderer, mesh, pass);
+      }
       finally { mesh.material = own; }
     };
     /**
@@ -359,6 +362,7 @@ export function createLightingSetupStage(options: {
     // The forward scene, into the display's target.
     for (const drawable of drawables) steps.push(step(() => {
       pending.push(renderer.compileAsync(drawable, camera, scene));
+      traceProgramPreparation(renderer, drawable, "forward");
       for (const material of materialsOf(drawable)) materials.add(material);
     }));
     for (const mesh of meshes) {
@@ -366,15 +370,15 @@ export function createLightingSetupStage(options: {
       for (let target = 0; target < 3; target++) steps.push(step(() => {
         if (!display.scatterPossible || Array.isArray(mesh.material)) return;
         const variant = scatter.variantsOf(mesh.material)[target];
-        if (variant) compileAs(mesh, variant);
+        if (variant) compileAs(mesh, variant, `scatter-s${target}`);
       }));
-      steps.push(step(() => { if (contactOn && mesh.castShadow) compileAs(mesh, contact.casterMaterial(mesh)); }));
+      steps.push(step(() => { if (contactOn && mesh.castShadow) compileAs(mesh, contact.casterMaterial(mesh), "contact-depth"); }));
       // The shadow pass draws into the lights' maps: any render target keys a program as one does (no tone mapping, working colour space).
       steps.push(step(target => {
         if (!castsShadowMaps() || !mesh.castShadow) return;
         renderer.setRenderTarget(target ?? depthTarget());
         for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
-          if (material.visible) compileAs(mesh, shadowDepthMaterial(mesh, material, touched));
+          if (material.visible) compileAs(mesh, shadowDepthMaterial(mesh, material, touched), "shadow-forward");
         }
         // The maps are redrawn inside the contact prepass too (its draw is the frame's first, while every caster wears its depth
         // material), so Three's shadow pass then picks a depth material for the depth material itself: that variant as well. It
@@ -383,8 +387,8 @@ export function createLightingSetupStage(options: {
         if (contactOn) {
           restoreTouched(touched);
           const caster = contact.casterMaterial(mesh);
-          compileAs(mesh, shadowDepthMaterial(mesh, caster, touched));
-          compileAs(mesh, shadowDepthMaterial(mesh, caster, touched));
+          compileAs(mesh, shadowDepthMaterial(mesh, caster, touched), "shadow-contact-1");
+          compileAs(mesh, shadowDepthMaterial(mesh, caster, touched), "shadow-contact-2");
         }
       }));
     }

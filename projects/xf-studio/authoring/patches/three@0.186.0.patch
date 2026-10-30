@@ -1,8 +1,7 @@
 diff --git a/build/three.module.js b/build/three.module.js
-index c52087acfabae80efabb8cc05e3a1d96e35a1426..71a5a29d077f8fdd6f55b00dc7e8d8af69a39ac9 100644
 --- a/build/three.module.js
 +++ b/build/three.module.js
-@@ -4597,9 +4597,47 @@ function WebGLMorphtargets( gl, capabilities, textures ) {
+@@ -4597,9 +4597,47 @@
  
  	}
  
@@ -51,7 +50,61 @@ index c52087acfabae80efabb8cc05e3a1d96e35a1426..71a5a29d077f8fdd6f55b00dc7e8d8af
  
  	};
  
-@@ -16548,6 +16586,9 @@ class WebGLRenderer {
+@@ -6370,24 +6408,26 @@
+ 
+ }
+ 
++// XF Studio: one scan of each expanded shader instead of thirteen. Match the longer shadow token first.
+ function replaceLightNums( string, parameters ) {
+ 
+-	const numSpotLightCoords = parameters.numSpotLightShadows + parameters.numSpotLightMaps - parameters.numSpotLightShadowsWithMaps;
+-
+-	return string
+-		.replace( /NUM_SUN_LIGHTS/g, parameters.numSunLights )
+-		.replace( /NUM_DIR_LIGHTS/g, parameters.numDirLights )
+-		.replace( /NUM_SPOT_LIGHTS/g, parameters.numSpotLights )
+-		.replace( /NUM_SPOT_LIGHT_MAPS/g, parameters.numSpotLightMaps )
+-		.replace( /NUM_SPOT_LIGHT_COORDS/g, numSpotLightCoords )
+-		.replace( /NUM_RECT_AREA_LIGHTS/g, parameters.numRectAreaLights )
+-		.replace( /NUM_POINT_LIGHTS/g, parameters.numPointLights )
+-		.replace( /NUM_HEMI_LIGHTS/g, parameters.numHemiLights )
+-		.replace( /NUM_SUN_LIGHT_SHADOWS/g, parameters.numSunLightShadows )
+-		.replace( /NUM_DIR_LIGHT_SHADOWS/g, parameters.numDirLightShadows )
+-		.replace( /NUM_SPOT_LIGHT_SHADOWS_WITH_MAPS/g, parameters.numSpotLightShadowsWithMaps )
+-		.replace( /NUM_SPOT_LIGHT_SHADOWS/g, parameters.numSpotLightShadows )
+-		.replace( /NUM_POINT_LIGHT_SHADOWS/g, parameters.numPointLightShadows );
++	const values = {
++		NUM_SUN_LIGHTS: parameters.numSunLights,
++		NUM_DIR_LIGHTS: parameters.numDirLights,
++		NUM_SPOT_LIGHTS: parameters.numSpotLights,
++		NUM_SPOT_LIGHT_MAPS: parameters.numSpotLightMaps,
++		NUM_SPOT_LIGHT_COORDS: parameters.numSpotLightShadows + parameters.numSpotLightMaps - parameters.numSpotLightShadowsWithMaps,
++		NUM_RECT_AREA_LIGHTS: parameters.numRectAreaLights,
++		NUM_POINT_LIGHTS: parameters.numPointLights,
++		NUM_HEMI_LIGHTS: parameters.numHemiLights,
++		NUM_SUN_LIGHT_SHADOWS: parameters.numSunLightShadows,
++		NUM_DIR_LIGHT_SHADOWS: parameters.numDirLightShadows,
++		NUM_SPOT_LIGHT_SHADOWS_WITH_MAPS: parameters.numSpotLightShadowsWithMaps,
++		NUM_SPOT_LIGHT_SHADOWS: parameters.numSpotLightShadows,
++		NUM_POINT_LIGHT_SHADOWS: parameters.numPointLightShadows
++	};
++
++	return string.replace( /NUM_SUN_LIGHTS|NUM_DIR_LIGHTS|NUM_SPOT_LIGHTS|NUM_SPOT_LIGHT_MAPS|NUM_SPOT_LIGHT_COORDS|NUM_RECT_AREA_LIGHTS|NUM_POINT_LIGHTS|NUM_HEMI_LIGHTS|NUM_SUN_LIGHT_SHADOWS|NUM_DIR_LIGHT_SHADOWS|NUM_SPOT_LIGHT_SHADOWS_WITH_MAPS|NUM_SPOT_LIGHT_SHADOWS|NUM_POINT_LIGHT_SHADOWS/g, name => values[ name ] );
+ 
+ }
+ 
+@@ -7021,8 +7061,8 @@
+ 
+ 	function onFirstUse( self ) {
+ 
+-		// check for link errors
+-		if ( renderer.debug.checkShaderErrors ) {
++		// XF Studio: successful links need no diagnostics round trips. Failed links keep Three's full error path.
++		if ( renderer.debug.checkShaderErrors && gl.getProgramParameter( program, gl.LINK_STATUS ) === false ) {
+ 
+ 			const programInfoLog = gl.getProgramInfoLog( program ) || '';
+ 			const vertexShaderInfoLog = gl.getShaderInfoLog( glVertexShader ) || '';
+@@ -16548,6 +16588,9 @@
  			 */
  			_this.properties = properties;
  
