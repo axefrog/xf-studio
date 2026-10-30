@@ -1,7 +1,39 @@
 import { describe, expect, test } from "bun:test";
-import { analyse, type Run, type Row } from "../../../../experiments/044-profile-tabs/measure-tabs";
+import { analyse, collectedMemory, type Run, type Row } from "../../../../experiments/044-profile-tabs/measure-tabs";
 import { TAB_PROBE } from "../../../../experiments/044-profile-tabs/measure-tabs-probe";
 import { GL_PROBE } from "../tools/gl-probe";
+import type { Session } from "../tools/cdp";
+
+describe("T-h collected memory (no browser)", () => {
+  const memory = { live: { texture: 5 }, heapMB: 100, residents: [] };
+  const usage = { usedSize: 104857600, totalSize: 150000000, embedderHeapUsedSize: 1234, backingStorageSize: 5678 };
+  function fakePage(calls: string[], failure?: string): Pick<Session, "send" | "evaluate"> {
+    return {
+      async send<T>(method: string): Promise<T> {
+        calls.push(method);
+        if (method === failure) throw Error(`Unavailable: ${method}`);
+        return (method === "Runtime.getHeapUsage" ? usage : {}) as T;
+      },
+      async evaluate<T>(expression: string): Promise<T> { calls.push(expression); return structuredClone(memory) as T; },
+    };
+  }
+  test("both readings require GC before sampling and retain raw CDP counters", async () => {
+    const calls: string[] = [], page = fakePage(calls);
+    for (let i = 0; i < 2; i++) expect(await collectedMemory(page)).toEqual({ ...memory, cdpHeapUsage: usage });
+    expect(calls).toEqual(Array(2).fill(["HeapProfiler.enable", "HeapProfiler.collectGarbage", "window.__g4.memory()", "Runtime.getHeapUsage"]).flat());
+  });
+  test("a failed required GC cannot produce a memory reading", async () => {
+    for (const failure of ["HeapProfiler.enable", "HeapProfiler.collectGarbage"]) {
+      const calls: string[] = [];
+      await expect(collectedMemory(fakePage(calls, failure))).rejects.toThrow(failure);
+      expect(calls).not.toContain("window.__g4.memory()");
+    }
+  });
+  test("optional CDP counters report failure without replacing the heap gate input", async () => {
+    expect(await collectedMemory(fakePage([], "Runtime.getHeapUsage"))).toEqual({ ...memory,
+      cdpHeapUsageError: "Error: Unavailable: Runtime.getHeapUsage" });
+  });
+});
 
 /** These synthetic records test the gates, never pretend to be browser measurements. */
 function run(): Run {
@@ -75,6 +107,15 @@ describe("G4 fail-closed gate analysis (no GPU)", () => {
     expect(analyse("T-h", r, false, closure).pass).toBe(false);
     const missing = { ...closure, after: memory, osAfter: { ...os, dedicatedMB: null } };
     expect(analyse("T-h", r, false, missing).failures).toContain("OS / GPU memory counters unavailable");
+  });
+  test("the close heap budget stays at +16 MiB even with optional CDP diagnostics", () => {
+    const r = run(), memory = { live: { texture: 5 }, heapMB: 100, residents: [] };
+    const os = { privateMB: 500, dedicatedMB: 100, sharedMB: 0, processes: 4 };
+    const closure = { before: memory, after: { ...memory, heapMB: 116, cdpHeapUsage: { usedSize: 1, totalSize: 1 } },
+      osBefore: os, osAfter: os, scene: "sb" };
+    expect(analyse("T-h", r, false, closure).pass).toBe(true);
+    closure.after.heapMB = 116.01;
+    expect(analyse("T-h", r, false, closure).failures).toContain("JS heap exceeds baseline + 16 MiB");
   });
   test("a shell smoke never passes the real-data gate", () => {
     expect(analyse("T-g", run(), true)).toMatchObject({ pass: true, realDataPass: false });

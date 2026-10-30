@@ -1,6 +1,6 @@
 /**
  * G4 (README §5/§15). Isolated host, headless Chrome, offline browser evidence only.
- * bun experiments/044-profile-tabs/measure-tabs.ts --cache warm|fresh [--rows T-a,T-g] [--quick] [--no-game]
+ * bun experiments/044-profile-tabs/measure-tabs.ts --cache warm|fresh [--rows T-a,T-g] [--quick] [--no-game] [--no-th-warmup]
  * Defaults run warm (prime then measure), followed by fresh. The coordinator runs the full gate, never an agent smoke.
  * Server and browser are guarded separately at 5 GB; see README §15 for exact commands and limits.
  */
@@ -23,7 +23,9 @@ export type Run = { t0: number; before: Tick; ticks: Tick[]; sent: { tab: string
   long: [number, number][]; rasters: { at: number }[]; draws: { at: number; view: string | null }[];
   /** The page's timing marks, GL uploads and program waits over the interval (null detail: none), as [name, ms from the click, ...]. */
   marks?: [string, number, unknown][]; uploads?: unknown[][]; waits?: unknown[][] };
-type Memory = { live: Record<string, number>; heapMB: number | null; residents: Resident[]; objects?: { kind: string; stack: string }[] };
+type HeapUsage = { usedSize: number; totalSize: number; embedderHeapUsedSize?: number; backingStorageSize?: number };
+type Memory = { live: Record<string, number>; heapMB: number | null; residents: Resident[]; objects?: { kind: string; stack: string }[];
+  cdpHeapUsage?: HeapUsage; cdpHeapUsageError?: string };
 type OSMemory = { privateMB: number; dedicatedMB: number | null; sharedMB: number | null; processes: number; error?: string };
 type Closure = { before: Memory; after: Memory; osBefore: OSMemory; osAfter: OSMemory; scene: string };
 const round = (n: number) => Math.round(n * 10) / 10;
@@ -122,6 +124,15 @@ const root = resolve(import.meta.dir, "../../projects/xf-studio/authoring");
 const repo = resolve(import.meta.dir, "../..");
 // Resolve the full interpreter path, never the packaged `python` alias (its AppData view differs).
 const python = join(process.env.LOCALAPPDATA ?? join(process.env.USERPROFILE ?? "", "AppData/Local"), "Python/pythoncore-3.14-64/python.exe");
+/** Required GC for both T-h readings; optional isolate-wide counters are diagnostics, never substitute gate inputs. */
+export async function collectedMemory(page: Pick<Session, "send" | "evaluate">): Promise<Memory> {
+  await page.send("HeapProfiler.enable");
+  await page.send("HeapProfiler.collectGarbage");
+  const memory = await page.evaluate(`${G}.memory()`) as Memory;
+  try { memory.cdpHeapUsage = await page.send<HeapUsage>("Runtime.getHeapUsage"); }
+  catch (error) { memory.cdpHeapUsageError = String(error); }
+  return memory;
+}
 async function act(page: Session, action: Record<string, unknown>) { return page.evaluate(`${G}.act(${JSON.stringify(action)})`); }
 async function settle(page: Session, tab: Tab, noGame: boolean) {
   await page.waitFor(`${P}.tabs.snapshot().shown === ${JSON.stringify(tab.tab)} && ${noGame ? "true" : `(() => { const s=${G}.sample(); return s.phase==='ready' && s.onCanvas===${JSON.stringify(tab.view)} && !!s.key && !s.preparation; })()`}`, 900_000);
@@ -143,7 +154,7 @@ async function makeTab(page: Session, subject: unknown, look: unknown, share: st
 }
 async function show(page: Session, tab: Tab, noGame: boolean) { await page.evaluate(`${G}.click(${JSON.stringify(tab.tab)})`); await settle(page, tab, noGame); }
 
-async function measure(page: Session, row: Row, noGame: boolean, quick: boolean, profile: string) {
+async function measure(page: Session, row: Row, noGame: boolean, quick: boolean, profile: string, thWarmup: boolean) {
   await page.waitFor(`!!window.xfStudioTabFixtures && !!window.xfStudioShell && !!${P}?.tabs && !!document.querySelector('.history-controls button')`, 120_000);
   // Real owners create the candidates; remove all old tabs after the fixture to isolate this row's residency.
   const fixture = await page.evaluate(`window.xfStudioTabFixtures.u6('look',1)`) as { tab: string; subjects: string[] };
@@ -172,21 +183,39 @@ async function measure(page: Session, row: Row, noGame: boolean, quick: boolean,
     await act(page, { kind: "tabs.close", tab: calibration.tab });
     await page.wait(5000);
   }
-  const baseline = row === "T-h" ? { page: await page.evaluate(`${G}.memory()`) as Memory, os: await chromeMemory(profile) } : undefined;
   const shared = row === "T-a" || row === "T-g";
   // Diagnostic (README §16.6): in T-e the cold tab is B, the masculine default V as T-c has it, whose maps no other runtime holds.
   const otherV = row === "T-e" && !noGame && process.env.XFS_G4_T_E_V === "male";
-  const b = await makeTab(page, row === "T-c" || otherV ? { kind: "character", id: seeded.subjects[0]! } : subject,
-    row === "T-d" ? { collection: seeded.collection, look: seeded.looks[1]! } : lookA, shared ? a.scene : null, noGame);
-  await settle(page, b, noGame);
-  if (!noGame) {
-    await act(page, { kind: "preview.setBody", enabled: false });
-    await act(page, { kind: "motion.setIdle", enabled: false });
-    if (row === "T-c" || otherV) { await act(page, { kind: "character.useDefault", bodyGender: "male" }); await settle(page, b, false);
-      await page.waitFor(`${G}.sample().key?.endsWith('|male')`, 900_000); }
-    if (row === "T-d") { await act(page, { kind: "layer.edit", command: { kind: "add" } }); await settle(page, b, false); }
+  const prepareB = async () => {
+    const b = await makeTab(page, row === "T-c" || otherV ? { kind: "character", id: seeded.subjects[0]! } : subject,
+      row === "T-d" ? { collection: seeded.collection, look: seeded.looks[1]! } : lookA, shared ? a.scene : null, noGame);
+    await settle(page, b, noGame);
+    if (!noGame) {
+      await act(page, { kind: "preview.setBody", enabled: false });
+      await act(page, { kind: "motion.setIdle", enabled: false });
+      if (row === "T-c" || otherV) { await act(page, { kind: "character.useDefault", bodyGender: "male" }); await settle(page, b, false);
+        await page.waitFor(`${G}.sample().key?.endsWith('|male')`, 900_000); }
+      if (row === "T-d") { await act(page, { kind: "layer.edit", command: { kind: "add" } }); await settle(page, b, false); }
+    }
+    await show(page, a, noGame);
+    return b;
+  };
+  // Repeat the actual B setup/close path, in this page/isolate, before the measured baseline. Keep the older renderer
+  // calibration above in both modes so --no-th-warmup changes only this extra cycle, not the renderer baseline.
+  let warmup: Tab | undefined;
+  let warmupRun: Run | undefined;
+  if (row === "T-h" && thWarmup) {
+    warmup = await prepareB();
+    // Exercise the probe as well as the application: its first sample/close/tail must also precede the baseline.
+    warmupRun = await page.evaluate(`${G}.run(${JSON.stringify([[0, warmup.tab, true]])},${JSON.stringify({ ...a, unchanged: true })},${noGame},1000,${noGame ? 15_000 : 900_000},false)`) as Run;
+    if (warmupRun.errors.length || warmupRun.presented === null) throw Error(`T-h warm-up close failed: ${JSON.stringify(warmupRun.errors)}`);
+    await settle(page, a, noGame);
+    await page.wait(5000);
   }
-  await show(page, a, noGame);
+  const baseline = row === "T-h" ? { page: await collectedMemory(page), os: await chromeMemory(profile) } : undefined;
+  if (warmup && baseline?.page.residents.some(r => r.scene === warmup.scene)) throw Error("T-h warm-up scene remains resident at the baseline");
+  // A new independent scene with the same V/look: no Undo/reopen shortcut can preserve the warmed runtime.
+  const b = await prepareB();
   let target = b, steps: [number, string, boolean?][] = [[0, b.tab]];
   let c: Tab | undefined;
   if (row === "T-e" || row === "T-f") {
@@ -231,12 +260,13 @@ async function measure(page: Session, row: Row, noGame: boolean, quick: boolean,
     let closure: Closure | undefined;
     if (baseline) {
       await page.wait(5000);
-      closure = { before: baseline.page, after: await page.evaluate(`${G}.memory()`) as Memory,
+      closure = { before: baseline.page, after: await collectedMemory(page),
         osBefore: baseline.os, osAfter: await chromeMemory(profile), scene: b.scene };
     }
     runs.push({ result: analyse(row, raw, noGame, closure), raw });
   }
-  return { row, setup: { a, b, c, baseline }, runs, pass: runs.every(r => r.result.pass), realDataPass: runs.every(r => r.result.realDataPass) };
+  return { row, setup: { a, b, c, baseline, ...(row === "T-h" ? { thWarmup, warmup, warmupRun } : {}) }, runs,
+    pass: runs.every(r => r.result.pass), realDataPass: runs.every(r => r.result.realDataPass) };
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -244,8 +274,8 @@ export async function main(argv = process.argv.slice(2)) {
   const value = (name: string) => { const i = args.indexOf(name); if (i < 0) return undefined; const v = args[i + 1]; if (!v || v.startsWith("--")) throw Error(`Missing ${name} value`); args.splice(i, 2); return v; };
   const flag = (name: string) => { const i = args.indexOf(name); if (i < 0) return false; args.splice(i, 1); return true; };
   const cache = value("--cache") ?? "both", filter = value("--rows"), port = Number(value("--port") ?? 4571);
-  const quick = flag("--quick"), noGame = flag("--no-game");
-  if (args.length || !["warm", "fresh", "both"].includes(cache) || !Number.isInteger(port) || port < 1024 || port > 65535 || [4317, 4331].includes(port)) throw Error("Usage: measure-tabs.ts [--cache warm|fresh|both] [--rows T-a,T-g] [--port 4571] [--quick] [--no-game]");
+  const quick = flag("--quick"), noGame = flag("--no-game"), thWarmup = !flag("--no-th-warmup");
+  if (args.length || !["warm", "fresh", "both"].includes(cache) || !Number.isInteger(port) || port < 1024 || port > 65535 || [4317, 4331].includes(port)) throw Error("Usage: measure-tabs.ts [--cache warm|fresh|both] [--rows T-a,T-g] [--port 4571] [--quick] [--no-game] [--no-th-warmup]");
   const rows = filter ? filter.split(",") as Row[] : [...ROWS];
   if (!rows.length || rows.some(r => !ROWS.includes(r)) || new Set(rows).size !== rows.length) throw Error("--rows needs unique T-a to T-h IDs");
   if (noGame && rows.some(r => r !== "T-a" && r !== "T-g")) throw Error("--no-game is a shell-only T-a/T-g smoke");
@@ -261,9 +291,11 @@ export async function main(argv = process.argv.slice(2)) {
     env: { ...process.env, PORT: String(port), XFAS_DATA_DIR: data, XFS_SETTINGS_DIR: "", XFS_MOD_INSTALL: "off",
       XFS_PREVIEW_CORE_CACHE: join(data, "preview-cache"), XFS_RESOLVER_CACHE: join(data, "resolver-cache"), XFS_CHOICE_PREVIEW_CACHE: join(data, "choice-previews") },
     stdout: log, stderr: log, windowsHide: true });
-  const report: { date: string; noGame: boolean; quick: boolean; cache: string; rows: Row[]; runs: unknown[]; error?: string } = { date: new Date().toISOString(), noGame, quick, cache, rows, runs: [] };
+  const report: { date: string; noGame: boolean; quick: boolean; thWarmup: boolean; cache: string; rows: Row[]; runs: unknown[]; error?: string } = { date: new Date().toISOString(), noGame, quick, thWarmup, cache, rows, runs: [] };
   const table = ["# G4 tab-switch measurements", "", "Offline browser evidence. First presentation is bounded by the following rAF, as in G3.",
-    ...(noGame ? ["Shell-only smoke: real-data G4 remains pending."] : []), "", "| Cache | Row | Trial | Click → presented ms | Links / programs, first frame | Rasters | Tasks ≥50 ms | Progress ms | Gate |", "|---|---|---|---|---|---|---|---|---|"];
+    ...(noGame ? ["Shell-only smoke: real-data G4 remains pending."] : []),
+    `T-h extra B warm-up: ${thWarmup ? "on (default)" : "off (diagnostic)"}; both memory readings require CDP GC.`,
+    "", "| Cache | Row | Trial | Click → presented ms | Links / programs, first frame | Rasters | Tasks ≥50 ms | Progress ms | Gate |", "|---|---|---|---|---|---|---|---|---|"];
   const save = () => { writeFileSync(join(out, "results.json"), JSON.stringify(report, null, 2)); writeFileSync(join(out, "results.md"), table.join("\n") + "\n"); };
   let browser: ReturnType<typeof Bun.spawn> | undefined;
   try {
@@ -281,7 +313,7 @@ export async function main(argv = process.argv.slice(2)) {
       const runBrowser = async (prime: boolean) => {
         const output = join(out, `${mode}-${row}-${prime ? "prime" : "measure"}.json`);
         browser = Bun.spawn([python, guard, "--limit", noGame ? "3" : "5", "--", process.execPath, import.meta.path,
-          "--worker", String(port), profile, row, String(noGame), String(quick || prime), output], { cwd: repo, stdout: "inherit", stderr: "inherit", windowsHide: true });
+          "--worker", String(port), profile, row, String(noGame), String(quick || prime), output, String(thWarmup)], { cwd: repo, stdout: "inherit", stderr: "inherit", windowsHide: true });
         // A dead CDP connection must not hold the host indefinitely. Killing the guard closes its job and owned Chrome tree.
         const timeout = setTimeout(() => browser?.kill(), noGame ? 90_000 : 1_800_000);
         let code: number;
@@ -307,10 +339,10 @@ export async function main(argv = process.argv.slice(2)) {
 }
 if (import.meta.main) {
   if (process.argv[2] === "--worker") {
-    const [port, profile, row, noGame, quick, output] = process.argv.slice(3) as [string, string, Row, string, string, string];
+    const [port, profile, row, noGame, quick, output, thWarmup] = process.argv.slice(3) as [string, string, Row, string, string, string, string];
     const generated = resolve(import.meta.dir, "generated/g4") + sep;
     if (!port || !profile || !output || !Number.isInteger(Number(port)) || Number(port) < 1024 || Number(port) > 65535 || [4317, 4331].includes(Number(port)) ||
-      !ROWS.includes(row) || !["true", "false"].includes(noGame) || !["true", "false"].includes(quick) ||
+      !ROWS.includes(row) || !["true", "false"].includes(noGame) || !["true", "false"].includes(quick) || !["true", "false"].includes(thWarmup) ||
       !resolve(profile).startsWith(generated) || !resolve(output).startsWith(generated) || noGame === "true" && row !== "T-a" && row !== "T-g")
       throw Error("The internal worker requires an isolated G4 profile/output, an allowed row and a non-Studio port");
     let page: Session | undefined;
@@ -319,7 +351,7 @@ if (import.meta.main) {
       page = await launch(`http://127.0.0.1:${port}/?verify=1`, { profile, width: 1280, height: 800, init: GL_PROBE + TAB_PROBE,
         args: ["--enable-precise-memory-info", "--js-flags=--expose-gc", "--disable-extensions", "--disable-background-networking"] });
       console.log(`G4 Chrome ${row}: preparing fixtures`);
-      const result = await measure(page, row, noGame === "true", quick === "true", profile);
+      const result = await measure(page, row, noGame === "true", quick === "true", profile, thWarmup === "true");
       writeFileSync(output, JSON.stringify(result, null, 2));
     } catch (e) { writeFileSync(output, JSON.stringify({ error: String(e), console: page?.console }, null, 2)); throw e; }
     finally { await page?.close(); }
