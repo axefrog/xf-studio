@@ -14,7 +14,6 @@ The single queue for XF Studio (`projects/xf-studio`) and related research. **Th
 
 ### In flight
 - **Open High findings:** 0. CORE-03 closed on 29 Oct; the retained legacy placement is tracked as CORE-249 (Medium). *29 Oct*
-- **Look-and-feel redesign proposals (preliminary).** Three distinct coats of paint for the Studio and the in-game bridge surfaces, each with five logo variants: keep the UX, change typography and aesthetic so XF stops converging with other AI-made Cyberpunk UIs. One designer produces all three, each reviewed for alignment and placement before delivery. The maintainer chooses a direction; adopting it becomes UI-track work through the style guide. *29 Oct*
 - **Profiles phase 3: the binding selector, several instances per panel type, the panel picker and every empty state** (the single primary focus). Its plan is being written as experiment 047. Phase 2 (tabs and contributed defaults) is built and on `main`, and its G4 tab-switch gate passes on real data, warm and fresh ([experiment 044](../../experiments/044-profile-tabs/README.md)). Earlier: phase 1 (`35e3c5b6`, 22 Oct) and phase 4a, scene runtimes (`5b315f9b`, 24 Oct). *26 Oct*
 
 ### Beta blockers
